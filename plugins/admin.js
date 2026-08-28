@@ -1,24 +1,24 @@
 'use strict';
 
-function extractJid(jid = '') {
-  const num = String(jid).split('@')[0].split(':')[0].replace(/\D/g, '');
-  return `${num}@s.whatsapp.net`;
+function extractJid(text = '') {
+  const num = String(text).replace(/\D/g, '');
+  return num ? `${num}@s.whatsapp.net` : null;
 }
 
 module.exports = {
   name: 'admin',
   aliases: ['kick', 'promote', 'demote', 'revoke', 'abrirgrupo', 'cerrargrupo'],
   category: 'administración',
-  desc: 'Comandos administrativos de grupo',
+  desc: 'Comandos administrativos de grupo directo',
 
-  execute: async ({ sock, msg, remoteJid, sender, commandName, isOwner, isAdmin, fromGroup, reply }) => {
-    if (!fromGroup) return reply('❌ Solo en grupos.');
-    if (!isAdmin && !isOwner) return reply('❌ Solo admins pueden usar este comando.');
+  execute: async ({ sock, msg, remoteJid, args, commandName, isOwner, isAdmin, fromGroup, reply }) => {
+    if (!fromGroup) return reply('❌ Comando exclusivo para grupos.');
+    if (!isAdmin && !isOwner) return reply('❌ Solo los administradores pueden usar esto.');
 
-    const botNumber = String(sock.user.id).split(':')[0].split('@')[0].replace(/\D/g, '');
+    const botNumber = String(sock.user.id).replace(/\D/g, '');
 
     try {
-      // 🌐 ACCIONES DE GRUPO
+      // 🌐 ACCIONES DE GRUPO (No requieren mencionar a nadie)
       if (commandName === 'cerrargrupo') {
         await sock.groupSettingUpdate(remoteJid, 'announcement');
         return reply('🔒 Grupo cerrado. Solo admins pueden escribir.');
@@ -35,21 +35,27 @@ module.exports = {
         return reply(`✅ *Link del grupo reiniciado*\n🔗 Nuevo link: https://chat.whatsapp.com/${code}`);
       }
 
-      // 🎯 OBTENER EL OBJETIVO PARA KICK, PROMOTE, DEMOTE
-      const target = msg.message?.extendedTextMessage?.contextInfo?.participant 
-                  || msg.message?.extendedTextMessage?.contextInfo?.mentionedJid?.[0];
+      // 🎯 OBTENER OBJETIVO (Responder, Mencionar, o Escribir número)
+      let targetRaw = msg.message?.extendedTextMessage?.contextInfo?.participant 
+                   || msg.message?.extendedTextMessage?.contextInfo?.mentionedJid?.[0] 
+                   || args.join('');
 
-      if (!target) return reply('❌ Debes mencionar o responder al mensaje del usuario.');
-      
-      const userJid = extractJid(target);
+      const userJid = extractJid(targetRaw);
 
-      if (userJid.includes(botNumber)) return reply('❌ No puedo aplicar eso en mí mismo.');
+      if (!userJid) {
+        return reply('❌ Debes mencionar, responder al mensaje o escribir el número del usuario.');
+      }
+
+      if (userJid.includes(botNumber)) {
+        return reply('❌ No puedo aplicar comandos de administración en mí mismo.');
+      }
 
       // 👤 ACCIONES SOBRE USUARIOS
       if (commandName === 'kick') {
         await sock.groupParticipantsUpdate(remoteJid, [userJid], 'remove');
         return reply(`✅ Usuario expulsado exitosamente.`);
       }
+      
       if (commandName === 'promote') {
         await sock.groupParticipantsUpdate(remoteJid, [userJid], 'promote');
         return sock.sendMessage(remoteJid, { 
@@ -57,6 +63,7 @@ module.exports = {
           mentions: [userJid] 
         }, { quoted: msg });
       }
+      
       if (commandName === 'demote') {
         await sock.groupParticipantsUpdate(remoteJid, [userJid], 'demote');
         return sock.sendMessage(remoteJid, { 
@@ -67,8 +74,7 @@ module.exports = {
 
     } catch (err) {
       console.log(`❌ Error en comando ${commandName}:`, err);
-      // 🔥 Si WhatsApp bloquea la acción, soltamos el error:
-      return reply('❌ El bot necesita ser Administrador para hacer esto.');
+      return reply('❌ La acción falló. Asegúrate de que el bot sea Administrador y que el usuario esté en el grupo.');
     }
   }
 };
