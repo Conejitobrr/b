@@ -1,6 +1,10 @@
 'use strict';
 
-function cleanJid(jid = '') { return String(jid).split(':')[0]; }
+function extractJid(jid = '') {
+  // Extrae el número puro ignorando el ID de dispositivo (:xx) y arma el JID limpio
+  const num = String(jid).split('@')[0].split(':')[0].replace(/\D/g, '');
+  return `${num}@s.whatsapp.net`;
+}
 
 module.exports = {
   name: 'admin',
@@ -12,10 +16,13 @@ module.exports = {
     if (!fromGroup) return reply('❌ Solo en grupos.');
     if (!isAdmin && !isOwner) return reply('❌ Solo admins pueden usar este comando.');
 
-    // Validar si el bot es admin
+    // Validar si el bot es admin con el extractor corregido
     const groupMetadata = await sock.groupMetadata(remoteJid);
-    const botJid = cleanJid(sock.user.id);
-    const botIsAdmin = groupMetadata.participants.find(p => cleanJid(p.id) === botJid)?.admin;
+    const botJid = extractJid(sock.user.id);
+    const botData = groupMetadata.participants.find(p => extractJid(p.id) === botJid);
+    
+    // Verificamos explícitamente si el rol es 'admin' o 'superadmin'
+    const botIsAdmin = botData?.admin === 'admin' || botData?.admin === 'superadmin';
 
     if (['kick', 'promote', 'demote', 'abrirgrupo', 'cerrargrupo'].includes(commandName) && !botIsAdmin) {
       return reply('❌ El bot necesita ser Administrador para hacer esto.');
@@ -37,30 +44,38 @@ module.exports = {
       return reply(`✅ *Link del grupo reiniciado*\n🔗 Nuevo link: https://chat.whatsapp.com/${code}`);
     }
 
-    // Comandos que requieren un objetivo (kick, promote, demote)
+    // Comandos que requieren apuntar a un usuario
     const target = msg.message?.extendedTextMessage?.contextInfo?.participant 
                 || msg.message?.extendedTextMessage?.contextInfo?.mentionedJid?.[0];
 
     if (!target) return reply('❌ Debes mencionar o responder al mensaje del usuario.');
-    const userJid = cleanJid(target);
+    
+    const userJid = extractJid(target);
 
-    if (userJid === botJid) return reply('❌ No me puedo hacer eso a mí mismo.');
+    if (userJid === botJid) return reply('❌ No puedo aplicar eso en mí mismo.');
 
     try {
       if (commandName === 'kick') {
         await sock.groupParticipantsUpdate(remoteJid, [userJid], 'remove');
-        return reply(`✅ Usuario expulsado.`);
+        return reply(`✅ Usuario expulsado exitosamente.`);
       }
       if (commandName === 'promote') {
         await sock.groupParticipantsUpdate(remoteJid, [userJid], 'promote');
-        return reply(`✅ Admin otorgado a @${userJid.split('@')[0]}`, { mentions: [userJid] });
+        return sock.sendMessage(remoteJid, { 
+          text: `✅ Rango de Administrador otorgado a @${userJid.split('@')[0]}`, 
+          mentions: [userJid] 
+        }, { quoted: msg });
       }
       if (commandName === 'demote') {
         await sock.groupParticipantsUpdate(remoteJid, [userJid], 'demote');
-        return reply(`✅ Admin removido a @${userJid.split('@')[0]}`, { mentions: [userJid] });
+        return sock.sendMessage(remoteJid, { 
+          text: `✅ Rango de Administrador removido a @${userJid.split('@')[0]}`, 
+          mentions: [userJid] 
+        }, { quoted: msg });
       }
     } catch (err) {
-      return reply('❌ Ocurrió un error ejecutando la acción.');
+      console.log('❌ Error en comando de administración:', err);
+      return reply('❌ Ocurrió un error ejecutando la acción. Verifica que mantenga mis permisos.');
     }
   }
 };
