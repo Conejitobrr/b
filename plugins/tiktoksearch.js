@@ -5,7 +5,7 @@ const searchSessions = new Map();
 
 module.exports = {
   name: 'tiktoksearch',
-  aliases: ['tts', 'buscartiktok', 'buscarig'], // Agrega alias a gusto
+  aliases: ['tts', 'buscartiktok'],
   category: 'multimedia',
   desc: 'Busca videos en TikTok y permite navegar con "siguiente"',
 
@@ -18,57 +18,67 @@ module.exports = {
     await reply(`🔍 Buscando *${query}* en TikTok...`);
 
     try {
-      // Usamos una API pública para búsquedas de TikTok
-      const res = await fetch(`https://deliriussapi-oficial.vercel.app/search/tiktoksearch?query=${encodeURIComponent(query)}`);
-      const json = await res.json();
+      // 🔥 Cambiamos a una API más estable
+      const res = await fetch(`https://api.siputzx.my.id/api/tiktok/search?query=${encodeURIComponent(query)}`);
+      const textRes = await res.text(); // Leemos como texto primero para evitar crasheos
 
-      if (!json.status || !json.data || json.data.length === 0) {
+      let json;
+      try {
+        json = JSON.parse(textRes);
+      } catch (e) {
+        return reply('❌ La API pública de búsqueda está saturada en este momento. Intenta de nuevo más tarde.');
+      }
+
+      // 🔥 Adaptador Universal: Busca el array de videos sin importar cómo lo devuelva la API
+      const videos = json.data || json.result || json.BK9 || json.videos;
+
+      if (!videos || !Array.isArray(videos) || videos.length === 0) {
         return reply('❌ No se encontraron resultados para esa búsqueda.');
       }
 
-      const videos = json.data;
       const firstVideo = videos[0];
+      
+      // Adaptador para enlaces de video y nombres
+      const videoUrl = firstVideo.play || firstVideo.media?.[0] || firstVideo.video || firstVideo.no_watermark;
+      const authorName = firstVideo.author?.nickname || firstVideo.author?.name || firstVideo.author || 'Desconocido';
+      const title = firstVideo.title || firstVideo.desc || 'Sin descripción';
 
-      const caption = `🎬 *RESULTADO DE TIKTOK*\n\n👤 *Autor:* ${firstVideo.author.nickname}\n📝 *Desc:* ${firstVideo.title}\n\n👉 _Responde a este mensaje con la palabra *siguiente* para ver otro video de esta búsqueda._`;
+      if (!videoUrl) {
+        return reply('❌ Se encontraron resultados, pero la API no proporcionó el enlace del video.');
+      }
 
-      // Enviamos el primer video
+      const caption = `🎬 *RESULTADO DE TIKTOK*\n\n👤 *Autor:* ${authorName}\n📝 *Desc:* ${title}\n\n👉 _Responde a este mensaje con la palabra *siguiente* para ver otro video de esta búsqueda._`;
+
       const sentMsg = await sock.sendMessage(remoteJid, {
-        video: { url: firstVideo.media[0] }, // La API suele devolver el link directo del video
+        video: { url: videoUrl },
         caption: caption,
         mimetype: 'video/mp4'
       }, { quoted: msg });
 
-      // Guardamos la sesión vinculada al ID del mensaje que acaba de enviar el bot
+      // Guardamos la sesión
       searchSessions.set(sentMsg.key.id, {
         query: query,
         videos: videos,
-        currentIndex: 0, // Índice actual
-        sender: sender // Opcional: para que solo el que buscó pueda dar siguiente
+        currentIndex: 0,
+        sender: sender 
       });
 
-      // Limpieza automática para no saturar memoria (Borra la sesión en 5 minutos)
-      setTimeout(() => {
-        searchSessions.delete(sentMsg.key.id);
-      }, 5 * 60 * 1000);
+      // Limpieza automática en 5 minutos
+      setTimeout(() => searchSessions.delete(sentMsg.key.id), 5 * 60 * 1000);
 
     } catch (e) {
       console.log('❌ Error en TikTok Search:', e);
-      await reply('❌ Ocurrió un error al conectar con el buscador de TikTok.');
+      await reply('❌ Ocurrió un error interno al conectar con el buscador.');
     }
   },
 
-  // Escuchador pasivo para detectar la respuesta "siguiente"
   onMessage: async ({ sock, msg, remoteJid, body, sender }) => {
     const text = String(body || '').toLowerCase().trim();
-    
-    // Si no dijo siguiente, ignoramos
     if (text !== 'siguiente' && text !== 'next') return;
 
-    // Obtenemos el ID del mensaje al que está respondiendo
     const quotedMsgId = msg.message?.extendedTextMessage?.contextInfo?.stanzaId;
     if (!quotedMsgId) return;
 
-    // Verificamos si ese ID pertenece a una búsqueda activa
     if (searchSessions.has(quotedMsgId)) {
       const session = searchSessions.get(quotedMsgId);
       session.currentIndex++;
@@ -78,23 +88,22 @@ module.exports = {
       }
 
       const nextVideo = session.videos[session.currentIndex];
-      const caption = `🎬 *RESULTADO DE TIKTOK*\n\n👤 *Autor:* ${nextVideo.author.nickname}\n📝 *Desc:* ${nextVideo.title}\n\n👉 _Responde a este nuevo mensaje con *siguiente* para ver otro._`;
+      const videoUrl = nextVideo.play || nextVideo.media?.[0] || nextVideo.video || nextVideo.no_watermark;
+      const authorName = nextVideo.author?.nickname || nextVideo.author?.name || nextVideo.author || 'Desconocido';
+      const title = nextVideo.title || nextVideo.desc || 'Sin descripción';
 
-      // Enviamos el siguiente video
+      const caption = `🎬 *RESULTADO DE TIKTOK*\n\n👤 *Autor:* ${authorName}\n📝 *Desc:* ${title}\n\n👉 _Responde a este nuevo mensaje con *siguiente* para ver otro._`;
+
       const newSentMsg = await sock.sendMessage(remoteJid, {
-        video: { url: nextVideo.media[0] },
+        video: { url: videoUrl },
         caption: caption,
         mimetype: 'video/mp4'
       }, { quoted: msg });
 
-      // Borramos el ID viejo y vinculamos la sesión al ID del nuevo mensaje
       searchSessions.delete(quotedMsgId);
       searchSessions.set(newSentMsg.key.id, session);
 
-      // Renovamos la limpieza automática
-      setTimeout(() => {
-        searchSessions.delete(newSentMsg.key.id);
-      }, 5 * 60 * 1000);
+      setTimeout(() => searchSessions.delete(newSentMsg.key.id), 5 * 60 * 1000);
     }
   }
 };
