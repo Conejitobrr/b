@@ -1,0 +1,21 @@
+{
+  "name": "siriusbot",
+  "version": "2.0.0",
+  "description": "Bot de WhatsApp SiriusBot Mega Mejorado",
+  "main": "index.js",
+  "type": "commonjs",
+  "scripts": {
+    "start": "node index.js"
+  },
+  "dependencies": {
+    "@hapi/boom": "^10.0.1",
+    "@whiskeysockets/baileys": "^6.7.0",
+    "chalk": "^4.1.2",
+    "dotenv": "^16.4.5",
+    "figlet": "^1.6.0",
+    "mongoose": "^8.4.0",
+    "pino": "^8.0.0",
+    "qrcode-terminal": "^0.12.0",
+    "yt-search": "^2.10.4"
+  }
+}
