@@ -24,7 +24,7 @@ const ITEMS = {
   caja: { key: 'cajaUses', name: '📦 Caja Sorpresa XP', price: 2000, desc: 'Contiene XP aleatorio' },
   escudo: { key: 'shieldUses', name: '🛡️ Escudo Anti-Robo', price: 2500, desc: 'Te protege del próximo robo' },
   // NUEVO CATÁLOGO
-  vip: { key: 'premium', name: '💎 Pase VIP (1 Día)', price: 15000, desc: 'Bono XP y cooldown reducido al trabajar' },
+  vip: { key: 'premium', name: '💎 Pase VIP (1 Día)', price: 50000, desc: 'Bono XP y cooldown reducido al trabajar' },
   mascota: { key: 'mascota', name: '🐶 Licencia de Mascota', price: 50000, desc: 'Permite adoptar un animal (¡Aumentado!)' },
   anillo: { key: 'anillo', name: '💍 Anillo de Bodas', price: 25000, desc: 'Requisito para casarte' }
 };
