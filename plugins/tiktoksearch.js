@@ -11,44 +11,50 @@ if (!fs.existsSync(TEMP_DIR)) fs.mkdirSync(TEMP_DIR, { recursive: true });
 
 const searchSessions = new Map();
 
-// 1. API NATIVA (TikWM - Muy estable)
-async function searchTikWM(query) {
-  try {
-    const formData = new URLSearchParams();
-    formData.append('keywords', query);
-    const res = await fetch('https://tikwm.com/api/feed/search', {
-      method: 'POST',
-      body: formData
-    });
-    const json = await res.json();
-    
-    if (json.data && json.data.videos && json.data.videos.length > 0) {
-      return json.data.videos.map(v => ({
-        type: 'api',
-        url: v.play,
-        author: v.author?.nickname || 'Desconocido',
-        title: v.title || 'Sin descripción'
-      }));
+// 1. SISTEMA MULTI-API (Las más recientes y estables)
+async function searchWithApis(query) {
+  const apis = [
+    `https://aemt.me/tiktoksearch?text=${encodeURIComponent(query)}`,
+    `https://api.tiklydown.eu.org/api/search?q=${encodeURIComponent(query)}`,
+    `https://api.siputzx.my.id/api/tiktok/search?query=${encodeURIComponent(query)}`
+  ];
+
+  for (const url of apis) {
+    try {
+      const res = await fetch(url, { timeout: 10000 });
+      const json = await res.json();
+      
+      const result = json.result || json.data || json;
+      const videos = Array.isArray(result) ? result : (result.videos || result.data);
+
+      if (videos && Array.isArray(videos) && videos.length > 0) {
+        return videos.map(v => ({
+          type: 'api',
+          url: v.play || v.video || v.media?.[0] || v.no_watermark || v.url,
+          author: v.author?.nickname || v.author?.name || v.author || 'Desconocido',
+          title: v.title || v.desc || 'Sin descripción'
+        })).filter(v => v.url); 
+      }
+    } catch (e) {
+      continue;
     }
-  } catch (e) {}
+  }
   return null;
 }
 
-// 2. EL TRUCO DEL PATO (Scraping de DuckDuckGo + yt-dlp)
+// 2. EL TRUCO DEL PATO MEJORADO (Disfrazado de Chrome)
 async function searchDuckDuckGo(query) {
   try {
-    const res = await fetch('https://lite.duckduckgo.com/lite/', {
-      method: 'POST',
+    const searchUrl = `https://html.duckduckgo.com/html/?q=${encodeURIComponent('site:tiktok.com/video/ ' + query)}`;
+    const res = await fetch(searchUrl, {
       headers: {
-        'Content-Type': 'application/x-www-form-urlencoded',
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'
-      },
-      body: `q=site:tiktok.com/video/ ${encodeURIComponent(query)}`
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+      }
     });
     const html = await res.text();
     
-    // Extraer enlaces puros de TikTok del código fuente del navegador
-    const regex = /https?:\/\/(?:www\.)?tiktok\.com\/@[^\/]+\/video\/\d+/g;
+    // Cazar cualquier link de video de TikTok ignorando basura web
+    const regex = /https?:\/\/(?:www\.)?tiktok\.com\/@[A-Za-z0-9_.-]+\/video\/\d+/g;
     const matches = html.match(regex) || [];
     const uniqueUrls = [...new Set(matches)];
     
@@ -56,15 +62,14 @@ async function searchDuckDuckGo(query) {
       return uniqueUrls.map(url => ({
         type: 'duck',
         url: url,
-        author: url.split('@')[1].split('/')[0], // Saca el @usuario del enlace
-        title: 'Video extraído usando búsqueda web'
+        author: url.split('@')[1]?.split('/')[0] || 'Desconocido',
+        title: '🎥 Video extraído por búsqueda web'
       }));
     }
   } catch (e) {}
   return null;
 }
 
-// Bajar video usando tu motor nativo para los resultados del pato
 async function downloadWithYtDlp(url) {
   const id = `${Date.now()}_${Math.floor(Math.random() * 9999)}`;
   const file = path.join(TEMP_DIR, `tts_duck_${id}.mp4`);
@@ -78,22 +83,17 @@ async function downloadWithYtDlp(url) {
   return file;
 }
 
-// Función maestra para enviar el video
 async function sendTikTokResult(sock, remoteJid, videoData, msg, reply) {
-  const caption = `🎬 *RESULTADO DE TIKTOK*\n\n👤 *Autor:* ${videoData.author}\n📝 *Desc:* ${videoData.title}\n\n👉 _Responde a este mensaje con la palabra *siguiente* para ver otro video._`;
+  const caption = `🎬 *RESULTADO DE TIKTOK*\n\n👤 *Autor:* @${videoData.author}\n📝 *Desc:* ${videoData.title}\n\n👉 _Responde a este mensaje con la palabra *siguiente* para ver otro video._`;
 
   if (videoData.type === 'api') {
-    // Si la API funcionó, lo manda instantáneo por URL
     return await sock.sendMessage(remoteJid, {
       video: { url: videoData.url },
       caption: caption,
       mimetype: 'video/mp4'
     }, { quoted: msg });
   } else {
-    // Si la API falló, activa el truco del pato
-    await reply('🦆 _Bypasseando bloqueos con el navegador del pato... descargando video._');
     const downloadedFile = await downloadWithYtDlp(videoData.url);
-    
     const sentMsg = await sock.sendMessage(remoteJid, {
       video: fs.readFileSync(downloadedFile),
       caption: caption,
@@ -119,14 +119,13 @@ module.exports = {
     const query = args.join(' ');
     await reply(`🔍 Buscando *${query}* en TikTok...`);
 
-    // Intento 1: API. Intento 2: Truco del Pato.
-    let videos = await searchTikWM(query);
+    let videos = await searchWithApis(query);
     if (!videos) {
       videos = await searchDuckDuckGo(query);
     }
 
     if (!videos || videos.length === 0) {
-      return reply('❌ Las APIs están saturadas y el navegador no arrojó resultados. Intenta de nuevo.');
+      return reply('❌ Los sistemas de TikTok bloquearon la búsqueda temporalmente. Intenta con otras palabras o más tarde.');
     }
 
     try {
@@ -139,11 +138,9 @@ module.exports = {
         sender: sender 
       });
 
-      // Limpia la sesión tras 5 minutos
       setTimeout(() => searchSessions.delete(sentMsg.key.id), 5 * 60 * 1000);
     } catch (e) {
-      console.log('❌ Error enviando video:', e);
-      await reply('❌ Error al enviar el video. Puede que sea demasiado pesado.');
+      await reply('❌ Error al enviar el video. Es posible que el archivo sea demasiado pesado.');
     }
   },
 
