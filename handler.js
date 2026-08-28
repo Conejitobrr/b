@@ -7,12 +7,18 @@ const config = require('./config');
 const db = require('./lib/database');
 const { getBody, normalizeJid, detectPrefix, cleanNumber, getGroupAdmins } = require('./lib/utils');
 
+// ⏱️ OBTENER HORA FORMATEADA
+function getTime() {
+  const now = new Date();
+  return `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}:${now.getSeconds().toString().padStart(2, '0')}`;
+}
+
 // ==========================================
 // 🛡️ SISTEMA DE COLA ANTI-OVERLIMIT 
 // ==========================================
 const sendQueue = [];
 let isSending = false;
-const SEND_DELAY = 1000; // 1 segundo exacto de espera entre mensajes
+const SEND_DELAY = 1000; 
 
 async function processSendQueue() {
   if (isSending || sendQueue.length === 0) return;
@@ -37,12 +43,18 @@ function attachSendLogger(sock) {
       sendQueue.push(async () => {
         try {
           if (config.debug) {
-            console.log(chalk.green('\n📤 BOT ENVÍA MENSAJE A:'), chalk.cyan(jid));
+            const dest = jid.split('@')[0];
+            const type = content.text ? 'Texto' : (content.image ? 'Imagen' : 'Multimedia');
+            console.log(
+              chalk.bgWhite.black(`[${getTime()}]`), 
+              chalk.bgBlue.white(' 📤 ENVIANDO '), 
+              chalk.cyan(`A: +${dest} | Tipo: ${type}`)
+            );
           }
           const result = await originalSend(jid, content, options);
           resolve(result);
         } catch (err) {
-          console.log(chalk.red('❌ Error enviando:'), err?.message || err);
+          console.log(chalk.bgWhite.black(`[${getTime()}]`), chalk.bgRed.white(' ❌ ERROR ENVÍO '), chalk.red(err?.message || err));
           reject(err);
         }
       });
@@ -52,7 +64,7 @@ function attachSendLogger(sock) {
 }
 
 // ==========================================
-// 🧩 CARGA DE PLUGINS PROFESIONAL
+// 🧩 CARGA DE PLUGINS
 // ==========================================
 const PLUGINS_DIR = path.join(process.cwd(), 'plugins');
 if (!fs.existsSync(PLUGINS_DIR)) fs.mkdirSync(PLUGINS_DIR, { recursive: true });
@@ -70,7 +82,7 @@ function loadPlugins() {
   for (const file of files) {
     try {
       const filepath = path.join(PLUGINS_DIR, file);
-      delete require.cache[require.resolve(filepath)]; // Hot-reload manual
+      delete require.cache[require.resolve(filepath)];
       const plugin = require(filepath);
 
       if (plugin.name && typeof plugin.execute === 'function') {
@@ -85,10 +97,10 @@ function loadPlugins() {
         count++;
       }
     } catch (err) {
-      console.log(chalk.red(`❌ Error cargando plugin ${file}:`), err?.message);
+      console.log(chalk.bgRed.white(' ❌ ERROR PLUGIN '), chalk.red(`Fallo en ${file}: ${err?.message}`));
     }
   }
-  console.log(chalk.green(`♻️ Plugins cargados: ${count} comandos estructurados listos`));
+  console.log(chalk.bgGreen.black('\n ♻️ PLUGINS LISTOS '), chalk.green(`${count} comandos estructurados cargados exitosamente.\n`));
 }
 
 loadPlugins();
@@ -117,10 +129,15 @@ async function messageHandler(sock, msg, store = {}) {
     const ownerNumbers = Array.isArray(config.owner) ? config.owner.map(n => String(n).replace(/\D/g, '')) : [];
     const isOwner = !!key.fromMe || ownerNumbers.includes(senderNumber);
 
-    if (config.debug) {
-      console.log(chalk.gray('───────────────────────────────────────'));
-      console.log(chalk.white('👤 De   :'), chalk.green(pushName), chalk.yellow(`(+${senderNumber})`));
-      console.log(chalk.white('💬 Msg  :'), chalk.white(String(body).slice(0, 100)));
+    // 📩 LOG DE MENSAJE ENTRANTE
+    if (config.debug && body) {
+      console.log(
+        chalk.bgWhite.black(`\n[${getTime()}]`),
+        chalk.bgGreen.black(' 📥 MENSAJE '),
+        chalk.green(`De: ${pushName} (+${senderNumber})`),
+        fromGroup ? chalk.magenta(`[Grupo]`) : chalk.blue(`[Privado]`)
+      );
+      console.log(chalk.gray(` ↳ 💬 ${String(body).slice(0, 80)}`));
     }
 
     if (!body) return;
@@ -132,24 +149,30 @@ async function messageHandler(sock, msg, store = {}) {
     const commandName = args.shift()?.toLowerCase();
     if (!commandName) return;
 
-    // Buscar comando por nombre o por alias
     const cmdKey = aliases.has(commandName) ? aliases.get(commandName) : commandName;
     const plugin = commands.get(cmdKey);
     
     if (!plugin) return;
 
-    // Control de Base de Datos
+    // ⚡ LOG DE COMANDO DETECTADO
+    if (config.debug) {
+      console.log(
+        chalk.bgWhite.black(`[${getTime()}]`),
+        chalk.bgYellow.black(' ⚡ COMANDO '),
+        chalk.yellow(`Procesando: ${config.prefix}${commandName}`)
+      );
+    }
+
     let groupData = null;
     if (fromGroup) {
       groupData = await db.getGroup(remoteJid);
-      // Apagado absoluto del bot en grupos (excepto para dueños)
-      if (groupData.bot === false && !isOwner && !['enable', 'disable'].includes(cmdKey)) return; 
+      if (groupData.bot === false && !isOwner && !['enable', 'disable', 'config'].includes(cmdKey)) return; 
     }
 
     const userData = await db.getUser(sender);
     if (userData.banned && !isOwner) return;
 
-    // Ejecutar el Plugin
+    // EJECUCIÓN
     try {
       await plugin.execute({
         sock, msg, remoteJid, sender, botJid, pushName, body, args, commandName, config, db,
@@ -157,16 +180,21 @@ async function messageHandler(sock, msg, store = {}) {
         reply: (text) => sock.sendMessage(remoteJid, { text: String(text) }, { quoted: msg })
       });
       
-      // Sumar XP automático por uso
       if (!isOwner) await db.addXP(sender, Math.floor(Math.random() * 10) + 5);
+
+      // ✅ LOG DE ÉXITO
+      if (config.debug) {
+        console.log(chalk.bgWhite.black(`[${getTime()}]`), chalk.bgGreen.white(' ✅ ÉXITO '), chalk.green(`Comando ejecutado.`));
+      }
       
     } catch (e) {
-      console.log(chalk.red(`❌ Error en comando ${commandName}:`), e);
-      await sock.sendMessage(remoteJid, { text: '❌ Ocurrió un error al ejecutar este comando.' }, { quoted: msg });
+      // ❌ LOG DE ERROR
+      console.log(chalk.bgWhite.black(`[${getTime()}]`), chalk.bgRed.white(' ❌ ERROR COMANDO '), chalk.red(e.message || e));
+      await sock.sendMessage(remoteJid, { text: '❌ Ocurrió un error interno al ejecutar este comando.' }, { quoted: msg });
     }
 
   } catch (err) {
-    console.log(chalk.red('❌ Error crítico en handler:'), err);
+    console.log(chalk.bgRed.white('\n ❌ ERROR CRÍTICO '), chalk.red(err.message || err));
   }
 }
 
