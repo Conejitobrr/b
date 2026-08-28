@@ -2,7 +2,6 @@
 
 const fs = require('fs');
 const path = require('path');
-const shop = require('../lib/shop'); // Importamos tu tienda para manejar los escudos
 
 const ROBOS_PATH = path.join(process.cwd(), 'lib', 'robos_recientes.json');
 if (!fs.existsSync(path.dirname(ROBOS_PATH))) fs.mkdirSync(path.dirname(ROBOS_PATH), { recursive: true });
@@ -15,7 +14,7 @@ function saveRobos(data) { fs.writeFileSync(ROBOS_PATH, JSON.stringify(data, nul
 function cleanJid(jid = '') { return String(jid).split(':')[0]; }
 function cleanNumber(jid = '') { return cleanJid(jid).split('@')[0].replace(/\D/g, ''); }
 
-// ⏱️ CANDADO EN RAM (Elimina la necesidad de guardar el cooldown en la base de datos)
+// ⏱️ CANDADO EN RAM
 const cooldowns = new Map();
 
 module.exports = {
@@ -27,7 +26,7 @@ module.exports = {
   execute: async ({ sock, remoteJid, sender, msg, db, reply, fromGroup }) => {
     if (!fromGroup) return reply('❌ Este comando solo funciona en grupos.');
 
-    // 🔥 DETECTAR OBJETIVO: Respondiendo a un msj o mencionando
+    // 🔥 DETECTAR OBJETIVO: Respondiendo o mencionando
     let target = msg.message?.extendedTextMessage?.contextInfo?.participant 
               || msg.message?.extendedTextMessage?.contextInfo?.mentionedJid?.[0];
     
@@ -55,16 +54,15 @@ module.exports = {
       return reply('❌ Esa persona es demasiado pobre para ser asaltada (Mínimo 2000 XP).');
     }
 
-    // Registramos el uso en RAM
     cooldowns.set(thief, now);
 
-    // 🛡️ REVISAR ESCUDO ANTI-ROBO (Usando tu shop original)
-    const targetInv = await shop.getInventory(target);
-    if ((targetInv.shieldUses || targetInv.escudo || 0) > 0) {
-      // Gastar escudo de la víctima usando shop
-      await shop.useItem(target, targetInv.shieldUses ? 'shieldUses' : 'escudo', 1);
+    // 🛡️ REVISAR ESCUDO ANTI-ROBO DIRECTO EN BD
+    if (targetData.inventory && (targetData.inventory.shieldUses > 0 || targetData.inventory.escudo > 0)) {
+      if (targetData.inventory.shieldUses > 0) targetData.inventory.shieldUses -= 1;
+      else if (targetData.inventory.escudo > 0) targetData.inventory.escudo -= 1;
       
-      // Multa para el ladrón de forma segura
+      await db.setUser(target, targetData); // Guarda el escudo gastado
+      
       const multa = Math.floor(Math.random() * 2000) + 1000;
       await db.removeXP(thief, multa); 
 
@@ -74,11 +72,10 @@ module.exports = {
       }, { quoted: msg });
     }
 
-    // 💰 CÁLCULO DEL ROBO Y JACKPOT
     let amount = 0;
     let jackpot = false;
 
-    if (Math.random() < 0.05) { // 5% Probabilidad de Jackpot
+    if (Math.random() < 0.05) {
       const porcentaje = (Math.random() * 0.08) + 0.12; 
       amount = Math.floor(targetXp * porcentaje);
       jackpot = true;
@@ -89,11 +86,11 @@ module.exports = {
 
     amount = Math.min(amount, targetXp);
 
-    // 🔥 TRANSFERENCIA DE XP (100% libre de errores)
+    // 🔥 TRANSFERENCIA DE XP
     await db.removeXP(target, amount);
     await db.addXP(thief, amount);
 
-    // 📝 REGISTRO POLICIAL PARA EL COMANDO .policia
+    // 📝 REGISTRO POLICIAL
     const robosDB = loadRobos();
     if (!robosDB[remoteJid]) robosDB[remoteJid] = [];
     
