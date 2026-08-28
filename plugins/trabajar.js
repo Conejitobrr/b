@@ -1,8 +1,8 @@
 'use strict';
 
-// ⏱️ Usamos la memoria RAM para los tiempos de espera (más rápido y no gasta base de datos)
+// ⏱️ Usamos la memoria RAM para los tiempos de espera
 const cooldowns = new Map();
-const BASE_COOLDOWN = 10 * 60 * 1000; // 10 minutos
+const COOLDOWN = 10 * 60 * 1000; // 10 minutos
 
 const trabajos = [
   '👨‍🍳 Trabajaste de chef preparando anticuchos', '🚕 Fuiste taxista toda la noche',
@@ -43,8 +43,8 @@ const fracasos = [
   '💀 Te quedaste dormido en el trabajo', '😵 Rompiste algo caro sin querer',
   '🐀 Saliste corriendo por una rata gigante', '📉 Invertiste tu sueldo en una mala idea',
   '🫠 Te estafaron con un trabajo falso', '🚓 Te confundieron con el ladrón y perdiste tiempo',
-  '🤦‍♂️ Te equivocaste de pedido y tu jefe te gritó', '🐕 Un perro callejero te persiguió y perdiste la mercancía',
-  '🌧️ Llovió fortísimo y se arruinó lo que estabas vendiendo', '📱 Te distrajiste viendo TikToks y te despidieron',
+  '🤦‍♂️ Te equivocaste de pedido y te descontaron de tu sueldo', '🐕 Un perro callejero te persiguió y perdiste la mercancía',
+  '🌧️ Llovió fortísimo y se arruinó lo que estabas vendiendo', '📱 Te distrajiste viendo TikToks y tu jefe te despidió',
   '💸 Te pagaron con billetes falsos y no te diste cuenta'
 ];
 
@@ -61,59 +61,44 @@ module.exports = {
   name: 'trabajar',
   aliases: ['work', 'chambear'],
   category: 'economía',
-  desc: 'Trabaja para ganar experiencia y dinero',
+  desc: 'Trabaja para ganar o perder experiencia',
 
-  execute: async ({ sock, msg, remoteJid, sender, userData, db, reply }) => {
+  execute: async ({ sock, msg, remoteJid, sender, db, reply }) => {
     const now = Date.now();
     const lastWork = cooldowns.get(sender) || 0;
-    
-    // 💎 Beneficio Premium: Tienen solo la mitad del tiempo de espera (5 mins)
-    const isPremium = userData.premium === true || Number(userData.premiumUntil || 0) > now;
-    const userCooldown = isPremium ? BASE_COOLDOWN / 2 : BASE_COOLDOWN;
-    
-    const remaining = userCooldown - (now - lastWork);
+    const remaining = COOLDOWN - (now - lastWork);
 
     if (remaining > 0) {
-      return reply(`⏳ Estás cansado.\nVuelve a chambear en *${formatTime(remaining)}*.${isPremium ? '\n_(💎 Bono Premium: Tiempos de espera reducidos a la mitad)_' : ''}`);
+      return sock.sendMessage(remoteJid, {
+        text: `⏳ Ya trabajaste hace poco.\nVuelve en *${formatTime(remaining)}*.`
+      }, { quoted: msg });
     }
 
-    // 12% de probabilidad de fracaso
     const isFail = Math.random() < 0.12;
 
     if (isFail) {
-      // ⚠️ En lugar de quitar XP (lo cual rompe el cálculo de niveles), les damos una penalización de tiempo
-      cooldowns.set(sender, now + (5 * 60 * 1000)); // +5 mins extra de penalización
+      const lost = Math.floor(Math.random() * 301) + 200; 
       
-      const textoFracaso = `╭─❖「 *DÍA DE MALA SUERTE* 」
-│ ${pick(fracasos)}
-│
-│ 💸 Ganancia: *0 XP*
-│ ⏳ Penalidad: *Has perdido 5 minutos extra recuperándote.*
-╰─────────────────`;
-      return sock.sendMessage(remoteJid, { text: textoFracaso }, { quoted: msg });
+      // Restamos XP manualmente y guardamos
+      const user = await db.getUser(sender);
+      user.xp -= lost;
+      if (user.xp < 0) user.xp = 0;
+      user.level = Math.floor(user.xp / 10000) + 1;
+      if (user.save) await user.save(); // Guarda en MongoDB si está activo
+
+      cooldowns.set(sender, now);
+
+      return sock.sendMessage(remoteJid, {
+        text: `╔══════════════╗\n║ 💼 TRABAJO\n╠══════════════╣\n\n${pick(fracasos)}\n\n💸 Perdiste: *-${lost} XP*\n\n╚══════════════╝`
+      }, { quoted: msg });
     }
 
-    // ⭐ Ganancia base: 400 - 1200 XP
-    let xp = Math.floor(Math.random() * 801) + 400; 
-
-    // 📈 Beneficio por Nivel: Ganan 5% extra por cada nivel que tengan
-    const levelBonusMultiplier = 1 + ((userData.level || 1) * 0.05);
-    xp = Math.floor(xp * levelBonusMultiplier);
-
-    // 💎 Beneficio Premium: 1.5x de XP
-    if (isPremium) xp = Math.floor(xp * 1.5);
-
-    // Guardar cooldown y otorgar XP
-    cooldowns.set(sender, now);
+    const xp = Math.floor(Math.random() * 801) + 400; 
     await db.addXP(sender, xp);
+    cooldowns.set(sender, now);
 
-    const textoExito = `╭─❖「 *JORNADA LABORAL* 」
-│ ${pick(trabajos)}
-│
-│ ⭐ Ganancia: *+${xp} XP*
-│ 📈 Bono aplicado: *x${levelBonusMultiplier.toFixed(1)}* por Nivel ${userData.level || 1}
-╰─────────────────`;
-
-    await sock.sendMessage(remoteJid, { text: textoExito }, { quoted: msg });
+    await sock.sendMessage(remoteJid, {
+      text: `╔══════════════╗\n║ 💼 TRABAJO\n╠══════════════╣\n\n${pick(trabajos)}\n\n⭐ Ganaste: *+${xp} XP*\n\n╚══════════════╝`
+    }, { quoted: msg });
   }
 };
