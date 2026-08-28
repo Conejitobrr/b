@@ -1,7 +1,6 @@
 'use strict';
 
 function extractJid(jid = '') {
-  // Extrae el número puro ignorando el ID de dispositivo (:xx) y arma el JID limpio
   const num = String(jid).split('@')[0].split(':')[0].replace(/\D/g, '');
   return `${num}@s.whatsapp.net`;
 }
@@ -16,15 +15,14 @@ module.exports = {
     if (!fromGroup) return reply('❌ Solo en grupos.');
     if (!isAdmin && !isOwner) return reply('❌ Solo admins pueden usar este comando.');
 
-    // Validar si el bot es admin con el extractor corregido
+    // 🤖 DETECCIÓN INFALIBLE DE PERMISOS DEL BOT (Solo comparamos los números)
     const groupMetadata = await sock.groupMetadata(remoteJid);
-    const botJid = extractJid(sock.user.id);
-    const botData = groupMetadata.participants.find(p => extractJid(p.id) === botJid);
-    
-    // Verificamos explícitamente si el rol es 'admin' o 'superadmin'
+    const botNumber = String(sock.user.id).split(':')[0].split('@')[0].replace(/\D/g, '');
+    const botData = groupMetadata.participants.find(p => String(p.id).includes(botNumber));
     const botIsAdmin = botData?.admin === 'admin' || botData?.admin === 'superadmin';
 
-    if (['kick', 'promote', 'demote', 'abrirgrupo', 'cerrargrupo'].includes(commandName) && !botIsAdmin) {
+    // Bloqueo general si el bot no tiene los permisos
+    if (['kick', 'promote', 'demote', 'revoke', 'abrirgrupo', 'cerrargrupo'].includes(commandName) && !botIsAdmin) {
       return reply('❌ El bot necesita ser Administrador para hacer esto.');
     }
 
@@ -44,7 +42,7 @@ module.exports = {
       return reply(`✅ *Link del grupo reiniciado*\n🔗 Nuevo link: https://chat.whatsapp.com/${code}`);
     }
 
-    // Comandos que requieren apuntar a un usuario
+    // 🎯 OBTENER EL OBJETIVO PARA KICK, PROMOTE, DEMOTE
     const target = msg.message?.extendedTextMessage?.contextInfo?.participant 
                 || msg.message?.extendedTextMessage?.contextInfo?.mentionedJid?.[0];
 
@@ -52,7 +50,7 @@ module.exports = {
     
     const userJid = extractJid(target);
 
-    if (userJid === botJid) return reply('❌ No puedo aplicar eso en mí mismo.');
+    if (userJid.includes(botNumber)) return reply('❌ No puedo aplicar eso en mí mismo.');
 
     try {
       if (commandName === 'kick') {
@@ -75,7 +73,7 @@ module.exports = {
       }
     } catch (err) {
       console.log('❌ Error en comando de administración:', err);
-      return reply('❌ Ocurrió un error ejecutando la acción. Verifica que mantenga mis permisos.');
+      return reply('❌ Ocurrió un error. Verifica que mantenga mis permisos y que el usuario siga en el grupo.');
     }
   }
 };
