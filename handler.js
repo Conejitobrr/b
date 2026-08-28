@@ -7,10 +7,14 @@ const config = require('./config');
 const db = require('./lib/database');
 const { getBody, normalizeJid, detectPrefix, cleanNumber, getReadableType } = require('./lib/utils');
 
-// ⏱️ OBTENER HORA FORMATEADA
+// ⏱️ OBTENER HORA FORMATEADA (12 horas AM/PM)
 function getTime() {
-  const now = new Date();
-  return `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}:${now.getSeconds().toString().padStart(2, '0')}`;
+  return new Date().toLocaleTimeString('es-PE', { 
+    hour: '2-digit', 
+    minute: '2-digit', 
+    second: '2-digit', 
+    hour12: true 
+  });
 }
 
 // ==========================================
@@ -54,8 +58,9 @@ function attachSendLogger(sock) {
             else if (content.document) { type = '📄 Documento'; preview = content.fileName || '[Documento]'; }
 
             const labelType = isGroup ? chalk.magenta('👥 GRUPO') : chalk.blue('👤 PRIVADO');
+            const time = getTime();
 
-            console.log(chalk.gray(`╭─── 📤 `) + chalk.cyan.bold(`BOT ENVÍA`) + chalk.gray(` ─────────────────────────`));
+            console.log(chalk.gray(`╭─── 📤 `) + chalk.cyan.bold(`BOT ENVÍA`) + chalk.cyan(` [${time}]`) + chalk.gray(` ───────────────`));
             console.log(chalk.gray(`│ 🏷️  Destino : `) + labelType + chalk.yellow(` (+${cleanNumber(jid)})`));
             console.log(chalk.gray(`│ 📦  Tipo    : `) + chalk.white(type));
             if (preview) console.log(chalk.gray(`│ 💬  Msg     : `) + chalk.green(String(preview).slice(0, 60).replace(/\n/g, ' ')));
@@ -64,7 +69,8 @@ function attachSendLogger(sock) {
           const result = await originalSend(jid, content, options);
           resolve(result);
         } catch (err) {
-          console.log(chalk.gray(`╭─── ❌ `) + chalk.red.bold(`ERROR ENVÍO`) + chalk.gray(` ───────────────────────`));
+          const time = getTime();
+          console.log(chalk.gray(`╭─── ❌ `) + chalk.red.bold(`ERROR ENVÍO`) + chalk.cyan(` [${time}]`) + chalk.gray(` ─────────────`));
           console.log(chalk.gray(`│ ⚠️  Detalle : `) + chalk.red(err?.message || err));
           console.log(chalk.gray(`╰──────────────────────────────────────────\n`));
           reject(err);
@@ -170,7 +176,8 @@ async function messageHandler(sock, msg, store = {}) {
 
     // 📩 LOG DE MENSAJE ENTRANTE
     if (config.debug && body) {
-      console.log(chalk.gray(`╭─── 📥 `) + chalk.green.bold(`MENSAJE ENTRANTE`) + chalk.gray(` ──────────────────`));
+      const time = getTime();
+      console.log(chalk.gray(`╭─── 📥 `) + chalk.green.bold(`MENSAJE ENTRANTE`) + chalk.cyan(` [${time}]`) + chalk.gray(` ──────────`));
       console.log(chalk.gray(`│ 🏷️  Chat    : `) + chatLabel + (fromGroup ? chalk.white(` ${groupName}`) : ''));
       console.log(chalk.gray(`│ 👤  De      : `) + chalk.white(pushName) + chalk.yellow(` (+${senderNumber})`));
       console.log(chalk.gray(`│ 🛡️  Admin   : `) + adminStatus);
@@ -214,7 +221,8 @@ async function messageHandler(sock, msg, store = {}) {
     if (!plugin) return;
 
     if (config.debug) {
-      console.log(chalk.gray(`╭─── ⚡ `) + chalk.yellow.bold(`EJECUTANDO COMANDO`) + chalk.gray(` ────────────────`));
+      const time = getTime();
+      console.log(chalk.gray(`╭─── ⚡ `) + chalk.yellow.bold(`EJECUTANDO COMANDO`) + chalk.cyan(` [${time}]`) + chalk.gray(` ────────`));
       console.log(chalk.gray(`│ 🚀  Cmd     : `) + chalk.yellow(`${config.prefix}${commandName}`));
       console.log(chalk.gray(`│ 👤  Por     : `) + chalk.white(pushName));
       console.log(chalk.gray(`╰──────────────────────────────────────────`));
@@ -233,13 +241,15 @@ async function messageHandler(sock, msg, store = {}) {
       if (!isOwner) await db.addXP(sender, Math.floor(Math.random() * 10) + 5);
 
       if (config.debug) {
-        console.log(chalk.gray(`╭─── ✅ `) + chalk.green.bold(`ÉXITO`) + chalk.gray(` ─────────────────────────────`));
+        const time = getTime();
+        console.log(chalk.gray(`╭─── ✅ `) + chalk.green.bold(`ÉXITO`) + chalk.cyan(` [${time}]`) + chalk.gray(` ─────────────────────`));
         console.log(chalk.gray(`│ ⚙️  Comando completado sin errores.`));
         console.log(chalk.gray(`╰──────────────────────────────────────────\n`));
       }
       
     } catch (e) {
-      console.log(chalk.gray(`╭─── ❌ `) + chalk.red.bold(`ERROR EN COMANDO`) + chalk.gray(` ──────────────────`));
+      const time = getTime();
+      console.log(chalk.gray(`╭─── ❌ `) + chalk.red.bold(`ERROR EN COMANDO`) + chalk.cyan(` [${time}]`) + chalk.gray(` ───────────`));
       console.log(chalk.gray(`│ ⚠️  Detalle : `) + chalk.red(e.message || e));
       console.log(chalk.gray(`╰──────────────────────────────────────────\n`));
       await sock.sendMessage(remoteJid, { text: '❌ Ocurrió un error interno al ejecutar este comando.' }, { quoted: msg });
