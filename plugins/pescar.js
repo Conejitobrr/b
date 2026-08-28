@@ -7,11 +7,66 @@ function pick(arr) { return arr[Math.floor(Math.random() * arr.length)]; }
 function randXP(min, max) { return Math.floor(Math.random() * (max - min + 1)) + min; }
 const esperar = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 
-const pescaLegendaria = ['🦈 ¡INCREÍBLE! Pescaste un *Megalodón* y lo vendiste en el mercado negro.', '🏴‍☠️ ¡Pesca histórica! Enganchaste un *Cofre Pirata* lleno de joyas antiguas.', '🧜‍♀️ ¡Wow! Una *Sirena* se enredó en tu red y te pagó con perlas para que la liberes.', '🐉 Pescaste al mismísimo *Monstruo del Lago Ness* y los periódicos te pagaron millones.'];
-const pescaEpica = ['🐡 ¡Genial! Pescaste un raro *Pez Globo Dorado*.', '🐟 ¡Qué fuerza! Lograste sacar un *Atún Aleta Amarilla* gigante.', '⚔️ Luchaste por horas y pescaste un enorme *Pez Espada*.', '🦑 Pescaste un *Calamar Gigante* que casi hunde tu bote.'];
-const pescaNormal = ['🐟 Pescaste un hermoso *Salmón* para la cena.', '🐠 Conseguiste una buena *Corvina* fresca.', '🐟 Pescaste un *Bonito* de buen tamaño.', '🐡 Atrapaste un montón de *Pejerreyes*.', '🐟 Sacaste una *Trucha* de río muy apetitosa.', '🐠 Pescaste una *Tilapia* promedio.'];
-const pescaBasura = ['🥾 Qué asco... Pescaste una *bota vieja y apestosa*.', '🛞 Enganchaste una *llanta pinchada* llena de lodo.', '🌿 Solo sacaste un montón de *algas enredadas*.', '🩲 Pescaste un *calzoncillo mojado* de alguien más... qué asco.', '🍾 Enganchaste una *botella de plástico* vacía. Al menos limpiaste el mar.'];
-const pescaCastigo = ['🐊 ¡CUIDADO! Un *cocodrilo* salió del agua y te mordió. Pagaste medicinas.', '🦈 Un *tiburón* saltó, se comió tu pesca y rompió tu caña carísima.', '🌊 Te resbalaste, caíste al agua y *perdiste tu billetera*.', '🦅 Un *pelícano gigante* te atacó y se robó lo que habías pescado.', '👮‍♂️ La policía marítima te multó por *pescar sin licencia*.'];
+const pescaLegendaria = [
+    '🦈 ¡INCREÍBLE! Pescaste un *Megalodón* y lo vendiste en el mercado negro.',
+    '🏴‍☠️ ¡Pesca histórica! Enganchaste un *Cofre Pirata* lleno de joyas antiguas.',
+    '🧜‍♀️ ¡Wow! Una *Sirena* se enredó en tu red y te pagó con perlas para que la liberes.',
+    '🐉 Pescaste al mismísimo *Monstruo del Lago Ness* y los periódicos te pagaron millones.',
+    '🔱 Sacaste del fondo el legendario *Tridente de Poseidón*.',
+    '🐠 Atrapaste al místico *Pez Dorado Concededor de Deseos*.',
+    '🦑 Luchaste horas y lograste pescar un *Kraken Bebé*.',
+    '🐚 Encontraste una *Perla Negra Gigante* dentro de una ostra colosal.',
+    '🛸 Pescaste restos de un *Submarino Extraterrestre hundido*.',
+    '🥚 Pescaste un extraño *Huevo de Dragón de Agua* intacto.'
+];
+const pescaEpica = [
+    '🐡 ¡Genial! Pescaste un raro *Pez Globo Dorado*.',
+    '🐟 ¡Qué fuerza! Lograste sacar un *Atún Aleta Amarilla* gigante.',
+    '⚔️ Luchaste por horas y pescaste un enorme *Pez Espada*.',
+    '🦑 Pescaste un *Calamar Gigante* que casi hunde tu bote.',
+    '🐟 Enganchaste un rapidísimo *Pez Vela*.',
+    '🦈 Sobreviviste al forcejeo y pescaste un *Tiburón Martillo*.',
+    '🦀 Sacaste del agua a un ancestral *Cangrejo Rey Místico*.',
+    '⚡ Sufriste descargas pero pescaste una *Mantarraya Eléctrica*.',
+    '🔦 Pescaste un aterrador *Pez Linterna Abisal*.',
+    '🐍 Lograste dominar y pescar una *Anguila Mutante*.'
+];
+const pescaNormal = [
+    '🐟 Pescaste un hermoso *Salmón* para la cena.',
+    '🐠 Conseguiste una buena *Corvina* fresca.',
+    '🐟 Pescaste un *Bonito* de buen tamaño.',
+    '🐡 Atrapaste un montón de *Pejerreyes*.',
+    '🐟 Sacaste una *Trucha* de río muy apetitosa.',
+    '🐠 Pescaste una *Tilapia* promedio.',
+    '🐟 Sacaste un *Lenguado* escondido en la arena.',
+    '🐠 Atrapaste un *Pez Payaso* despistado.',
+    '🐟 Lograste enganchar una *Caballa*.',
+    '🐠 Pescaste un buen *Jurel* para el almuerzo.'
+];
+const pescaBasura = [
+    '🥾 Qué asco... Pescaste una *bota vieja y apestosa*.',
+    '🛞 Enganchaste una *llanta pinchada* llena de lodo.',
+    '🌿 Solo sacaste un montón de *algas enredadas*.',
+    '🩲 Pescaste un *calzoncillo mojado* de alguien más... qué asco.',
+    '🍾 Enganchaste una *botella de plástico* vacía. Al menos limpiaste el mar.',
+    '🥫 Pescaste una *lata oxidada* de frijoles.',
+    '🥽 Sacaste unas *gafas de buceo rotas*.',
+    '🗑️ Enganchaste una horrible *bolsa de basura*.',
+    '🪵 Pescaste un pedazo de *tronco podrido*.',
+    '🦴 Solo pescaste un *hueso de pescado* devorado.'
+];
+const pescaCastigo = [
+    '🐊 ¡CUIDADO! Un *cocodrilo* salió del agua y te mordió. Pagaste medicinas.',
+    '🦈 Un *tiburón* saltó, se comió tu pesca y rompió tu caña carísima.',
+    '🌊 Te resbalaste, caíste al agua y *perdiste tu billetera*.',
+    '🦅 Un *pelícano gigante* te atacó y se robó lo que habías pescado.',
+    '👮‍♂️ La policía marítima te multó por *pescar sin licencia*.',
+    '🐟 Un cardumen de *pirañas* atacó y destrozó tu equipo.',
+    '⚡ Una *medusa* te rozó. Pagaste la crema para quemaduras.',
+    '🦛 Un *hipopótamo* territorial embistió tu bote.',
+    '🌪️ Una fuerte corriente te arrastró y *perdiste tus pertenencias*.',
+    '🪝 Tiraste mal la caña y *te clavaste el anzuelo en el ojo*.'
+];
 
 module.exports = {
     name: 'pescar',
@@ -63,7 +118,7 @@ module.exports = {
             resTxt = `${pick(pescaBasura)}\n💸 No ganas nada de XP.`;
         } else { 
             let castigo = randXP(500, 1000);
-            await db.removeXP(sender, castigo); // 🔥 FIX APLICADO
+            await db.removeXP(sender, castigo);
             resTxt = `${pick(pescaCastigo)}\n❌ Perdiste *${castigo} XP*.`;
         }
 
@@ -73,7 +128,7 @@ module.exports = {
             resTxt += `\n✨ ¡Tu mascota *${userData.pet.name}* te ayudó y encontró *+${bono} XP* extra!`;
         }
 
-        if (premio > 0) await db.addXP(sender, premio); // 🔥 FIX APLICADO
+        if (premio > 0) await db.addXP(sender, premio);
 
         const fMsg = `*RESULTADO DE LA PESCA* 🎣\n\n${resTxt}\n👤 Pescador: @${cleanNumber(sender)}`;
         try { await sock.sendMessage(remoteJid, { text: fMsg, edit: msgSent.key, mentions: [sender] }); } 
