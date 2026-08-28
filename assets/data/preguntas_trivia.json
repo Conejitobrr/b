@@ -3,8 +3,6 @@
   { q: '¿Capital de México?', a: ['ciudad de mexico', 'cdmx', 'mexico df'] },
   { q: '¿Capital de España?', a: ['madrid'] },
   { q: '¿Capital de Argentina?', a: ['buenos aires'] },
-  { q: '¿Capital de Chile?', a: ['santiago', 'santiago de chile'] },
-
   { q: '¿Cuánto es 5 + 7?', a: ['12', 'doce'] },
   { q: '¿Cuánto es 9 x 3?', a: ['27', 'veintisiete'] },
   { q: '¿Cuánto es 15 - 6?', a: ['9', 'nueve'] },
