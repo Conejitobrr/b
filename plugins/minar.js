@@ -63,8 +63,7 @@ module.exports = {
             resTxt = `${pick(minaBasura)}\n💸 No ganas nada de XP.`;
         } else { 
             let castigo = randXP(500, 1000);
-            if ((userData.xp || 0) < castigo) castigo = userData.xp || 0; 
-            userData.xp -= castigo;
+            await db.removeXP(sender, castigo); // 🔥 FIX APLICADO
             resTxt = `${pick(minaCastigo)}\n❌ Perdiste *${castigo} XP*.`;
         }
 
@@ -74,8 +73,7 @@ module.exports = {
             resTxt += `\n✨ ¡Tu mascota *${userData.pet.name}* te ayudó y encontró *+${bono} XP* extra!`;
         }
 
-        if (premio > 0) userData.xp += premio;
-        await db.setUser(sender, userData);
+        if (premio > 0) await db.addXP(sender, premio); // 🔥 FIX APLICADO
 
         const fMsg = `*RESULTADO DE LA MINERÍA* ⛏️\n\n${resTxt}\n👤 Minero: @${cleanNumber(sender)}`;
         try { await sock.sendMessage(remoteJid, { text: fMsg, edit: msgSent.key, mentions: [sender] }); } 
