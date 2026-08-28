@@ -12,26 +12,22 @@ if (!fs.existsSync(TEMP_DIR)) fs.mkdirSync(TEMP_DIR, { recursive: true });
 const searchSessions = new Map();
 
 // ==========================================
-// 🛡️ MOTOR DE BÚSQUEDA 1: APIs MÚLTIPLES
+// 🛡️ MOTOR 1: APIs MÚLTIPLES
 // ==========================================
 async function searchApis(query) {
   const apis = [
+    `https://deliriussapi-oficial.vercel.app/search/tiktoksearch?query=${encodeURIComponent(query)}`,
     `https://api.siputzx.my.id/api/tiktok/search?query=${encodeURIComponent(query)}`,
-    `https://api.tiklydown.eu.org/api/search?q=${encodeURIComponent(query)}`,
-    `https://aemt.me/tiktoksearch?text=${encodeURIComponent(query)}`,
-    `https://api.agatz.xyz/api/tiktoksearch?text=${encodeURIComponent(query)}`,
-    `https://api.ryzendesu.vip/api/search/tiktok?query=${encodeURIComponent(query)}`
+    `https://aemt.me/tiktoksearch?text=${encodeURIComponent(query)}`
   ];
 
   for (const url of apis) {
     try {
-      const res = await fetch(url, { timeout: 6000 });
-      const text = await res.text();
-      let json;
-      try { json = JSON.parse(text); } catch (e) { continue; }
-
-      const data = json.data || json.result || json.videos || json.BK9 || json;
-      const arr = Array.isArray(data) ? data : (data.videos || data.data);
+      const res = await fetch(url, { timeout: 7000 });
+      const json = await res.json();
+      
+      let data = json.data || json.result || json.BK9 || json;
+      let arr = Array.isArray(data) ? data : (data.videos || data.data);
 
       if (Array.isArray(arr) && arr.length > 0) {
         const mapped = arr.map(v => {
@@ -52,38 +48,69 @@ async function searchApis(query) {
 }
 
 // ==========================================
-// 🛡️ MOTOR DE BÚSQUEDA 2: SCRAPING WEB BRUTO
+// 🛡️ MOTOR 2: DECODIFICADOR DUCKDUCKGO
 // ==========================================
-async function scrapeSearchEngines(query) {
-  const userAgent = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
-  const searchQueries = [
-    `https://www.bing.com/search?q=${encodeURIComponent('site:tiktok.com/video/ ' + query)}`,
-    `https://html.duckduckgo.com/html/?q=${encodeURIComponent('site:tiktok.com/video/ ' + query)}`,
-    `https://search.yahoo.com/search?p=${encodeURIComponent('site:tiktok.com/video/ ' + query)}`,
-    `https://www.bing.com/search?q=${encodeURIComponent('tiktok ' + query)}`
-  ];
+async function scrapeDuckDuckGo(query) {
+  try {
+    const res = await fetch('https://lite.duckduckgo.com/lite/', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded',
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+      },
+      body: `q=${encodeURIComponent('site:tiktok.com/video/ ' + query)}`
+    });
+    const html = await res.text();
+    
+    const links = [];
+    // 🔓 Capturamos los enlaces encriptados por DuckDuckGo
+    const regex = /uddg=([^&]+)/g;
+    let match;
+    while ((match = regex.exec(html)) !== null) {
+      try {
+        // 🔓 Los desencriptamos a texto plano
+        const decoded = decodeURIComponent(match[1]);
+        if (/tiktok\.com\/@[A-Za-z0-9_.-]+\/video\/\d+/.test(decoded)) {
+          links.push(decoded.split('?')[0]); // Limpiamos la URL
+        }
+      } catch (e) {}
+    }
+    
+    const unique = [...new Set(links)];
+    if (unique.length > 0) {
+      return unique.map(url => ({
+        type: 'scraper',
+        sourceUrl: url,
+        author: url.split('@')[1]?.split('/')[0] || 'Desconocido',
+        title: '🎥 Búsqueda Web (DuckDuckGo)'
+      }));
+    }
+  } catch (e) {}
+  return null;
+}
 
-  let allLinks = [];
-  const regex = /https?:\/\/(?:www\.)?tiktok\.com\/@[A-Za-z0-9_.-]+\/video\/\d+/g;
-
-  for (const url of searchQueries) {
-    try {
-      const res = await fetch(url, { headers: { 'User-Agent': userAgent }, timeout: 8000 });
-      const html = await res.text();
-      const matches = html.match(regex) || [];
-      allLinks.push(...matches);
-    } catch (e) { continue; }
-  }
-
-  const uniqueUrls = [...new Set(allLinks)];
-  if (uniqueUrls.length > 0) {
-    return uniqueUrls.map(link => ({
-      type: 'scraper',
-      sourceUrl: link,
-      author: link.split('@')[1]?.split('/')[0] || 'Desconocido',
-      title: '🎥 Extraído a la fuerza por scraping web'
-    }));
-  }
+// ==========================================
+// 🛡️ MOTOR 3: SCRAPER DE YAHOO
+// ==========================================
+async function scrapeYahoo(query) {
+  try {
+    const res = await fetch(`https://search.yahoo.com/search?p=${encodeURIComponent('site:tiktok.com/video/ ' + query)}`, {
+      headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)' }
+    });
+    const html = await res.text();
+    const regex = /https?:\/\/(?:www\.)?tiktok\.com\/@[A-Za-z0-9_.-]+\/video\/\d+/g;
+    const matches = html.match(regex) || [];
+    const unique = [...new Set(matches)];
+    
+    if (unique.length > 0) {
+      return unique.map(url => ({
+        type: 'scraper',
+        sourceUrl: url,
+        author: url.split('@')[1]?.split('/')[0] || 'Desconocido',
+        title: '🎥 Búsqueda Web (Yahoo)'
+      }));
+    }
+  } catch(e) {}
   return null;
 }
 
@@ -116,18 +143,15 @@ async function processAndSend(sock, remoteJid, videoData, msg, reply) {
 
   if (videoData.type === 'api') {
     try {
-      // Intento directo con el link de la API
       return await sock.sendMessage(remoteJid, {
         video: { url: videoData.sourceUrl },
         caption: caption,
         mimetype: 'video/mp4'
       }, { quoted: msg });
-    } catch (err) {
-      // Si la URL de la API falla al enviarse, forzamos descarga local
-    }
+    } catch (err) {}
   }
 
-  // Descarga forzada vía yt-dlp para Scraping o si la API falló
+  // Descarga forzada para los scrapers o si la API falla al enviar
   const downloadedFile = await forceDownload(videoData.sourceUrl);
   const sentMsg = await sock.sendMessage(remoteJid, {
     video: fs.readFileSync(downloadedFile),
@@ -140,30 +164,31 @@ async function processAndSend(sock, remoteJid, videoData, msg, reply) {
 }
 
 // ==========================================
-// 🎮 COMANDO PRINCIPAL Y ESCUCHA
+// 🎮 COMANDO PRINCIPAL
 // ==========================================
 module.exports = {
   name: 'tiktoksearch',
   aliases: ['tts', 'buscartiktok'],
   category: 'multimedia',
-  desc: 'Búsqueda extrema y blindada de TikToks',
+  desc: 'Búsqueda extrema y decodificada de TikToks',
 
   execute: async ({ sock, remoteJid, args, msg, sender, reply }) => {
-    if (!args.length) {
-      return reply('❌ Ingresa qué deseas buscar.\n\nEjemplo:\n.tts te estoy correteando');
-    }
+    if (!args.length) return reply('❌ Ingresa qué deseas buscar.\n\nEjemplo:\n.tts te estoy correteando');
 
     const query = args.join(' ');
     await reply(`🔍 Ejecutando búsqueda extrema para *${query}*...`);
 
     let videos = await searchApis(query);
     if (!videos) {
-      await reply('🦆 _APIs bloqueadas. Activando raspado de motores de búsqueda..._');
-      videos = await scrapeSearchEngines(query);
+      await reply('🦆 _APIs bloqueadas. Activando decodificación del navegador..._');
+      videos = await scrapeDuckDuckGo(query);
+    }
+    if (!videos) {
+      videos = await scrapeYahoo(query);
     }
 
     if (!videos || videos.length === 0) {
-      return reply('❌ TikTok ha bloqueado todas las conexiones posibles. Intenta con otra palabra.');
+      return reply('❌ TikTok ha bloqueado todas las conexiones. Intenta con otra palabra.');
     }
 
     try {
@@ -176,7 +201,6 @@ module.exports = {
 
       setTimeout(() => searchSessions.delete(sentMsg.key.id), 5 * 60 * 1000);
     } catch (e) {
-      console.log('❌ Error crítico en TTS:', e);
       await reply('❌ Error al enviar el archivo. Puede ser demasiado pesado.');
     }
   },
