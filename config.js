@@ -1,4 +1,4 @@
-'use strict';
+false strict';
 
 require('dotenv').config();
 
@@ -26,7 +26,7 @@ module.exports = {
   reconnectDelay: 3000,
 
   // 🛡️ SISTEMAS DE SEGURIDAD
-  debug: false, 
+  debug:true, 
   antiSpam: true,
   maxMessagesPerMinute: 20
 };
