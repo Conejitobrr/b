@@ -7,6 +7,12 @@ const config = require('./config');
 const db = require('./lib/database');
 const { getBody, normalizeJid, detectPrefix, cleanNumber, getReadableType } = require('./lib/utils');
 
+// ⏱️ OBTENER HORA FORMATEADA
+function getTime() {
+  const now = new Date();
+  return `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}:${now.getSeconds().toString().padStart(2, '0')}`;
+}
+
 // ==========================================
 // 🛡️ SISTEMA DE COLA ANTI-OVERLIMIT 
 // ==========================================
@@ -70,20 +76,23 @@ function attachSendLogger(sock) {
 }
 
 // ==========================================
-// 🧩 CARGA DE PLUGINS
+// 🧩 CARGA DE PLUGINS (Comandos y Escuchas)
 // ==========================================
 const PLUGINS_DIR = path.join(process.cwd(), 'plugins');
 if (!fs.existsSync(PLUGINS_DIR)) fs.mkdirSync(PLUGINS_DIR, { recursive: true });
 
 const commands = new Map();
 const aliases = new Map();
+const messageListeners = []; // 🔥 NUEVO: Para la trivia y anti-link
 
 function loadPlugins() {
   commands.clear();
   aliases.clear();
+  messageListeners.length = 0;
   
   const files = fs.readdirSync(PLUGINS_DIR).filter(file => file.endsWith('.js'));
-  let count = 0;
+  let cmdCount = 0;
+  let listenerCount = 0;
 
   for (const file of files) {
     try {
@@ -94,19 +103,21 @@ function loadPlugins() {
       if (plugin.name && typeof plugin.execute === 'function') {
         const cmdName = plugin.name.toLowerCase();
         commands.set(cmdName, plugin);
-        
         if (Array.isArray(plugin.aliases)) {
-          for (const alias of plugin.aliases) {
-            aliases.set(alias.toLowerCase(), cmdName);
-          }
+          for (const alias of plugin.aliases) aliases.set(alias.toLowerCase(), cmdName);
         }
-        count++;
+        cmdCount++;
+      }
+
+      if (typeof plugin.onMessage === 'function') {
+        messageListeners.push(plugin);
+        listenerCount++;
       }
     } catch (err) {
       console.log(chalk.bgRed.white(' ❌ ERROR PLUGIN '), chalk.red(`Fallo en ${file}: ${err?.message}`));
     }
   }
-  console.log(chalk.bgGreen.black('\n ♻️ PLUGINS LISTOS '), chalk.green(`${count} comandos estructurados cargados exitosamente.\n`));
+  console.log(chalk.bgGreen.black('\n ♻️ PLUGINS LISTOS '), chalk.green(`${cmdCount} comandos y ${listenerCount} detectores activos.\n`));
 }
 
 loadPlugins();
@@ -135,7 +146,6 @@ async function messageHandler(sock, msg, store = {}) {
     const ownerNumbers = Array.isArray(config.owner) ? config.owner.map(n => String(n).replace(/\D/g, '')) : [];
     const isOwner = !!key.fromMe || ownerNumbers.includes(senderNumber);
 
-    // 🕵️‍♂️ RECOPILAR METADATOS DEL CHAT Y USUARIO
     let groupName = 'Privado';
     let chatLabel = chalk.blue('👤 PRIVADO');
     let isAdmin = false;
@@ -155,21 +165,38 @@ async function messageHandler(sock, msg, store = {}) {
     }
 
     const msgType = getReadableType(msg);
-    
-    // FORMATOS SÍ/NO PARA LA CONSOLA
     const adminStatus = isAdmin ? chalk.green('Sí') : chalk.red('No');
     const ownerStatus = isOwner ? chalk.green('Sí') : chalk.red('No');
 
     // 📩 LOG DE MENSAJE ENTRANTE
-    if (config.debug) {
+    if (config.debug && body) {
       console.log(chalk.gray(`╭─── 📥 `) + chalk.green.bold(`MENSAJE ENTRANTE`) + chalk.gray(` ──────────────────`));
       console.log(chalk.gray(`│ 🏷️  Chat    : `) + chatLabel + (fromGroup ? chalk.white(` ${groupName}`) : ''));
       console.log(chalk.gray(`│ 👤  De      : `) + chalk.white(pushName) + chalk.yellow(` (+${senderNumber})`));
       console.log(chalk.gray(`│ 🛡️  Admin   : `) + adminStatus);
       console.log(chalk.gray(`│ 👑  Owner   : `) + ownerStatus);
       console.log(chalk.gray(`│ 📦  Tipo    : `) + chalk.white(msgType));
-      if (body) console.log(chalk.gray(`│ 💬  Texto   : `) + chalk.white(String(body).slice(0, 80).replace(/\n/g, ' ')));
+      console.log(chalk.gray(`│ 💬  Texto   : `) + chalk.white(String(body).slice(0, 80).replace(/\n/g, ' ')));
       console.log(chalk.gray(`╰──────────────────────────────────────────`));
+    }
+
+    let groupData = null;
+    if (fromGroup) groupData = await db.getGroup(remoteJid);
+    const userData = await db.getUser(sender);
+
+    // 🔥 EJECUTAR ESCUCHADORES PASIVOS (Trivia, Juegos, Anti-Link)
+    if (!fromGroup || (groupData && groupData.bot !== false) || isOwner) {
+      for (const listener of messageListeners) {
+        try {
+          await listener.onMessage({
+            sock, msg, remoteJid, sender, botJid, pushName, body, config, db,
+            fromGroup, isOwner, isAdmin, groupData, userData,
+            reply: (text) => sock.sendMessage(remoteJid, { text: String(text) }, { quoted: msg })
+          });
+        } catch (e) {
+          console.log(chalk.red(`❌ Error en detector pasivo: ${e.message}`));
+        }
+      }
     }
 
     if (!body) return;
@@ -186,7 +213,6 @@ async function messageHandler(sock, msg, store = {}) {
     
     if (!plugin) return;
 
-    // ⚡ LOG DE COMANDO DETECTADO
     if (config.debug) {
       console.log(chalk.gray(`╭─── ⚡ `) + chalk.yellow.bold(`EJECUTANDO COMANDO`) + chalk.gray(` ────────────────`));
       console.log(chalk.gray(`│ 🚀  Cmd     : `) + chalk.yellow(`${config.prefix}${commandName}`));
@@ -194,16 +220,9 @@ async function messageHandler(sock, msg, store = {}) {
       console.log(chalk.gray(`╰──────────────────────────────────────────`));
     }
 
-    let groupData = null;
-    if (fromGroup) {
-      groupData = await db.getGroup(remoteJid);
-      if (groupData.bot === false && !isOwner && !['config'].includes(cmdKey)) return; 
-    }
-
-    const userData = await db.getUser(sender);
+    if (fromGroup && groupData.bot === false && !isOwner && !['config'].includes(cmdKey)) return; 
     if (userData.banned && !isOwner) return;
 
-    // EJECUCIÓN
     try {
       await plugin.execute({
         sock, msg, remoteJid, sender, botJid, pushName, body, args, commandName, config, db,
@@ -213,7 +232,6 @@ async function messageHandler(sock, msg, store = {}) {
       
       if (!isOwner) await db.addXP(sender, Math.floor(Math.random() * 10) + 5);
 
-      // ✅ LOG DE ÉXITO
       if (config.debug) {
         console.log(chalk.gray(`╭─── ✅ `) + chalk.green.bold(`ÉXITO`) + chalk.gray(` ─────────────────────────────`));
         console.log(chalk.gray(`│ ⚙️  Comando completado sin errores.`));
@@ -221,7 +239,6 @@ async function messageHandler(sock, msg, store = {}) {
       }
       
     } catch (e) {
-      // ❌ LOG DE ERROR
       console.log(chalk.gray(`╭─── ❌ `) + chalk.red.bold(`ERROR EN COMANDO`) + chalk.gray(` ──────────────────`));
       console.log(chalk.gray(`│ ⚠️  Detalle : `) + chalk.red(e.message || e));
       console.log(chalk.gray(`╰──────────────────────────────────────────\n`));
