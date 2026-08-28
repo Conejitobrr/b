@@ -18,7 +18,7 @@ module.exports = {
   category: 'economía',
   desc: 'Roba XP a un usuario (Puede salir mal)',
 
-  execute: async ({ sock, remoteJid, sender, msg, args, db, reply, fromGroup, userData }) => {
+  execute: async ({ sock, remoteJid, sender, msg, db, reply, fromGroup }) => {
     if (!fromGroup) return reply('❌ Solo en grupos.');
 
     const now = Date.now();
@@ -38,31 +38,26 @@ module.exports = {
 
     cooldowns.set(sender, now);
 
-    // 🛡️ REVISAR ESCUDO
+    // 🛡️ REVISAR ESCUDO ANTI-ROBO
     if (targetData.inventory && targetData.inventory.shieldUses > 0) {
       targetData.inventory.shieldUses -= 1;
-      await db.setUser(target, targetData);
+      if (targetData.save) await targetData.save();
       
-      // El ladrón pierde XP
       const multa = Math.floor(Math.random() * 2000) + 1000;
-      userData.xp -= multa;
-      await db.setUser(sender, userData);
+      await db.removeXP(sender, multa); // 🔥 FIX: Descuento seguro
 
       return sock.sendMessage(remoteJid, { text: `🛡️ *¡ROBO FALLIDO!*\n\n@${sender.split('@')[0]} intentó robar a @${target.split('@')[0]}, pero este tenía un **Escudo Anti-Robo**.\n\nEl ladrón salió herido y perdió *${multa} XP*.`, mentions: [sender, target] }, { quoted: msg });
     }
 
-    // PROBABILIDAD DE ROBO (40% ÉXITO)
+    // 40% PROBABILIDAD DE ÉXITO
     const success = Math.random() < 0.40;
 
     if (success) {
-      const stoleAmount = Math.floor(Math.random() * (targetXp * 0.15)) + 500; // Roba hasta el 15%
+      const stoleAmount = Math.floor(Math.random() * (targetXp * 0.15)) + 500;
       
-      targetData.xp -= stoleAmount;
-      userData.xp += stoleAmount;
-      await db.setUser(target, targetData);
-      await db.setUser(sender, userData);
+      await db.removeXP(target, stoleAmount); // 🔥 FIX: Descuento seguro
+      await db.addXP(sender, stoleAmount);    // 🔥 FIX: Aumento seguro
 
-      // 📝 REGISTRO PARA LA POLICÍA
       const robosDB = loadRobos();
       if (!robosDB[remoteJid]) robosDB[remoteJid] = [];
       robosDB[remoteJid].push({ thief: sender, victim: target, amount: stoleAmount, time: now, caught: false });
@@ -71,8 +66,7 @@ module.exports = {
       return sock.sendMessage(remoteJid, { text: `🥷 *ROBO EXITOSO*\n\n@${sender.split('@')[0]} le robó silenciosamente *${stoleAmount} XP* a @${target.split('@')[0]}.\n\n🚨 ¡Cuidado! La policía tiene 5 minutos para usar *.policia* y atraparte.`, mentions: [sender, target] }, { quoted: msg });
     } else {
       const multa = Math.floor(Math.random() * 1500) + 500;
-      userData.xp -= multa;
-      await db.setUser(sender, userData);
+      await db.removeXP(sender, multa); // 🔥 FIX: Descuento seguro
       return sock.sendMessage(remoteJid, { text: `🚔 *¡TE ATRAPARON EN EL ACTO!*\n\n@${sender.split('@')[0]} intentó robar a @${target.split('@')[0]} pero el perro ladró.\nEn la huida, se le cayeron *${multa} XP*.`, mentions: [sender, target] }, { quoted: msg });
     }
   }
