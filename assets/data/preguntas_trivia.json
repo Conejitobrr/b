@@ -8,67 +8,56 @@
   { q: '¿Cuánto es 15 - 6?', a: ['9', 'nueve'] },
   { q: '¿Cuánto es 8 x 8?', a: ['64', 'sesenta y cuatro'] },
   { q: '¿Cuánto es 100 / 10?', a: ['10', 'diez'] },
-
   { q: '¿Planeta rojo?', a: ['marte'] },
   { q: '¿Planeta más grande?', a: ['jupiter'] },
   { q: '¿Planeta más cercano al sol?', a: ['mercurio'] },
   { q: '¿Nuestro planeta?', a: ['tierra'] },
   { q: '¿Satélite natural de la Tierra?', a: ['luna'] },
-
   { q: '¿Color del cielo?', a: ['azul'] },
   { q: '¿Color de la sangre?', a: ['rojo'] },
   { q: '¿Color del pasto?', a: ['verde'] },
   { q: '¿Color del sol?', a: ['amarillo'] },
   { q: '¿Color del carbón?', a: ['negro'] },
-
   { q: '¿Animal que ladra?', a: ['perro'] },
   { q: '¿Animal que maúlla?', a: ['gato'] },
   { q: '¿Animal más grande del mundo?', a: ['ballena azul'] },
   { q: '¿Animal que vuela y canta?', a: ['pajaro', 'ave'] },
   { q: '¿Animal con trompa?', a: ['elefante'] },
-
   { q: '¿Idioma de Brasil?', a: ['portugues'] },
   { q: '¿Idioma de Perú?', a: ['espanol', 'castellano'] },
   { q: '¿Idioma de Francia?', a: ['frances'] },
   { q: '¿Idioma de Japón?', a: ['japones'] },
   { q: '¿Idioma de Alemania?', a: ['aleman'] },
-
   { q: '¿Día después del lunes?', a: ['martes'] },
   { q: '¿Primer día de la semana?', a: ['lunes'] },
   { q: '¿Último día de la semana?', a: ['domingo'] },
   { q: '¿Mes con 28 días?', a: ['febrero'] },
   { q: '¿Cuántos meses tiene el año?', a: ['12', 'doce'] },
-
   { q: '¿Quién pintó la Mona Lisa?', a: ['da vinci', 'leonardo da vinci'] },
   { q: '¿Autor de Harry Potter?', a: ['rowling', 'jk rowling', 'j k rowling'] },
   { q: '¿Creador de Facebook?', a: ['mark zuckerberg', 'zuckerberg'] },
   { q: '¿Fundador de Apple?', a: ['steve jobs', 'jobs'] },
   { q: '¿Creador de Microsoft?', a: ['bill gates', 'gates'] },
-
   { q: '¿Cuántos lados tiene un triángulo?', a: ['3', 'tres'] },
   { q: '¿Cuántos lados tiene un cuadrado?', a: ['4', 'cuatro'] },
   { q: '¿Cuántos lados tiene un pentágono?', a: ['5', 'cinco'] },
   { q: '¿Cuántos lados tiene un hexágono?', a: ['6', 'seis'] },
   { q: '¿Cuántos lados tiene un círculo?', a: ['0', 'cero', 'ninguno'] },
-
   { q: '¿Metal precioso amarillo?', a: ['oro'] },
   { q: '¿Metal usado en cables?', a: ['cobre'] },
   { q: '¿Gas que respiramos?', a: ['oxigeno'] },
   { q: '¿Gas que absorben las plantas?', a: ['dioxido de carbono', 'co2'] },
   { q: '¿Elemento del agua?', a: ['hidrogeno'] },
-
   { q: '¿Qué app es de mensajería verde?', a: ['whatsapp'] },
   { q: '¿App para fotos?', a: ['instagram'] },
   { q: '¿App de videos cortos?', a: ['tiktok'] },
   { q: '¿App de streaming?', a: ['netflix'] },
   { q: '¿Buscador más usado?', a: ['google'] },
-
   { q: '¿Juego de bloques famoso?', a: ['minecraft'] },
   { q: '¿Juego battle royale famoso?', a: ['fortnite'] },
   { q: '¿Juego de fútbol famoso?', a: ['fifa', 'ea sports fc'] },
   { q: '¿Fontanero de Nintendo?', a: ['mario', 'super mario'] },
   { q: '¿Erizo azul?', a: ['sonic'] },
-
   { q: '¿Protagonista de Naruto?', a: ['naruto'] },
   { q: '¿Protagonista de Dragon Ball?', a: ['goku'] },
   { q: '¿Protagonista de One Piece?', a: ['luffy'] },
@@ -99,8 +88,8 @@
   { q: '¿Continente donde está Perú?', a: ['america', 'america del sur', 'sudamerica'] },
   { q: '¿Océano más grande del mundo?', a: ['pacifico', 'oceano pacifico'] },
   { q: '¿Desierto más grande del mundo?', a: ['sahara', 'desierto del sahara'] },
-{ q: '¿Capital de Noruega?', a: ['oslo'] },
-{ q: '¿Capital de Suecia?', a: ['estocolmo'] },
+  { q: '¿Capital de Noruega?', a: ['oslo'] },
+  { q: '¿Capital de Suecia?', a: ['estocolmo'] },
 { q: '¿Capital de Finlandia?', a: ['helsinki'] },
 { q: '¿Capital de Dinamarca?', a: ['copenhague'] },
 { q: '¿Capital de Bélgica?', a: ['bruselas'] },
@@ -109,8 +98,6 @@
 { q: '¿Capital de Polonia?', a: ['varsovia'] },
 { q: '¿Capital de Irlanda?', a: ['dublin'] },
 { q: '¿Capital de Islandia?', a: ['reikiavik'] },
-
-// 🧠 Cultura general
 { q: '¿Cuántos continentes existen?', a: ['7', 'siete'] },
 { q: '¿Cuántos océanos existen?', a: ['5', 'cinco'] },
 { q: '¿Cuál es el continente más grande?', a: ['asia'] },
@@ -121,8 +108,6 @@
 { q: '¿Cuál es la moneda de Estados Unidos?', a: ['dolar'] },
 { q: '¿Cuál es la moneda de Japón?', a: ['yen'] },
 { q: '¿Cuál es la moneda de Europa?', a: ['euro'] },
-
-// 🐾 Animales
 { q: '¿Animal más alto del mundo?', a: ['jirafa'] },
 { q: '¿Animal más pesado de la Tierra?', a: ['ballena azul'] },
 { q: '¿Animal símbolo de Australia?', a: ['canguro'] },
@@ -133,8 +118,6 @@
 { q: '¿Ave más grande del mundo?', a: ['avestruz'] },
 { q: '¿Mamífero que pone huevos?', a: ['ornitorrinco'] },
 { q: '¿Animal nacional de China?', a: ['panda'] },
-
-// 🎮 Videojuegos
 { q: '¿Empresa creadora de Minecraft?', a: ['mojang'] },
 { q: '¿Nombre del protagonista de Halo?', a: ['master chief'] },
 { q: '¿Personaje principal de God of War?', a: ['kratos'] },
@@ -145,8 +128,6 @@
 { q: '¿Empresa creadora de Nintendo Switch?', a: ['nintendo'] },
 { q: '¿Juego donde aparece Link?', a: ['zelda'] },
 { q: '¿Juego donde aparece Luigi?', a: ['mario'] },
-
-// 🎬 Cine
 { q: '¿Nombre del mago protagonista de Hogwarts?', a: ['harry potter'] },
 { q: '¿Nombre del mejor amigo pelirrojo de Harry Potter?', a: ['ron weasley'] },
 { q: '¿Nombre de la amiga inteligente de Harry Potter?', a: ['hermione'] },
@@ -157,9 +138,6 @@
 { q: '¿Nombre del robot azul de Star Wars?', a: ['r2d2'] },
 { q: '¿Nombre del ogro verde famoso?', a: ['shrek'] },
 { q: '¿Nombre del burro amigo de Shrek?', a: ['burro'] },
-
-// ⚽ Deportes
-{ q: '¿Cuántos jugadores tiene un equipo de voleibol?', a: ['6', 'seis'] },
 { q: '¿Cuántos tiempos tiene un partido de fútbol?', a: ['2', 'dos'] },
 { q: '¿Deporte de Lionel Messi?', a: ['futbol'] },
 { q: '¿Deporte de Michael Jordan?', a: ['basquetbol', 'baloncesto', 'basket'] },
@@ -169,8 +147,6 @@
 { q: '¿Color de la camiseta tradicional de Brasil?', a: ['amarillo'] },
 { q: '¿Cuántos jugadores hay en una cancha de fútbol contando ambos equipos?', a: ['22'] },
 { q: '¿Deporte donde se usa un bate?', a: ['beisbol'] },
-
-// 📱 Tecnología
 { q: '¿Quién fundó Tesla?', a: ['elon musk'] },
 { q: '¿Quién fundó Amazon?', a: ['jeff bezos'] },
 { q: '¿Quién fundó Facebook?', a: ['mark zuckerberg'] },
@@ -181,8 +157,6 @@
 { q: '¿Qué aplicación compró Facebook en 2014?', a: ['whatsapp'] },
 { q: '¿Qué plataforma es conocida por videos cortos?', a: ['tiktok'] },
 { q: '¿Qué plataforma pertenece a Google?', a: ['youtube'] },
-
-// 🔢 Matemáticas
 { q: '¿Cuánto es 20 x 20?', a: ['400'] },
 { q: '¿Cuánto es 30 x 3?', a: ['90'] },
 { q: '¿Cuánto es 99 + 1?', a: ['100'] },
@@ -193,8 +167,6 @@
 { q: '¿Cuánto es 18 + 18?', a: ['36'] },
 { q: '¿Cuánto es 90 / 9?', a: ['10'] },
 { q: '¿Cuánto es 5 x 12?', a: ['60'] },
-
-// 🎵 Música
 { q: '¿Instrumento con 88 teclas?', a: ['piano'] },
 { q: '¿Instrumento de viento de metal muy usado en jazz?', a: ['trompeta'] },
 { q: '¿Instrumento de cuerda más pequeño que el violonchelo?', a: ['violin'] },
@@ -205,8 +177,6 @@
 { q: '¿Cantante conocida como Reina del Pop?', a: ['madonna'] },
 { q: '¿Aplicación famosa para escuchar música?', a: ['spotify'] },
 { q: '¿Instrumento que tiene cuerdas y se toca con arco?', a: ['violin'] },
-
-// 🤔 Lógica
 { q: '¿Cuántos meses tienen 28 días o más?', a: ['12', 'doce'] },
 { q: '¿Qué sube pero nunca baja?', a: ['edad'] },
 { q: '¿Qué tiene agujas pero no cose?', a: ['reloj'] },
@@ -217,8 +187,6 @@
 { q: '¿Qué tiene cuello pero no cabeza?', a: ['botella'] },
 { q: '¿Qué tiene llaves pero no abre puertas?', a: ['piano'] },
 { q: '¿Qué puede viajar por el mundo sin moverse?', a: ['sello postal', 'estampilla'] },
-
-  // 🧮 Matemáticas
   { q: '¿Cuánto es 6 + 6?', a: ['12', 'doce'] },
   { q: '¿Cuánto es 7 + 8?', a: ['15', 'quince'] },
   { q: '¿Cuánto es 20 - 9?', a: ['11', 'once'] },
