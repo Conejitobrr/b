@@ -1,7 +1,43 @@
 'use strict';
 
-// Mapa para guardar las sesiones de búsqueda vinculadas al ID del mensaje enviado
 const searchSessions = new Map();
+
+// 🔥 Sistema Multi-API para garantizar que siempre encuentre resultados
+async function fetchTikTokSearch(query) {
+  const apis = [
+    `https://api.siputzx.my.id/api/tiktok/search?query=${encodeURIComponent(query)}`,
+    `https://api.vreden.my.id/api/tiktoksearch?query=${encodeURIComponent(query)}`,
+    `https://api.agatz.xyz/api/tiktoksearch?text=${encodeURIComponent(query)}`,
+    `https://deliriussapi-oficial.vercel.app/search/tiktoksearch?query=${encodeURIComponent(query)}`
+  ];
+
+  for (const url of apis) {
+    try {
+      const res = await fetch(url);
+      const text = await res.text();
+      let json;
+      
+      try { json = JSON.parse(text); } catch (e) { continue; }
+
+      const videos = json.data || json.result || json.BK9 || json.videos;
+      
+      if (videos && Array.isArray(videos) && videos.length > 0) {
+        return videos; // Retorna la primera API que funcione correctamente
+      }
+    } catch (e) {
+      continue; // Si una falla, salta a la siguiente
+    }
+  }
+  return null; // Si todas fallan
+}
+
+// Normalizador de datos (cada API devuelve los nombres de variables diferentes)
+function extractVideoData(videoObj) {
+  const videoUrl = videoObj.play || videoObj.media?.[0] || videoObj.video || videoObj.no_watermark || videoObj.url;
+  const authorName = videoObj.author?.nickname || videoObj.author?.name || videoObj.author || 'Desconocido';
+  const title = videoObj.title || videoObj.desc || 'Sin descripción';
+  return { videoUrl, authorName, title };
+}
 
 module.exports = {
   name: 'tiktoksearch',
@@ -11,51 +47,33 @@ module.exports = {
 
   execute: async ({ sock, remoteJid, args, msg, sender, reply }) => {
     if (!args.length) {
-      return reply('❌ Ingresa qué deseas buscar en TikTok.\n\nEjemplo:\n.tts gatitos graciosos');
+      return reply('❌ Ingresa qué deseas buscar en TikTok.\n\nEjemplo:\n.tts te estoy correteando');
     }
 
     const query = args.join(' ');
     await reply(`🔍 Buscando *${query}* en TikTok...`);
 
+    const videos = await fetchTikTokSearch(query);
+
+    if (!videos) {
+      return reply('❌ Las APIs de búsqueda están saturadas o no se encontraron resultados. Intenta de nuevo.');
+    }
+
+    const { videoUrl, authorName, title } = extractVideoData(videos[0]);
+
+    if (!videoUrl) {
+      return reply('❌ Se encontraron resultados, pero no se pudo extraer el enlace del video.');
+    }
+
+    const caption = `🎬 *RESULTADO DE TIKTOK*\n\n👤 *Autor:* ${authorName}\n📝 *Desc:* ${title}\n\n👉 _Responde a este mensaje con la palabra *siguiente* para ver otro video de esta búsqueda._`;
+
     try {
-      // 🔥 Cambiamos a una API más estable
-      const res = await fetch(`https://api.siputzx.my.id/api/tiktok/search?query=${encodeURIComponent(query)}`);
-      const textRes = await res.text(); // Leemos como texto primero para evitar crasheos
-
-      let json;
-      try {
-        json = JSON.parse(textRes);
-      } catch (e) {
-        return reply('❌ La API pública de búsqueda está saturada en este momento. Intenta de nuevo más tarde.');
-      }
-
-      // 🔥 Adaptador Universal: Busca el array de videos sin importar cómo lo devuelva la API
-      const videos = json.data || json.result || json.BK9 || json.videos;
-
-      if (!videos || !Array.isArray(videos) || videos.length === 0) {
-        return reply('❌ No se encontraron resultados para esa búsqueda.');
-      }
-
-      const firstVideo = videos[0];
-      
-      // Adaptador para enlaces de video y nombres
-      const videoUrl = firstVideo.play || firstVideo.media?.[0] || firstVideo.video || firstVideo.no_watermark;
-      const authorName = firstVideo.author?.nickname || firstVideo.author?.name || firstVideo.author || 'Desconocido';
-      const title = firstVideo.title || firstVideo.desc || 'Sin descripción';
-
-      if (!videoUrl) {
-        return reply('❌ Se encontraron resultados, pero la API no proporcionó el enlace del video.');
-      }
-
-      const caption = `🎬 *RESULTADO DE TIKTOK*\n\n👤 *Autor:* ${authorName}\n📝 *Desc:* ${title}\n\n👉 _Responde a este mensaje con la palabra *siguiente* para ver otro video de esta búsqueda._`;
-
       const sentMsg = await sock.sendMessage(remoteJid, {
         video: { url: videoUrl },
         caption: caption,
         mimetype: 'video/mp4'
       }, { quoted: msg });
 
-      // Guardamos la sesión
       searchSessions.set(sentMsg.key.id, {
         query: query,
         videos: videos,
@@ -65,10 +83,8 @@ module.exports = {
 
       // Limpieza automática en 5 minutos
       setTimeout(() => searchSessions.delete(sentMsg.key.id), 5 * 60 * 1000);
-
     } catch (e) {
-      console.log('❌ Error en TikTok Search:', e);
-      await reply('❌ Ocurrió un error interno al conectar con el buscador.');
+      await reply('❌ Error al enviar el video al chat. Es posible que el archivo sea demasiado pesado o el enlace haya caducado.');
     }
   },
 
@@ -87,23 +103,23 @@ module.exports = {
         return sock.sendMessage(remoteJid, { text: '⚠️ Ya no hay más resultados para esta búsqueda.' }, { quoted: msg });
       }
 
-      const nextVideo = session.videos[session.currentIndex];
-      const videoUrl = nextVideo.play || nextVideo.media?.[0] || nextVideo.video || nextVideo.no_watermark;
-      const authorName = nextVideo.author?.nickname || nextVideo.author?.name || nextVideo.author || 'Desconocido';
-      const title = nextVideo.title || nextVideo.desc || 'Sin descripción';
-
+      const { videoUrl, authorName, title } = extractVideoData(session.videos[session.currentIndex]);
       const caption = `🎬 *RESULTADO DE TIKTOK*\n\n👤 *Autor:* ${authorName}\n📝 *Desc:* ${title}\n\n👉 _Responde a este nuevo mensaje con *siguiente* para ver otro._`;
 
-      const newSentMsg = await sock.sendMessage(remoteJid, {
-        video: { url: videoUrl },
-        caption: caption,
-        mimetype: 'video/mp4'
-      }, { quoted: msg });
+      try {
+        const newSentMsg = await sock.sendMessage(remoteJid, {
+          video: { url: videoUrl },
+          caption: caption,
+          mimetype: 'video/mp4'
+        }, { quoted: msg });
 
-      searchSessions.delete(quotedMsgId);
-      searchSessions.set(newSentMsg.key.id, session);
+        searchSessions.delete(quotedMsgId);
+        searchSessions.set(newSentMsg.key.id, session);
 
-      setTimeout(() => searchSessions.delete(newSentMsg.key.id), 5 * 60 * 1000);
+        setTimeout(() => searchSessions.delete(newSentMsg.key.id), 5 * 60 * 1000);
+      } catch (e) {
+        await sock.sendMessage(remoteJid, { text: '❌ Error al cargar el siguiente video.' }, { quoted: msg });
+      }
     }
   }
 };
