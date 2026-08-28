@@ -5,6 +5,27 @@ const path = require('path');
 
 const MUTED_FILE = path.join(process.cwd(), 'lib', 'muted.json');
 
+// 🛡️ COLA DE SEGURIDAD EN RAM PARA EVITAR CAÍDAS POR SPAM
+const deleteQueue = [];
+let isDeleting = false;
+
+async function processDeleteQueue(sock, remoteJid) {
+  if (isDeleting) return;
+  isDeleting = true;
+
+  while (deleteQueue.length > 0) {
+    const task = deleteQueue.shift();
+    try {
+      await sock.sendMessage(remoteJid, { delete: task.key });
+      // Pequeña pausa de 250ms entre borrados para no saturar los sockets de WhatsApp
+      await new Promise(resolve => setTimeout(resolve, 250));
+    } catch (err) {
+      // Ignoramos si el mensaje ya fue borrado o expiró
+    }
+  }
+  isDeleting = false;
+}
+
 // ==========================================
 // FUNCIONES DE CONTROL Y LIMPIEZA DE JID
 // ==========================================
@@ -64,20 +85,18 @@ module.exports = {
   category: 'moderación',
   desc: 'Silencia a un usuario del grupo eliminando sus mensajes automáticamente',
 
-  // 🔥 MONITOR PASIVO: Borra mensajes en tiempo real de usuarios silenciados
+  // 🔥 MONITOR PASIVO BLINDADO CONTRA SPAM
   async onMessage(ctx) {
     const { sock, msg, remoteJid, sender, fromGroup } = ctx;
 
-    if (!fromGroup || !sender) return;
+    if (!fromGroup || !sender || !msg?.key) return;
 
     const userJid = cleanJid(sender);
 
     if (isUserMuted(remoteJid, userJid)) {
-      try {
-        await sock.sendMessage(remoteJid, { delete: msg.key });
-      } catch (err) {
-        console.log('❌ Error al intentar borrar mensaje de usuario muteado:', err?.message || err);
-      }
+      // Agregamos el mensaje a la cola para que se elimine ordenadamente sin apagar el bot
+      deleteQueue.push({ sock, remoteJid, key: msg.key });
+      processDeleteQueue(sock, remoteJid);
     }
   },
 
