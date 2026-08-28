@@ -118,7 +118,8 @@ module.exports = {
             resTxt = `${pick(pescaBasura)}\n💸 No ganas nada de XP.`;
         } else { 
             let castigo = randXP(500, 1000);
-            await db.removeXP(sender, castigo);
+            // 🔥 Sustitución de db.removeXP por resta matemática directa y segura
+            userData.xp = Math.max(0, (userData.xp || 0) - castigo);
             resTxt = `${pick(pescaCastigo)}\n❌ Perdiste *${castigo} XP*.`;
         }
 
@@ -128,7 +129,20 @@ module.exports = {
             resTxt += `\n✨ ¡Tu mascota *${userData.pet.name}* te ayudó y encontró *+${bono} XP* extra!`;
         }
 
-        if (premio > 0) await db.addXP(sender, premio);
+        if (premio > 0) {
+            userData.xp = (userData.xp || 0) + premio;
+        }
+
+        // Recalcular nivel de forma segura
+        userData.level = Math.floor((userData.xp || 0) / 10000) + 1;
+        if (userData.level < 1) userData.level = 1;
+
+        // Guardado seguro en base de datos
+        if (userData.save) {
+            await userData.save();
+        } else {
+            await db.setUser(sender, userData);
+        }
 
         const fMsg = `*RESULTADO DE LA PESCA* 🎣\n\n${resTxt}\n👤 Pescador: @${cleanNumber(sender)}`;
         try { await sock.sendMessage(remoteJid, { text: fMsg, edit: msgSent.key, mentions: [sender] }); } 
