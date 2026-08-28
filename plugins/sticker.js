@@ -11,7 +11,7 @@ const TEMP_DIR = path.join(process.cwd(), 'temp');
 if (!fs.existsSync(TEMP_DIR)) fs.mkdirSync(TEMP_DIR, { recursive: true });
 
 const STICKER_PACK_NAME = '𝑺𝒊𝒓𝒊𝒖𝒔𝑩𝒐𝒕';
-const STICKER_AUTHOR = 'Creado por el Bot';
+const STICKER_AUTHOR = ''; // Dejado en blanco intencionalmente
 
 function getQuotedMessage(msg) {
   const context = msg.message?.extendedTextMessage?.contextInfo ||
@@ -53,7 +53,7 @@ module.exports = {
   name: 'sticker',
   aliases: ['s', 'stiker'],
   category: 'multimedia',
-  desc: 'Convierte imagen o video a sticker (Uso Ilimitado)',
+  desc: 'Convierte imagen o video a sticker (Uso Ilimitado y Directo)',
 
   execute: async ({ sock, msg, remoteJid, reply }) => {
     let input = null, output = null, exif = null, finalOutput = null;
@@ -66,7 +66,6 @@ module.exports = {
         return reply('❌ Envía o responde a una imagen/video (máx 5 seg) para crear un sticker.');
       }
 
-      await reply('⏳ Creando sticker...');
       const buffer = await downloadMedia(info.media, info.downloadType);
       
       const id = `${Date.now()}_${Math.floor(Math.random() * 9999)}`;
@@ -87,11 +86,12 @@ module.exports = {
       fs.writeFileSync(exif, createExif());
       await execFileAsync('webpmux', ['-set', 'exif', exif, output, '-o', finalOutput]);
 
+      // Envía el sticker de golpe sin avisos previos
       await sock.sendMessage(remoteJid, { sticker: fs.readFileSync(finalOutput) }, { quoted: msg });
 
     } catch (err) {
       console.log('❌ Error en sticker:', err?.message || err);
-      await reply('❌ Error al crear sticker. Verifica el peso del video o si instalaste ffmpeg y webpmux.');
+      await reply('❌ Error al crear sticker. Verifica el peso del video.');
     } finally {
       [input, output, exif, finalOutput].forEach(file => {
         try { if (file && fs.existsSync(file)) fs.unlinkSync(file); } catch {}
