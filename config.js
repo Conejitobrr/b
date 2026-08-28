@@ -1,9 +1,9 @@
-false strict';
+'use strict';
 
 require('dotenv').config();
 
 module.exports = {
-  // 👤 PROPIETARIOS DEL BOT (Reemplaza con tus números sin el '+')
+  // 👤 PROPIETARIOS DEL BOT
   owner: [
     '51958959882',
     '42696337031354',
@@ -26,7 +26,7 @@ module.exports = {
   reconnectDelay: 3000,
 
   // 🛡️ SISTEMAS DE SEGURIDAD
-  debug:true, 
+  debug: true, // 🔥 AHORA ESTÁ EN TRUE PARA VER LA CONSOLA
   antiSpam: true,
   maxMessagesPerMinute: 20
 };
