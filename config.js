@@ -26,7 +26,7 @@ module.exports = {
   reconnectDelay: 3000,
 
   // 🛡️ SISTEMAS DE SEGURIDAD
-  debug: false, // Cámbialo a true si quieres ver todos los logs en la consola
+  debug: false, 
   antiSpam: true,
   maxMessagesPerMinute: 20
 };
