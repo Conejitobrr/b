@@ -1,56 +1,85 @@
 'use strict';
 
-const preguntas = require('../assets/data/preguntas_trivia.json');
+const preguntasBase = require('../assets/data/preguntas_trivia.json');
 const juegosTrivia = new Map();
 
 function normalize(text = '') {
   return String(text).toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim();
 }
 
+async function iniciarRonda(remoteJid, sock) {
+  const juego = juegosTrivia.get(remoteJid);
+  if (!juego) return;
+
+  // Si se acaban las preguntas, rellenamos y mezclamos
+  if (!juego.disponibles || juego.disponibles.length === 0) {
+    juego.disponibles = [...preguntasBase].sort(() => Math.random() - 0.5);
+  }
+
+  const q = juego.disponibles.pop();
+  const recompensa = Math.floor(Math.random() * 500) + 150;
+
+  juego.preguntaActual = q;
+  juego.recompensa = recompensa;
+
+  await sock.sendMessage(remoteJid, { 
+    text: `🎯 *TRIVIA EXPRESS*\n\n🧠 Pregunta: *${q.q}*\n💰 Recompensa: *+${recompensa} XP*\n⏳ Tienen 1 minuto y medio para responder.` 
+  });
+
+  // Temporizador de 90 segundos para inactividad
+  juego.tiempo = setTimeout(async () => {
+    if (juegosTrivia.has(remoteJid)) {
+      juegosTrivia.delete(remoteJid);
+      await sock.sendMessage(remoteJid, { 
+        text: `⏳ ¡Se acabó el tiempo! Nadie adivinó en 90 segundos.\n\nLa respuesta correcta era: *${q.a[0]}*\n\nEl juego ha finalizado por inactividad. Escriban *.trivia* para volver a jugar.` 
+      });
+    }
+  }, 90000);
+}
+
 module.exports = {
   name: 'trivia',
   aliases: ['t'],
   category: 'juegos',
-  desc: 'Inicia un juego de trivia express',
+  desc: 'Inicia un juego de trivia infinito',
   
-  execute: async ({ remoteJid, reply }) => {
+  execute: async ({ sock, remoteJid, reply }) => {
     if (juegosTrivia.has(remoteJid)) {
-      return reply('⚠️ Ya hay una trivia activa en este chat. ¡Responde directamente enviando un mensaje!');
+      return reply('⚠️ Ya hay una trivia activa en este chat. ¡Respondan directamente en el grupo!');
     }
 
-    const randomQ = preguntas[Math.floor(Math.random() * preguntas.length)];
-    const recompensa = Math.floor(Math.random() * 500) + 150; 
-    
+    // Inicializar el estado del juego para este grupo
     juegosTrivia.set(remoteJid, {
-      respuestas: randomQ.a,
-      recompensa: recompensa,
-      tiempo: setTimeout(() => {
-        if (juegosTrivia.has(remoteJid)) {
-          juegosTrivia.delete(remoteJid);
-          reply(`⏳ ¡Se acabó el tiempo! Nadie adivinó.\n\nLa respuesta correcta era: *${randomQ.a[0]}*`);
-        }
-      }, 30000)
+      disponibles: [...preguntasBase].sort(() => Math.random() - 0.5),
+      preguntaActual: null,
+      recompensa: 0,
+      tiempo: null
     });
 
-    await reply(`🎯 *TRIVIA EXPRESS*\n\n🧠 Pregunta: *${randomQ.q}*\n💰 Recompensa: *+${recompensa} XP*\n⏳ Tienes 30 segundos.`);
+    await iniciarRonda(remoteJid, sock);
   },
 
-  // 🔥 Se ejecuta con TODOS los mensajes de texto normales sin usar comando
-  onMessage: async ({ remoteJid, body, sender, pushName, db, reply }) => {
+  onMessage: async ({ sock, remoteJid, body, sender, pushName, db }) => {
     if (!juegosTrivia.has(remoteJid) || !body) return;
 
     const juego = juegosTrivia.get(remoteJid);
+    if (!juego.preguntaActual) return;
+
     const respuestaUsuario = normalize(body);
-    
-    // Si la respuesta del usuario es igual a alguna de las válidas
-    const acierto = juego.respuestas.some(r => normalize(r) === respuestaUsuario);
+    const acierto = juego.preguntaActual.a.some(r => normalize(r) === respuestaUsuario);
 
     if (acierto) {
       clearTimeout(juego.tiempo);
-      juegosTrivia.delete(remoteJid);
-      
       await db.addXP(sender, juego.recompensa);
-      await reply(`🎉 ¡CORRECTO, *${pushName}*!\n\nLa respuesta era *${juego.respuestas[0]}*.\nHas ganado *+${juego.recompensa} XP* ⚡`);
+      
+      await sock.sendMessage(remoteJid, { 
+        text: `🎉 ¡CORRECTO, *${pushName}*!\n\nLa respuesta era *${juego.preguntaActual.a[0]}*.\nHas ganado *+${juego.recompensa} XP* ⚡\n\nSiguiente pregunta en 3 segundos...` 
+      });
+
+      // Lanzar la siguiente pregunta después de 3 segundos
+      setTimeout(() => {
+        iniciarRonda(remoteJid, sock);
+      }, 3000);
     }
   }
 };
