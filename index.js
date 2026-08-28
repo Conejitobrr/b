@@ -46,7 +46,7 @@ async function askConnectionMethod() {
 
   console.log(chalk.cyan('¿Cómo deseas conectar WhatsApp?\n'));
   console.log(chalk.white('[1] Código QR'));
-  console.log(chalk.white('[2] Código de 8 dígitos (Recomendado para Termux/VPS)\n'));
+  console.log(chalk.white('[2] Código de 8 dígitos\n'));
 
   let choice = '';
   while (!['1', '2'].includes(choice)) {
@@ -90,7 +90,6 @@ async function main() {
   }
 }
 
-// Prevenir que el bot se apague por errores no controlados
 process.on('uncaughtException', err => {
   console.error(chalk.red('❌ Error no controlado (Uncaught Exception):'), err);
 });
