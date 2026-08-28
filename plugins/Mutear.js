@@ -1,8 +1,9 @@
 'use strict';
 
 const fs = require('fs');
-const path =
-path.join(process.cwd(), 'lib', 'muted.json');
+const path = require('path');
+
+const MUTED_FILE = path.join(process.cwd(), 'lib', 'muted.json');
 
 // ==========================================
 // FUNCIONES DE CONTROL Y LIMPIEZA DE JID
@@ -65,16 +66,13 @@ module.exports = {
 
   // 🔥 MONITOR PASIVO: Borra mensajes en tiempo real de usuarios silenciados
   async onMessage(ctx) {
-    const { sock, msg, remoteJid, sender, fromGroup, isAdmin, isOwner } = ctx;
+    const { sock, msg, remoteJid, sender, fromGroup } = ctx;
 
     if (!fromGroup || !sender) return;
 
     const userJid = cleanJid(sender);
 
-    // Si está silenciado en este grupo
     if (isUserMuted(remoteJid, userJid)) {
-      // Los admins o el owner no pueden ser silenciados de forma efectiva o sus mensajes se ignoran,
-      // pero por seguridad si el bot es admin, procedemos a borrar el mensaje.
       try {
         await sock.sendMessage(remoteJid, { delete: msg.key });
       } catch (err) {
@@ -91,12 +89,10 @@ module.exports = {
       return reply('❌ Este comando solo se puede usar dentro de grupos.');
     }
 
-    // 1. Permisos: Solo administradores o el owner
     if (!isAdmin && !isOwner) {
       return reply('❌ Solo los administradores del grupo o el owner pueden usar este comando.');
     }
 
-    // 2. Resolver a quién se quiere mutear/unmutear
     let target = getTarget(msg);
     
     if (!target && args.length > 0) {
@@ -118,13 +114,11 @@ module.exports = {
     // ACCIÓN: MUTEAR / SILENCIAR
     // ==========================================
     if (cmd === 'mutear' || cmd === 'silenciar') {
-      // Validar inmunidad del Bot
       const botRaw = sock.user?.id || sock.user?.jid || '';
       if (targetJid === cleanJid(botRaw)) {
         return reply('🛡️ No puedes mutearme a mí. ¡Soy el bot!');
       }
 
-      // Validar si el objetivo es Owner
       const ownerNumbers = Array.isArray(ctx.config?.owner) ? ctx.config.owner.map(n => String(n).replace(/\D/g, '')) : [];
       if (ownerNumbers.includes(targetNum)) {
         return reply(`🛡️ No se puede mutear a @${targetNum} porque cuenta con inmunidad (es Owner).`, { mentions: [targetJid] });
@@ -136,7 +130,6 @@ module.exports = {
         return reply(`⚠️ @${targetNum} ya se encuentra silenciado en este chat.`, { mentions: [targetJid] });
       }
 
-      // Registrar el muteo
       data[remoteJid][targetJid] = {
         mutedBy: cleanJid(sender),
         time: Date.now()
@@ -157,7 +150,6 @@ module.exports = {
         return reply(`⚠️ @${targetNum} no está silenciado en este grupo.`, { mentions: [targetJid] });
       }
 
-      // Remover del registro
       delete data[remoteJid][targetJid];
       if (Object.keys(data[remoteJid]).length === 0) delete data[remoteJid];
       saveMutes(data);
