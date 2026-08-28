@@ -138,7 +138,6 @@ async function messageHandler(sock, msg, store = {}) {
     // 🕵️‍♂️ RECOPILAR METADATOS DEL CHAT Y USUARIO
     let groupName = 'Privado';
     let chatLabel = chalk.blue('👤 PRIVADO');
-    let roleLabel = chalk.gray('👤 Usuario');
     let isAdmin = false;
 
     if (fromGroup) {
@@ -155,16 +154,19 @@ async function messageHandler(sock, msg, store = {}) {
       }
     }
 
-    if (isOwner) roleLabel = chalk.yellow('👑 Owner');
-    else if (isAdmin) roleLabel = chalk.cyan('🛡️ Admin');
-
     const msgType = getReadableType(msg);
+    
+    // FORMATOS SÍ/NO PARA LA CONSOLA
+    const adminStatus = isAdmin ? chalk.green('Sí') : chalk.red('No');
+    const ownerStatus = isOwner ? chalk.green('Sí') : chalk.red('No');
 
     // 📩 LOG DE MENSAJE ENTRANTE
     if (config.debug) {
       console.log(chalk.gray(`╭─── 📥 `) + chalk.green.bold(`MENSAJE ENTRANTE`) + chalk.gray(` ──────────────────`));
       console.log(chalk.gray(`│ 🏷️  Chat    : `) + chatLabel + (fromGroup ? chalk.white(` ${groupName}`) : ''));
-      console.log(chalk.gray(`│ 👤  De      : `) + chalk.white(pushName) + chalk.yellow(` (+${senderNumber}) `) + roleLabel);
+      console.log(chalk.gray(`│ 👤  De      : `) + chalk.white(pushName) + chalk.yellow(` (+${senderNumber})`));
+      console.log(chalk.gray(`│ 🛡️  Admin   : `) + adminStatus);
+      console.log(chalk.gray(`│ 👑  Owner   : `) + ownerStatus);
       console.log(chalk.gray(`│ 📦  Tipo    : `) + chalk.white(msgType));
       if (body) console.log(chalk.gray(`│ 💬  Texto   : `) + chalk.white(String(body).slice(0, 80).replace(/\n/g, ' ')));
       console.log(chalk.gray(`╰──────────────────────────────────────────`));
