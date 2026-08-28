@@ -14,7 +14,6 @@ function saveRobos(data) { fs.writeFileSync(ROBOS_PATH, JSON.stringify(data, nul
 function cleanJid(jid = '') { return String(jid).split(':')[0]; }
 function cleanNumber(jid = '') { return cleanJid(jid).split('@')[0].replace(/\D/g, ''); }
 
-// ⏱️ CANDADO EN RAM
 const cooldowns = new Map();
 
 module.exports = {
@@ -23,14 +22,13 @@ module.exports = {
   category: 'economía',
   desc: 'Roba XP a un usuario respondiendo o mencionando',
 
-  execute: async ({ sock, remoteJid, sender, msg, db, reply, fromGroup }) => {
+  execute: async ({ sock, remoteJid, sender, msg, db, reply, fromGroup, userData }) => {
     if (!fromGroup) return reply('❌ Este comando solo funciona en grupos.');
 
-    // 🔥 DETECTAR OBJETIVO: Respondiendo o mencionando
     let target = msg.message?.extendedTextMessage?.contextInfo?.participant 
               || msg.message?.extendedTextMessage?.contextInfo?.mentionedJid?.[0];
     
-    if (!target) return reply('❌ Debes mencionar o responder al mensaje de alguien para robarle.\nEjemplo: *.robar @usuario*');
+    if (!target) return reply('❌ Debes mencionar o responder al mensaje de alguien para robarle.');
     
     target = cleanJid(target);
     const thief = cleanJid(sender);
@@ -56,15 +54,16 @@ module.exports = {
 
     cooldowns.set(thief, now);
 
-    // 🛡️ REVISAR ESCUDO ANTI-ROBO DIRECTO EN BD
+    // 🛡️ REVISAR ESCUDO ANTI-ROBO DIRECTO
     if (targetData.inventory && (targetData.inventory.shieldUses > 0 || targetData.inventory.escudo > 0)) {
       if (targetData.inventory.shieldUses > 0) targetData.inventory.shieldUses -= 1;
       else if (targetData.inventory.escudo > 0) targetData.inventory.escudo -= 1;
       
-      await db.setUser(target, targetData); // Guarda el escudo gastado
+      if (targetData.save) await targetData.save(); else await db.setUser(target, targetData);
       
       const multa = Math.floor(Math.random() * 2000) + 1000;
-      await db.removeXP(thief, multa); 
+      userData.xp = Math.max(0, (userData.xp || 0) - multa); 
+      if (userData.save) await userData.save(); else await db.setUser(sender, userData);
 
       return sock.sendMessage(remoteJid, { 
         text: `🛡️ @${cleanNumber(target)} tiene un *Escudo Anti-Robo* activo. ¡El escudo absorbió tu ataque y se rompió!\n\n_Has salido herido y perdiste *${multa} XP*._`, 
@@ -86,9 +85,12 @@ module.exports = {
 
     amount = Math.min(amount, targetXp);
 
-    // 🔥 TRANSFERENCIA DE XP
-    await db.removeXP(target, amount);
-    await db.addXP(thief, amount);
+    // 🔥 TRANSFERENCIA MATEMÁTICA DE XP (Libre de errores)
+    targetData.xp = Math.max(0, targetXp - amount);
+    userData.xp = (userData.xp || 0) + amount;
+    
+    if (targetData.save) await targetData.save(); else await db.setUser(target, targetData);
+    if (userData.save) await userData.save(); else await db.setUser(sender, userData);
 
     // 📝 REGISTRO POLICIAL
     const robosDB = loadRobos();
