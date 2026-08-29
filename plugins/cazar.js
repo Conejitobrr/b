@@ -119,12 +119,25 @@ module.exports = {
         } else { 
             let castigo = randXP(500, 1000);
             if ((userData.xp || 0) < castigo) castigo = userData.xp || 0; 
-            userData.xp -= castigo;
+            // 🔥 Resta de XP matemática directa y segura (Evita db.removeXP y db.setUser)
+            userData.xp = Math.max(0, (userData.xp || 0) - castigo);
             resultadoTxt = `${pick(cazaCastigo)}\n❌ Perdiste: *-${castigo} XP*.`;
         }
 
-        if (premio > 0) userData.xp += premio;
-        await db.setUser(sender, userData);
+        if (premio > 0) {
+            userData.xp = (userData.xp || 0) + premio;
+        }
+
+        // Recalcular nivel de forma segura
+        userData.level = Math.floor((userData.xp || 0) / 10000) + 1;
+        if (userData.level < 1) userData.level = 1;
+
+        // Guardado seguro en la base de datos
+        if (userData.save) {
+            await userData.save();
+        } else {
+            await db.setUser(sender, userData);
+        }
 
         let finalMsg = `*RESULTADO DE LA CACERÍA* 🏹\n\n${resultadoTxt}\n👤 Cazador: @${cleanNumber(sender)}`;
         try { await sock.sendMessage(remoteJid, { text: finalMsg, edit: msgSent.key, mentions: [sender] }); } 
