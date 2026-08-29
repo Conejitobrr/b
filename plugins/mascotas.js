@@ -90,7 +90,7 @@ module.exports = {
     const now = Date.now();
     const petCommands = ['mascota', 'alimentar', 'jugar', 'entrenar', 'pasear', 'dormir', 'curar', 'pelear', 'ruletamascota'];
     
-    // 🔥 MUERTE POR ABANDONO (Eliminación Definitiva)
+    // 🔥 MUERTE POR ABANDONO
     if (userData.pet && petCommands.includes(commandName) && hoursPassed(userData.pet.lastFeed, 72)) {
       const p = userData.pet;
       const media = getPetMedia(p.type, 'sacrificada', p.level);
@@ -102,7 +102,7 @@ module.exports = {
       return sendMediaMsg(sock, remoteJid, media, txt, msg);
     }
 
-    // 1. ADOPTAR (CONSUME 50K XP / LICENCIA)
+    // 1. ADOPTAR (CONSUME LICENCIA CON GUARDADO FORZADO)
     if (commandName === 'adoptar') {
       if (!args.length) {
         const menuMascotas = `🐾 *CENTRO DE ADOPCIÓN* 🐾\n\nPara adoptar debes comprar primero una *Licencia de Mascota* en la *.tienda* (50,000 XP).\n\n*Uso:* \`.adoptar [Nombre]\`\n*Ejemplo:* \`.adoptar Zeus\``;
@@ -117,7 +117,10 @@ module.exports = {
       }
 
       if (!isOwner) {
+        // 🔥 FORZAR GUARDADO DEL INVENTARIO
         userData.inventory.mascota -= 1;
+        userData.inventory = { ...userData.inventory };
+        if (userData.markModified) userData.markModified('inventory');
       }
 
       const petName = args.join(' ');
@@ -141,7 +144,7 @@ module.exports = {
       return sendMediaMsg(sock, remoteJid, media, txt, msg);
     }
 
-    // 2. SACRIFICAR (Eliminación Reversible solo pagando de nuevo)
+    // 2. SACRIFICAR
     if (commandName === 'sacrificar') {
       if (!userData.pet) return sock.sendMessage(remoteJid, { text: `❌ No tienes mascota.` }, { quoted: msg });
       
