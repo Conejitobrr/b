@@ -3,7 +3,6 @@
 const fs = require('fs');
 const path = require('path');
 
-// 🗄️ BÓVEDA LOCAL PARA WARNS
 const WARNS_PATH = path.join(process.cwd(), 'lib', 'warns.json');
 if (!fs.existsSync(path.dirname(WARNS_PATH))) fs.mkdirSync(path.dirname(WARNS_PATH), { recursive: true });
 if (!fs.existsSync(WARNS_PATH)) fs.writeFileSync(WARNS_PATH, '{}');
@@ -11,17 +10,23 @@ if (!fs.existsSync(WARNS_PATH)) fs.writeFileSync(WARNS_PATH, '{}');
 function getWarns() { try { return JSON.parse(fs.readFileSync(WARNS_PATH, 'utf8')); } catch { return {}; } }
 function saveWarns(data) { fs.writeFileSync(WARNS_PATH, JSON.stringify(data, null, 2)); }
 
-// 🔥 FUNCIÓN DEFINITIVA: Destruye el ID "sucio" de WhatsApp y lo reconstruye perfecto
-function getTargetJid(msg) {
-  const quoted = msg.message?.extendedTextMessage?.contextInfo?.participant;
-  const mentioned = msg.message?.extendedTextMessage?.contextInfo?.mentionedJid?.[0];
-  
-  const raw = quoted || mentioned;
-  if (!raw) return null;
+// 🔥 FUNCIONES CLONADAS EXACTAMENTE DE TU PERFIL.JS
+function cleanJid(jid = '') {
+  return String(jid).split(':')[0];
+}
 
-  // Extrae ÚNICAMENTE los números puros (sin '+', espacios ni colones)
-  const pureNum = String(raw).replace(/\D/g, '');
-  return `${pureNum}@s.whatsapp.net`;
+function cleanNumber(jid = '') {
+  return cleanJid(jid).split('@')[0].replace(/\D/g, '');
+}
+
+function getTarget(msg) {
+  const quoted = msg.message?.extendedTextMessage?.contextInfo?.participant;
+  if (quoted) return cleanJid(quoted);
+
+  const mentioned = msg.message?.extendedTextMessage?.contextInfo?.mentionedJid?.[0];
+  if (mentioned) return cleanJid(mentioned);
+
+  return null;
 }
 
 const MAX_WARN = 3;
@@ -48,10 +53,10 @@ module.exports = {
       const mentions = [];
       
       entries.forEach(([jid, count], i) => { 
-        const pureNum = String(jid).replace(/\D/g, '');
-        const targetJid = `${pureNum}@s.whatsapp.net`;
+        const target = cleanJid(jid); 
+        const pureNum = cleanNumber(target);
         list += `${i + 1}. @${pureNum} — *${count}/${MAX_WARN}*\n`; 
-        mentions.push(targetJid);
+        mentions.push(target);
       });
       
       return sock.sendMessage(remoteJid, { text: list, mentions }, { quoted: msg });
@@ -60,64 +65,65 @@ module.exports = {
     // 🛡️ Permisos
     if (!isAdmin && !isOwner) return reply('❌ Solo los administradores pueden usar este comando.');
 
-    // 🎯 CAPTURA DEL JID (Totalmente purificado para forzar el color azul)
-    const targetJid = getTargetJid(msg);
-    if (!targetJid) return reply('❌ Debes mencionar o responder al mensaje del usuario.');
+    // 🔥 USANDO EXACTAMENTE EL MISMO TARGET DE PERFIL.JS
+    const target = getTarget(msg);
+    if (!target) return reply('❌ Debes mencionar o responder al mensaje del usuario.');
     
-    const pureNumber = targetJid.split('@')[0];
+    // Obtenemos solo los números limpios para el texto visual
+    const pureNumber = cleanNumber(target);
 
     // 2. COMANDO: REINICIAR WARNS (0/3)
     if (commandName === 'resetwarn') {
-      delete groupWarns[targetJid];
+      delete groupWarns[target];
       saveWarns(dbWarns);
       return sock.sendMessage(remoteJid, { 
         text: `✅ Warns reiniciados a 0 para @${pureNumber}.`, 
-        mentions: [targetJid] 
+        mentions: [target] 
       }, { quoted: msg });
     }
 
     // 3. COMANDO: QUITAR 1 WARN (-1)
     if (commandName === 'unwarn') {
-      const current = groupWarns[targetJid] || 0;
-      groupWarns[targetJid] = Math.max(0, current - 1);
+      const current = groupWarns[target] || 0;
+      groupWarns[target] = Math.max(0, current - 1);
       saveWarns(dbWarns);
       return sock.sendMessage(remoteJid, { 
-        text: `✅ Se quitó 1 warn a @${pureNumber}.\n🚨 Warns actuales: *${groupWarns[targetJid]}/${MAX_WARN}*`, 
-        mentions: [targetJid] 
+        text: `✅ Se quitó 1 warn a @${pureNumber}.\n🚨 Warns actuales: *${groupWarns[target]}/${MAX_WARN}*`, 
+        mentions: [target] 
       }, { quoted: msg });
     }
 
     // 4. COMANDO: AGREGAR WARN (+1)
     if (commandName === 'warn') {
-      // Limpiamos el texto del motivo para que no aparezca el "@Nick" ahí metido
+      // Limpiamos el texto del motivo
       const reason = args.join(' ').replace(/@\S+/g, '').trim() || 'Advertencia manual';
       
-      const current = (groupWarns[targetJid] || 0) + 1;
-      groupWarns[targetJid] = current;
+      const current = (groupWarns[target] || 0) + 1;
+      groupWarns[target] = current;
       saveWarns(dbWarns);
 
       const textWarn = `⚠️ *ADVERTENCIA MANUAL*\n\n👤 Usuario: @${pureNumber}\n📌 Motivo: ${reason}\n🚨 Warns: *${current}/${MAX_WARN}*`;
 
       await sock.sendMessage(remoteJid, { 
         text: textWarn, 
-        mentions: [targetJid] 
+        mentions: [target] 
       }, { quoted: msg });
 
       // Expulsión
       if (current >= MAX_WARN) {
-        groupWarns[targetJid] = 0; 
+        groupWarns[target] = 0; 
         saveWarns(dbWarns);
 
         const textBan = `🚫 *LÍMITE ALCANZADO*\n\n@${pureNumber} ha sido expulsado por llegar a *${MAX_WARN}* advertencias.`;
 
         await sock.sendMessage(remoteJid, { 
           text: textBan, 
-          mentions: [targetJid] 
+          mentions: [target] 
         });
 
         setTimeout(async () => {
           try {
-            await sock.groupParticipantsUpdate(remoteJid, [targetJid], 'remove');
+            await sock.groupParticipantsUpdate(remoteJid, [target], 'remove');
           } catch (err) {
             console.log('Error expulsando al usuario manualmente:', err.message);
           }
