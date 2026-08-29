@@ -4,11 +4,14 @@ const fs = require('fs');
 const path = require('path');
 
 const JAIL_PATH = path.join(process.cwd(), 'lib', 'jail.json');
+const INV_PATH = path.join(process.cwd(), 'lib', 'inventario.json');
 if (!fs.existsSync(path.dirname(JAIL_PATH))) fs.mkdirSync(path.dirname(JAIL_PATH), { recursive: true });
+
 function loadJail() { try { return JSON.parse(fs.readFileSync(JAIL_PATH, 'utf8') || '{"jailed":{}}'); } catch { return { jailed: {} }; } }
 function saveJail(data) { try { fs.writeFileSync(JAIL_PATH, JSON.stringify(data, null, 2)); } catch {} }
+function getInv() { try { return JSON.parse(fs.readFileSync(INV_PATH, 'utf8')); } catch { return {}; } }
+function saveInv(data) { fs.writeFileSync(INV_PATH, JSON.stringify(data, null, 2)); }
 
-// 🔥 AHORA LOS ÍTEMS SE GUARDAN DE FORMA DIRECTA COMO LA XP
 const ITEMS = {
   ver: { key: 'verUses', name: '🎟️ Uso de .ver', price: 10000, desc: 'Permite usar .ver 1 vez' },
   spotify: { key: 'spotifyUses', name: '🎵 Uso de .spotify', price: 1500, desc: 'Permite usar .spotify 1 vez' },
@@ -30,32 +33,37 @@ module.exports = {
   category: 'economía',
   desc: 'Compra ítems o usa los que ya tienes',
 
-  execute: async ({ sock, msg, remoteJid, sender, args, commandName, userData, reply }) => {
-    
+  execute: async ({ sock, msg, remoteJid, sender, args, commandName, db, reply }) => {
+    const userData = await db.getUser(sender);
+    const dbInv = getInv();
+    if (!dbInv[sender]) dbInv[sender] = {};
+    const myInv = dbInv[sender];
+
     if (commandName === 'usar') {
       const itemKey = (args[0] || '').toLowerCase();
 
       if (itemKey === 'llave') {
-        if ((userData.keys || 0) <= 0) return reply('❌ No tienes llaves en tu inventario.');
+        if ((myInv.keys || 0) <= 0) return reply('❌ No tienes llaves en tu inventario.');
         const jailDB = loadJail();
         if (!jailDB.jailed[sender]) return reply('✅ No estás arrestado.');
         
-        userData.keys -= 1;
-        if (userData.save) await userData.save();
-        
+        myInv.keys -= 1;
+        saveInv(dbInv);
         delete jailDB.jailed[sender];
         saveJail(jailDB);
         return reply('🔑 Has usado una llave de celda y escapaste de prisión.');
       }
 
       if (itemKey === 'caja') {
-        if ((userData.cajaUses || 0) <= 0) return reply('❌ No tienes cajas sorpresa en tu mochila.');
+        if ((myInv.cajaUses || 0) <= 0) return reply('❌ No tienes cajas sorpresa en tu mochila.');
         
-        userData.cajaUses -= 1;
+        myInv.cajaUses -= 1;
+        saveInv(dbInv);
+
         const ganar = Math.floor(Math.random() * 2000) + 500;
         userData.xp = (userData.xp || 0) + ganar;
-        
         if (userData.save) await userData.save();
+        
         return reply(`📦 Abriste la caja y ganaste *+${ganar} XP*`);
       }
       return reply('❌ Ítem desconocido o no utilizable (solo: llave, caja).');
@@ -76,7 +84,6 @@ module.exports = {
     const total = item.price * amount;
     if ((userData.xp || 0) < total) return reply(`❌ No tienes suficiente XP.\nCuesta *${total} XP* pero tienes *${userData.xp || 0} XP*.`);
 
-    // Descontar XP
     userData.xp -= total;
 
     if (itemName === 'vip') {
@@ -86,9 +93,9 @@ module.exports = {
       if (userData.save) await userData.save();
       return reply(`✅ Has adquirido *${amount} Día(s) VIP* por ${total} XP.`);
     } else {
-      // Se guarda como dato directo blindado
-      userData[item.key] = (userData[item.key] || 0) + amount;
-      if (userData.save) await userData.save();
+      myInv[item.key] = (myInv[item.key] || 0) + amount;
+      saveInv(dbInv); // Guarda local blindado
+      if (userData.save) await userData.save(); // Guarda el cobro de XP en Mongo
       return reply(`✅ Compraste ${amount}x *${item.name}* por ${total} XP.\n🎒 Revisa tu mochila usando *.inventario*`);
     }
   }
