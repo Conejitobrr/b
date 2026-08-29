@@ -7,18 +7,17 @@ const deletedCache = new Map();
 const handledDeletes = new Set();
 
 const MAX_CACHE = 1000;
-const CACHE_TIME = 2 * 60 * 60 * 1000; // 2 horas
-const MAX_MEDIA_BUFFER = 60 * 1024 * 1024; // 60 MB
+const CACHE_TIME = 2 * 60 * 60 * 1000; 
+const MAX_MEDIA_BUFFER = 60 * 1024 * 1024; 
 
-// 🔥 FÓRMULA INFALIBLE PARA MENCIONES REALES
-function cleanJid(jid = '') { return String(jid).split(':')[0]; }
-function cleanNumber(jid = '') { return cleanJid(jid).split('@')[0].replace(/\D/g, ''); }
-function formatMention(jid) { return `${cleanNumber(jid)}@s.whatsapp.net`; }
+// 🔥 FÓRMULA INFALIBLE PARA MENCIONES AZULES (Separación Estricta)
+function cleanJid(jid = '') { return String(jid).split(':')[0]; } // Conserva el ID original del servidor
+function cleanNumber(jid = '') { return cleanJid(jid).split('@')[0].replace(/\D/g, ''); } // Purifica solo para el texto visual
 
 function getMsgKey(remoteJid, id) { return `${remoteJid}:${id}`; }
 function getHandledKey(remoteJid, id) { return `${remoteJid}:${id}:handled`; }
 
-// 🧠 DESEMPAQUETADOR ABSOLUTO (Rompe los mensajes temporales y de única visualización)
+// 🧠 DESEMPAQUETADOR ABSOLUTO
 function unwrapMessage(message = {}) {
   if (!message) return {};
   if (message.ephemeralMessage?.message) return unwrapMessage(message.ephemeralMessage.message);
@@ -29,7 +28,6 @@ function unwrapMessage(message = {}) {
   return message;
 }
 
-// 👁️ DETECTOR DE BORRADO (Ahora sí lee a través de las capas invisibles)
 function isDeleteMessage(msg) {
   const message = unwrapMessage(msg.message);
   const protocol = message?.protocolMessage;
@@ -125,20 +123,17 @@ module.exports = {
   category: 'administración',
   desc: 'Recupera mensajes eliminados',
 
-  // 1. ESCUCHA ACTIVA (Atrapa todos los mensajes)
   onMessage: async (ctx) => {
     const { sock, msg, remoteJid, sender, pushName, fromGroup, groupData } = ctx;
 
     try {
       cleanOldCache();
 
-      // Si NO es un borrado, guarda el mensaje en la memoria RAM y termina
       if (!isDeleteMessage(msg)) {
         await saveMessage(msg, remoteJid, sender, pushName);
         return;
       }
 
-      // 🔥 Por defecto está activado (true) a menos que lo hayan apagado explícitamente (false)
       const isEnabled = fromGroup ? (groupData?.antidelete !== false) : true;
       if (!isEnabled) return;
 
@@ -155,19 +150,18 @@ module.exports = {
       const cacheKey = getMsgKey(remoteJid, deletedId);
       const saved = deletedCache.get(cacheKey);
 
-      if (!saved) return; // Si era muy viejo o se borró antes de encender el bot
+      if (!saved) return;
 
-      // 🔥 Separación de IDs para la mención azul
-      const targetJid = formatMention(saved.sender);
-      const pureNumber = cleanNumber(saved.sender);
-      
-      const originalMentions = (saved.mentions || []).map(formatMention);
+      // 🔥 EL SECRETO APLICADO: Extraemos el target original intacto para la memoria de WhatsApp
+      const targetJid = cleanJid(saved.sender);         
+      const pureNumber = cleanNumber(saved.sender);     
+
+      const originalMentions = (saved.mentions || []).map(cleanJid);
       const finalMentions = [...new Set([targetJid, ...originalMentions])];
 
       const text = saved.text || getText(saved.message);
       const media = saved.media || getMediaInfo(saved.message);
 
-      // CASO A: Mensaje solo texto
       if (!media) {
         if (!text) { deletedCache.delete(cacheKey); return; }
         await sock.sendMessage(remoteJid, {
@@ -178,7 +172,6 @@ module.exports = {
         return;
       }
 
-      // CASO B: Mensaje multimedia
       let buffer = saved.mediaBuffer;
       if (!buffer || !buffer.length) {
         try { buffer = await downloadMediaBuffer(media); } catch {}
@@ -214,14 +207,12 @@ module.exports = {
     }
   },
 
-  // 2. COMANDO DE CONTROL
   execute: async ({ remoteJid, args, fromGroup, isAdmin, isOwner, db, groupData, reply }) => {
     try {
       if (!fromGroup) return reply('✅ En chats privados, *antidelete* siempre está activo.');
       if (!isOwner && !isAdmin) return reply('❌ Solo los administradores pueden usar este comando.');
 
       const option = (args[0] || '').toLowerCase();
-      // Verificamos estado (Por defecto asume true)
       const currentStatus = groupData?.antidelete !== false;
 
       if (!option) {
