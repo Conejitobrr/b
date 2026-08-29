@@ -3,17 +3,13 @@
 const fs = require('fs');
 const path = require('path');
 
-// 🗄️ BÓVEDA LOCAL PARA WARNS (Compartida con el antilink)
+// 🗄️ BÓVEDA LOCAL PARA WARNS
 const WARNS_PATH = path.join(process.cwd(), 'lib', 'warns.json');
 if (!fs.existsSync(path.dirname(WARNS_PATH))) fs.mkdirSync(path.dirname(WARNS_PATH), { recursive: true });
 if (!fs.existsSync(WARNS_PATH)) fs.writeFileSync(WARNS_PATH, '{}');
 
 function getWarns() { try { return JSON.parse(fs.readFileSync(WARNS_PATH, 'utf8')); } catch { return {}; } }
 function saveWarns(data) { fs.writeFileSync(WARNS_PATH, JSON.stringify(data, null, 2)); }
-
-// 🔥 MISMA EXTRACCIÓN DEL RETO.JS Y ANTILINK PARA MENCIONES REALES
-function cleanJid(jid = '') { return String(jid).split(':')[0]; }
-function cleanNumber(jid = '') { return cleanJid(jid).split('@')[0].replace(/\D/g, ''); }
 
 const MAX_WARN = 3;
 
@@ -39,7 +35,7 @@ module.exports = {
       const mentions = [];
       
       entries.forEach(([jid, count], i) => { 
-        const pureNum = cleanNumber(jid);
+        const pureNum = String(jid).split('@')[0].replace(/\D/g, '');
         const formatJid = `${pureNum}@s.whatsapp.net`;
         list += `${i + 1}. @${pureNum} — *${count}/${MAX_WARN}*\n`; 
         mentions.push(formatJid);
@@ -48,35 +44,36 @@ module.exports = {
       return sock.sendMessage(remoteJid, { text: list, mentions }, { quoted: msg });
     }
 
-    // 🛡️ Filtro de permisos para agregar/quitar warns
+    // 🛡️ Filtro de permisos
     if (!isAdmin && !isOwner) return reply('❌ Solo los administradores pueden usar este comando.');
 
-    // Capturar al objetivo (mención o respuesta al mensaje)
+    // Capturar al objetivo
     const targetRaw = msg.message?.extendedTextMessage?.contextInfo?.participant || msg.message?.extendedTextMessage?.contextInfo?.mentionedJid?.[0];
     if (!targetRaw) return reply('❌ Debes mencionar o responder al mensaje del usuario.');
     
-    // Generación de ID y número puro
-    const pureNumber = cleanNumber(targetRaw);
-    const userJid = `${pureNumber}@s.whatsapp.net`;
+    // 🔥 EXTRACCIÓN 100% IDÉNTICA AL ANTILINK (Forzará el color azul/Nick)
+    const userJidRaw = String(targetRaw).split(':')[0];
+    const pureNumber = userJidRaw.split('@')[0].replace(/\D/g, ''); 
+    const formatJid = `${pureNumber}@s.whatsapp.net`;
 
     // 2. COMANDO: REINICIAR WARNS (0/3)
     if (commandName === 'resetwarn') {
-      delete groupWarns[userJid];
+      delete groupWarns[formatJid];
       saveWarns(dbWarns);
       return sock.sendMessage(remoteJid, { 
         text: `✅ Warns reiniciados a 0 para @${pureNumber}.`, 
-        mentions: [userJid] 
+        mentions: [formatJid] 
       }, { quoted: msg });
     }
 
     // 3. COMANDO: QUITAR 1 WARN (-1)
     if (commandName === 'unwarn') {
-      const current = groupWarns[userJid] || 0;
-      groupWarns[userJid] = Math.max(0, current - 1);
+      const current = groupWarns[formatJid] || 0;
+      groupWarns[formatJid] = Math.max(0, current - 1);
       saveWarns(dbWarns);
       return sock.sendMessage(remoteJid, { 
-        text: `✅ Se quitó 1 warn a @${pureNumber}.\n🚨 Warns actuales: *${groupWarns[userJid]}/${MAX_WARN}*`, 
-        mentions: [userJid] 
+        text: `✅ Se quitó 1 warn a @${pureNumber}.\n🚨 Warns actuales: *${groupWarns[formatJid]}/${MAX_WARN}*`, 
+        mentions: [formatJid] 
       }, { quoted: msg });
     }
 
@@ -84,31 +81,31 @@ module.exports = {
     if (commandName === 'warn') {
       const reason = args.join(' ').replace(/@\d+/g, '').trim() || 'Advertencia manual';
       
-      const current = (groupWarns[userJid] || 0) + 1;
-      groupWarns[userJid] = current;
+      const current = (groupWarns[formatJid] || 0) + 1;
+      groupWarns[formatJid] = current;
       saveWarns(dbWarns);
 
       await sock.sendMessage(remoteJid, { 
         text: `⚠️ *ADVERTENCIA MANUAL*\n\n👤 Usuario: @${pureNumber}\n📌 Motivo: ${reason}\n🚨 Warns: *${current}/${MAX_WARN}*`, 
-        mentions: [userJid] 
+        mentions: [formatJid] 
       }, { quoted: msg });
 
       // Expulsión si llega al máximo
       if (current >= MAX_WARN) {
-        groupWarns[userJid] = 0; // Se reinicia para el futuro
+        groupWarns[formatJid] = 0; // Reiniciar cuenta para el futuro
         saveWarns(dbWarns);
 
         await sock.sendMessage(remoteJid, { 
           text: `🚫 *LÍMITE ALCANZADO*\n\n@${pureNumber} ha sido expulsado por llegar a *${MAX_WARN}* advertencias.`, 
-          mentions: [userJid] 
+          mentions: [formatJid] 
         });
 
-        // Retraso de 1 segundo para evitar crasheos de Baileys al expulsar
+        // Baneo limpio
         setTimeout(async () => {
           try {
-            await sock.groupParticipantsUpdate(remoteJid, [userJid], 'remove');
+            await sock.groupParticipantsUpdate(remoteJid, [formatJid], 'remove');
           } catch (err) {
-            console.log('No se pudo expulsar manualmente:', err.message);
+            console.log('Error expulsando al usuario manualmente:', err.message);
           }
         }, 1000);
       }
