@@ -7,6 +7,41 @@ const config = require('./config');
 const db = require('./lib/database');
 const { getBody, normalizeJid, detectPrefix, cleanNumber, getReadableType } = require('./lib/utils');
 
+// 🛡️ BÓVEDA DE BANEOS (Aviso único)
+const BANNED_PATH = path.join(process.cwd(), 'lib', 'banned.json');
+
+async function checkBannedUser(sock, remoteJid, sender, msg, isOwner) {
+  if (isOwner) return false; // El owner nunca es bloqueado
+  try {
+    const senderPure = cleanJid(sender);
+    if (!fs.existsSync(BANNED_PATH)) return false;
+    
+    const bannedDB = JSON.parse(fs.readFileSync(BANNED_PATH, 'utf8'));
+    const banInfo = bannedDB[senderPure];
+
+    if (banInfo) {
+      if (!banInfo.notified) {
+        bannedDB[senderPure].notified = true;
+        fs.writeFileSync(BANNED_PATH, JSON.stringify(bannedDB, null, 2));
+
+        const pureNumber = cleanNumber(senderPure);
+        await sock.sendMessage(remoteJid, {
+          text: `⛔ *ACCESO DENEGADO*\n\n@${pureNumber}, estás baneado del bot. No puedes usar comandos, trivias ni audios.\n\n📝 Razón: ${banInfo.reason}\n_Este es el único aviso que recibirás._`,
+          mentions: [senderPure]
+        }, { quoted: msg });
+      }
+      return true; // Bloquea completamente la ejecución
+    }
+    return false;
+  } catch {
+    return false;
+  }
+}
+
+function cleanJid(jid = '') {
+  return String(jid).split(':')[0];
+}
+
 // ⏱️ OBTENER HORA FORMATEADA (12 horas AM/PM)
 function getTime() {
   return new Date().toLocaleTimeString('es-PE', { 
@@ -89,7 +124,7 @@ if (!fs.existsSync(PLUGINS_DIR)) fs.mkdirSync(PLUGINS_DIR, { recursive: true });
 
 const commands = new Map();
 const aliases = new Map();
-const messageListeners = []; // 🔥 NUEVO: Para la trivia y anti-link
+const messageListeners = [];
 
 function loadPlugins() {
   commands.clear();
@@ -151,6 +186,9 @@ async function messageHandler(sock, msg, store = {}) {
     
     const ownerNumbers = Array.isArray(config.owner) ? config.owner.map(n => String(n).replace(/\D/g, '')) : [];
     const isOwner = !!key.fromMe || ownerNumbers.includes(senderNumber);
+
+    // 🛡️ VERIFICACIÓN DE BANEO CON AVISO ÚNICO
+    if (await checkBannedUser(sock, remoteJid, sender, msg, isOwner)) return;
 
     let groupName = 'Privado';
     let chatLabel = chalk.blue('👤 PRIVADO');
@@ -229,7 +267,6 @@ async function messageHandler(sock, msg, store = {}) {
     }
 
     if (fromGroup && groupData.bot === false && !isOwner && !['config'].includes(cmdKey)) return; 
-    if (userData.banned && !isOwner) return;
 
     try {
       await plugin.execute({
