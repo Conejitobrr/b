@@ -52,7 +52,6 @@ module.exports = {
           return sock.sendMessage(remoteJid, { text: `⚠️ @${targetNum} ya se encuentra baneado.`, mentions: [target] }, { quoted: msg });
         }
 
-        // 🔥 CRÍTICO: "notified: false" prepara el terreno para el aviso único
         bannedDB[target] = { reason, time: Date.now(), notified: false };
         saveBanned(bannedDB);
 
