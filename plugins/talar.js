@@ -35,7 +35,8 @@ module.exports = {
 
         cooldowns.set(sender, now);
 
-        let multiplicador = (userData.inventory?.arma_pro || 0) > 0 ? 1.5 : 1;
+        // 🔥 AQUÍ CONECTAMOS CON LA TIENDA: Usa el Hacha de Leñador (hacha_pro)
+        let multiplicador = (userData.inventory?.hacha_pro || 0) > 0 ? 1.5 : 1;
         let aviso = multiplicador > 1 ? `\n🪓 *¡Tu Hacha Profesional te da un bono de XP!*` : '';
 
         const msgSent = await sock.sendMessage(remoteJid, { text: `🪓 @${cleanNumber(sender)} camina hacia el espeso bosque buscando un buen árbol...`, mentions: [sender] });
@@ -63,8 +64,7 @@ module.exports = {
             resTxt = `${pick(talaBasura)}\n💸 No ganas nada de XP.`;
         } else { 
             let castigo = randXP(500, 1000);
-            // 🔥 Resta matemática segura de XP
-            userData.xp = Math.max(0, (userData.xp || 0) - castigo);
+            userData.xp = Math.max(0, (userData.xp || 0) - castigo); 
             resTxt = `${pick(talaCastigo)}\n❌ Perdiste *${castigo} XP*.`;
         }
 
@@ -78,11 +78,9 @@ module.exports = {
             userData.xp = (userData.xp || 0) + premio;
         }
 
-        // Recalcular nivel de forma segura
         userData.level = Math.floor((userData.xp || 0) / 10000) + 1;
         if (userData.level < 1) userData.level = 1;
 
-        // Guardado seguro en base de datos
         if (userData.save) {
             await userData.save();
         } else {
