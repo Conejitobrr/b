@@ -11,7 +11,6 @@ function getTarget(msg, sender) {
   return cleanJid(sender);
 }
 
-// 📖 Diccionario para traducir las variables de la base de datos a nombres legibles con instrucciones
 const DICCIONARIO_ITEMS = {
   mascota: { nombre: '🐶 Licencia de Mascota', uso: 'Usa *.adoptar [Nombre]* para obtener tu mascota.' },
   keys: { nombre: '🔑 Llave de Celda', uso: 'Usa *.usar llave* para escapar de prisión.' },
@@ -23,7 +22,7 @@ const DICCIONARIO_ITEMS = {
   arma_pro: { nombre: '🏹 Arco de Cacería', uso: 'Pasivo. Bono permanente en *.cazar*.' },
   hacha_pro: { nombre: '🪓 Hacha de Leñador', uso: 'Pasivo. Bono permanente en *.talar*.' },
   pico_pro: { nombre: '⛏️ Pico de Diamante', uso: 'Pasivo. Bono permanente en *.minar*.' },
-  anillo: { nombre: '💍 Anillo de Bodas', uso: 'Siruye para proponer matrimonio.' }
+  anillo: { nombre: '💍 Anillo de Bodas', uso: 'Sirve para proponer matrimonio.' }
 };
 
 module.exports = {
@@ -35,10 +34,10 @@ module.exports = {
   execute: async ({ sock, msg, remoteJid, sender, db, reply }) => {
     try {
       const target = getTarget(msg, sender);
+      // LECTURA FRESCA DIRECTO DE MONGODB
       const user = await db.getUser(target);
       const inv = user.inventory || {};
 
-      // Filtramos la base de datos para mostrar solo los ítems que tienen 1 o más en cantidad
       const itemsActivos = Object.entries(inv).filter(([_, cantidad]) => Number(cantidad) > 0);
 
       let texto = `🎒 *INVENTARIO DE @${cleanNumber(target)}*\n\n`;
@@ -52,11 +51,7 @@ module.exports = {
         }
       }
 
-      return sock.sendMessage(remoteJid, { 
-        text: texto.trim(), 
-        mentions: [target] 
-      }, { quoted: msg });
-
+      return sock.sendMessage(remoteJid, { text: texto.trim(), mentions: [target] }, { quoted: msg });
     } catch (err) {
       console.log('❌ Error cargando inventario:', err);
       return reply('❌ Ocurrió un error al intentar abrir la mochila.');
