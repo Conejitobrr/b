@@ -10,9 +10,9 @@ if (!fs.existsSync(WARNS_PATH)) fs.writeFileSync(WARNS_PATH, '{}');
 function getWarns() { try { return JSON.parse(fs.readFileSync(WARNS_PATH, 'utf8')); } catch { return {}; } }
 function saveWarns(data) { fs.writeFileSync(WARNS_PATH, JSON.stringify(data, null, 2)); }
 
-// 🔥 CORRECCIÓN: Extractor de JID perfecto
+// 🔥 CORRECCIÓN CRÍTICA: Destruye cualquier signo '+' o espacio para evitar el internal-server-error
 function cleanJid(jid = '') { 
-  const number = String(jid).split('@')[0].split(':')[0];
+  const number = String(jid).replace(/\D/g, ''); 
   return `${number}@s.whatsapp.net`;
 }
 
@@ -32,7 +32,7 @@ module.exports = {
 
     if (isOwner || isAdmin) return;
 
-    // ID y número ahora se generan sin errores
+    // Genera el ID matemáticamente perfecto
     const senderJid = cleanJid(sender);
     const senderNum = senderJid.split('@')[0];
 
@@ -57,7 +57,6 @@ module.exports = {
         mentions: [senderJid] 
       });
 
-      // 🔥 Pausa de 1 segundo para asegurar la expulsión
       setTimeout(async () => {
         try {
           await sock.groupParticipantsUpdate(remoteJid, [senderJid], 'remove');
