@@ -46,7 +46,11 @@ module.exports = {
         const jailDB = loadJail();
         if (!jailDB.jailed[sender]) return reply('✅ No estás arrestado.');
         
+        // 🔥 FORZAR GUARDADO DEL INVENTARIO
         userData.inventory.keys -= 1;
+        userData.inventory = { ...userData.inventory };
+        if (userData.markModified) userData.markModified('inventory');
+
         if (userData.save) await userData.save(); else await db.setUser(sender, userData);
         
         delete jailDB.jailed[sender];
@@ -56,7 +60,11 @@ module.exports = {
 
       if (itemKey === 'caja') {
         if ((inv.cajaUses || 0) <= 0) return reply('❌ No tienes cajas sorpresa.');
+        
+        // 🔥 FORZAR GUARDADO DEL INVENTARIO
         userData.inventory.cajaUses -= 1;
+        userData.inventory = { ...userData.inventory };
+        if (userData.markModified) userData.markModified('inventory');
         
         const ganar = Math.floor(Math.random() * 2000) + 500;
         userData.xp = (userData.xp || 0) + ganar;
@@ -100,10 +108,14 @@ module.exports = {
       if (userData.save) await userData.save(); else await db.setUser(sender, userData);
       return reply(`✅ Has adquirido *${amount} Día(s) VIP* por ${total} XP.`);
     } else {
-      userData.inventory[item.key] = (userData.inventory[item.key] || 0) + amount;
+      // 🔥 FORZAR GUARDADO DEL INVENTARIO AL COMPRAR
+      const newInv = { ...userData.inventory };
+      newInv[item.key] = (newInv[item.key] || 0) + amount;
+      userData.inventory = newInv;
+      if (userData.markModified) userData.markModified('inventory');
       
       if (userData.save) await userData.save(); else await db.setUser(sender, userData);
-      return reply(`✅ Compraste ${amount}x *${item.name}* por ${total} XP.\n🎒 Revisa tu mochila usando *.perfil*`);
+      return reply(`✅ Compraste ${amount}x *${item.name}* por ${total} XP.\n🎒 Revisa tu mochila usando *.inventario*`);
     }
   }
 };
