@@ -85,42 +85,41 @@ module.exports = {
   commands: ['adoptar', 'mascota', 'alimentar', 'jugar', 'entrenar', 'pasear', 'dormir', 'curar', 'sacrificar', 'pelear', 'darmascota', 'editarnombre', 'darxpmascota', 'ruletamascota'],
   
   async execute(ctx) {
-    const { sock, remoteJid, msg, sender, args, commandName, isOwner, pushName, userData, db } = ctx;
+    const { sock, remoteJid, msg, sender, args, commandName, isOwner, pushName, db } = ctx;
     const userKey = cleanJid(sender);
     const now = Date.now();
     const petCommands = ['mascota', 'alimentar', 'jugar', 'entrenar', 'pasear', 'dormir', 'curar', 'pelear', 'ruletamascota'];
     
-    // 🔥 MUERTE POR ABANDONO
-    if (userData.pet && petCommands.includes(commandName) && hoursPassed(userData.pet.lastFeed, 72)) {
-      const p = userData.pet;
+    // 🔥 LECTURA DIRECTA A LA BASE DE DATOS
+    const user = await db.getUser(userKey);
+    if (!user.inventory) user.inventory = {};
+
+    if (user.pet && petCommands.includes(commandName) && hoursPassed(user.pet.lastFeed, 72)) {
+      const p = user.pet;
       const media = getPetMedia(p.type, 'sacrificada', p.level);
       const txt = `🪦 *Lamentablemente, ${p.name}(${p.type}) ha fallecido por abandono.*\n\nPasó más de 3 días sin probar bocado y no resistió.\n\n_Para tener otra mascota deberás comprar una nueva licencia en la tienda (50,000 XP)._`;
       
-      delete userData.pet; 
-      if (userData.save) await userData.save(); else await db.setUser(userKey, userData);
+      delete user.pet; 
+      await db.setUser(userKey, user);
       
       return sendMediaMsg(sock, remoteJid, media, txt, msg);
     }
 
-    // 1. ADOPTAR (CONSUME LICENCIA CON GUARDADO FORZADO)
     if (commandName === 'adoptar') {
       if (!args.length) {
         const menuMascotas = `🐾 *CENTRO DE ADOPCIÓN* 🐾\n\nPara adoptar debes comprar primero una *Licencia de Mascota* en la *.tienda* (50,000 XP).\n\n*Uso:* \`.adoptar [Nombre]\`\n*Ejemplo:* \`.adoptar Zeus\``;
         return sock.sendMessage(remoteJid, { text: menuMascotas }, { quoted: msg });
       }
 
-      if (userData.pet) return sock.sendMessage(remoteJid, { text: `❌ Ya tienes una mascota activa.` }, { quoted: msg });
+      if (user.pet) return sock.sendMessage(remoteJid, { text: `❌ Ya tienes una mascota activa.` }, { quoted: msg });
 
-      const licenses = userData.inventory?.mascota || 0;
+      const licenses = user.inventory.mascota || 0;
       if (licenses <= 0 && !isOwner) {
         return sock.sendMessage(remoteJid, { text: `❌ No tienes una *Licencia de Mascota* en tu inventario.\n\n🛒 Cómprala en la *.tienda* por *50,000 XP*.` }, { quoted: msg });
       }
 
       if (!isOwner) {
-        // 🔥 FORZAR GUARDADO DEL INVENTARIO
-        userData.inventory.mascota -= 1;
-        userData.inventory = { ...userData.inventory };
-        if (userData.markModified) userData.markModified('inventory');
+        user.inventory.mascota -= 1;
       }
 
       const petName = args.join(' ');
@@ -134,9 +133,9 @@ module.exports = {
 
       const randomType = pool[Math.floor(Math.random() * pool.length)];
 
-      userData.pet = { name: petName, type: randomType, xp: 0, level: 1, lastFeed: now, lastPlay: now, lastTrain: 0, lastWalk: 0, lastBattle: 0 };
+      user.pet = { name: petName, type: randomType, xp: 0, level: 1, lastFeed: now, lastPlay: now, lastTrain: 0, lastWalk: 0, lastBattle: 0 };
       
-      if (userData.save) await userData.save(); else await db.setUser(userKey, userData);
+      await db.setUser(userKey, user); // 🔥 GUARDAR
 
       const media = getPetMedia(randomType, 'naciendo', 1);
       const txt = `🎉 *¡MILAGRO DE VIDA!* 🎉\n\nCanjeaste tu licencia y nació tu *${randomType.toUpperCase()}* bebé (*${rareza}*).\n\nLe has puesto de nombre: *${petName}*\n\nUsa *.mascota* para ver su estado.`;
@@ -144,24 +143,21 @@ module.exports = {
       return sendMediaMsg(sock, remoteJid, media, txt, msg);
     }
 
-    // 2. SACRIFICAR
     if (commandName === 'sacrificar') {
-      if (!userData.pet) return sock.sendMessage(remoteJid, { text: `❌ No tienes mascota.` }, { quoted: msg });
+      if (!user.pet) return sock.sendMessage(remoteJid, { text: `❌ No tienes mascota.` }, { quoted: msg });
       
       if (!args.includes('confirmar')) {
         return sock.sendMessage(remoteJid, { text: `⚠️ Estás a punto de sacrificar a tu mascota de forma irreversible. Perderás los 50,000 XP que invertiste.\n\nPara confirmar escribe: *.sacrificar confirmar*` }, { quoted: msg });
       }
 
-      delete userData.pet; 
-      if (userData.save) await userData.save(); else await db.setUser(userKey, userData);
+      delete user.pet; 
+      await db.setUser(userKey, user);
       
       return sock.sendMessage(remoteJid, { text: `☠️ Mascota sacrificada. Los 50,000 XP se han perdido. Si deseas otra, deberás comprar una nueva licencia en la tienda.` }, { quoted: msg });
     }
 
-    // 3. COMANDOS DE OWNER
     if (commandName === 'darmascota') {
       if (!isOwner) return sock.sendMessage(remoteJid, { text: `❌ Solo los Owners pueden crear criaturas a voluntad.` }, { quoted: msg });
-      
       const target = getTarget(msg, args);
       if (!target) return sock.sendMessage(remoteJid, { text: `❌ Menciona al usuario.\n*Uso:* .darmascota @user Raza | Nombre` }, { quoted: msg });
 
@@ -182,7 +178,7 @@ module.exports = {
       const targetData = await db.getUser(target);
       targetData.pet = { name: nombreElegido, type: razaOficial, xp: 0, level: 1, lastFeed: now, lastPlay: now, lastTrain: 0, lastWalk: 0, lastBattle: 0 };
       
-      if (targetData.save) await targetData.save(); else await db.setUser(target, targetData);
+      await db.setUser(target, targetData);
       return sock.sendMessage(remoteJid, { text: `🎁 *REGALO DIVINO*\n\nEl Owner ha concedido a @${cleanNumber(target)} un majestuoso *${razaOficial}* llamado *${nombreElegido}*.`, mentions: [target] }, { quoted: msg });
     }
 
@@ -196,7 +192,7 @@ module.exports = {
       if (!targetData.pet) return sock.sendMessage(remoteJid, { text: `❌ El usuario no tiene mascota.` }, { quoted: msg });
 
       targetData.pet.name = nuevoNombre;
-      if (targetData.save) await targetData.save(); else await db.setUser(target, targetData);
+      await db.setUser(target, targetData);
       return sock.sendMessage(remoteJid, { text: `✅ Nombre actualizado a *${nuevoNombre}*.`, mentions: [target] }, { quoted: msg });
     }
 
@@ -212,14 +208,13 @@ module.exports = {
       targetData.pet.xp += amount;
       targetData.pet.level = Math.floor(targetData.pet.xp / 200) + 1;
       
-      if (targetData.save) await targetData.save(); else await db.setUser(target, targetData);
+      await db.setUser(target, targetData);
       return sock.sendMessage(remoteJid, { text: `⚡ Inyectados *+${amount} XP* a la mascota de @${cleanNumber(target)}.`, mentions: [target] }, { quoted: msg });
     }
 
-    // 4. PERFIL DE MASCOTA
     if (commandName === 'mascota') {
-      if (!userData.pet) return sock.sendMessage(remoteJid, { text: `❌ No tienes mascota.` }, { quoted: msg });
-      const p = userData.pet;
+      if (!user.pet) return sock.sendMessage(remoteJid, { text: `❌ No tienes mascota.` }, { quoted: msg });
+      const p = user.pet;
       const stage = p.level >= NIVEL_EVOLUCION ? 'Adulto 🔥' : 'Bebé 🐾';
       
       let estadoActual = 'contenta', notaEstado = '¡Irradia felicidad y energía!';
@@ -233,8 +228,8 @@ module.exports = {
       return sendMediaMsg(sock, remoteJid, media, txt, msg);
     }
 
-    if (!userData.pet && petCommands.includes(commandName)) return sock.sendMessage(remoteJid, { text: `❌ No tienes criatura alguna a tu cuidado.` }, { quoted: msg });
-    const p = userData.pet;
+    if (!user.pet && petCommands.includes(commandName)) return sock.sendMessage(remoteJid, { text: `❌ No tienes criatura alguna a tu cuidado.` }, { quoted: msg });
+    const p = user.pet;
 
     const procesarAccion = async (gainXP, newState, actionText, isHeal = false) => {
       if (!isHeal && hoursPassed(p.lastFeed, 24)) {
@@ -251,7 +246,7 @@ module.exports = {
         p.level = newLevel;
       }
       
-      if (userData.save) await userData.save(); else await db.setUser(userKey, userData);
+      await db.setUser(userKey, user);
 
       const estadoFinal = evoluciono ? 'evolucionando' : newState;
       let txtFinal = `${actionText}\n⭐ Ganó *+${gainXP} XP*.`;
@@ -341,8 +336,8 @@ module.exports = {
       p.level = Math.floor(p.xp / 200) + 1;
       enemyPet.level = Math.floor(enemyPet.xp / 200) + 1;
 
-      if (userData.save) await userData.save(); else await db.setUser(userKey, userData);
-      if (targetData.save) await targetData.save(); else await db.setUser(target, targetData);
+      await db.setUser(userKey, user);
+      await db.setUser(target, targetData);
 
       return sock.sendMessage(remoteJid, { text: txtResumen, mentions: [target] }, { quoted: msg });
     }
