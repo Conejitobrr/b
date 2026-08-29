@@ -3,11 +3,21 @@
 const preguntasBase = require('../assets/data/preguntas_trivia.json');
 const juegosTrivia = new Map();
 
+// Limpia tildes, signos de puntuación y dobles espacios
+function normalizeText(text) {
+  if (!text) return '';
+  return String(text)
+    .toLowerCase()
+    .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^\w\s]/gi, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
 async function iniciarRonda(remoteJid, sock) {
   const juego = juegosTrivia.get(remoteJid);
   if (!juego) return;
 
-  // Si se acaban las preguntas, las rellenamos y mezclamos
   if (!juego.disponibles || juego.disponibles.length === 0) {
     juego.disponibles = [...preguntasBase].sort(() => Math.random() - 0.5);
   }
@@ -22,13 +32,15 @@ async function iniciarRonda(remoteJid, sock) {
     text: `🎯 *TRIVIA EXPRESS*\n\n🧠 Pregunta: *${q.q}*\n💰 Recompensa: *+${recompensa} XP*\n⏳ Tienen 60 segundos.\n\n_¡Puedes responder dentro de una frase!_` 
   });
 
-  // Temporizador de inactividad
   juego.tiempo = setTimeout(async () => {
     if (juegosTrivia.has(remoteJid)) {
+      const currentGame = juegosTrivia.get(remoteJid);
       juegosTrivia.delete(remoteJid);
-      await sock.sendMessage(remoteJid, { 
-        text: `⏳ ¡Se acabó el tiempo! Nadie logró adivinar.\n\n✅ La respuesta era: *${q.a[0]}*\n\nEscriban *.trivia* para jugar otra vez.` 
-      });
+      try {
+        await sock.sendMessage(remoteJid, { 
+          text: `⏳ ¡Se acabó el tiempo! Nadie logró adivinar.\n\n✅ La respuesta era: *${currentGame.preguntaActual.a[0]}*\n\nEscriban *.trivia* para jugar otra vez.` 
+        });
+      } catch (err) {}
     }
   }, 60000);
 }
@@ -54,52 +66,48 @@ module.exports = {
     await iniciarRonda(remoteJid, sock);
   },
 
-  onMessage: async ({ sock, remoteJid, body, sender, pushName, db }) => {
-    if (!juegosTrivia.has(remoteJid) || !body) return;
+  onMessage: async (ctx) => {
+    const { sock, remoteJid, body, sender, pushName, db } = ctx;
     
-    // Ignora los comandos para evitar conflictos con el chat normal
+    if (!juegosTrivia.has(remoteJid) || !body) return;
     if (body.trim().startsWith('.')) return;
 
     const juego = juegosTrivia.get(remoteJid);
-    if (!juego.preguntaActual) return;
+    if (!juego || !juego.preguntaActual) return;
 
-    // Limpia el texto del usuario de tildes y lo pasa a minúsculas
-    const userText = String(body).toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+    // Colocamos la frase del usuario entre espacios en blanco para aislar cada palabra
+    const cleanedBody = ` ${normalizeText(body)} `;
     
-    // Búsqueda inteligente e infalible
+    // Verificamos si alguna de las respuestas exactas (también entre espacios) está dentro del texto
     const acierto = juego.preguntaActual.a.some(ans => {
-      const cleanAns = String(ans).toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
-      const escapedAns = cleanAns.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-      
-      // El límite \b asegura que encuentre la palabra exacta, ignorando signos de puntuación o frases largas
-      const regex = new RegExp(`\\b${escapedAns}\\b`, 'i');
-      return regex.test(userText);
+      const cleanAns = ` ${normalizeText(ans)} `;
+      return cleanedBody.includes(cleanAns);
     });
 
     if (acierto) {
-      clearTimeout(juego.tiempo);
+      if (juego.tiempo) clearTimeout(juego.tiempo);
       
-      // Congelamos la pregunta de inmediato para que nadie más la conteste a la vez
+      const recompensaGanada = juego.recompensa;
+      const respuestaCorrecta = juego.preguntaActual.a[0];
+      
+      // Congelamos la pregunta de inmediato
       juego.preguntaActual = null; 
 
-      // Guardado de XP seguro
+      // Guardamos la XP en la base de datos
       try {
-        if (db && typeof db.addXP === 'function') {
-          await db.addXP(sender, juego.recompensa);
-        } else if (db && typeof db.getUser === 'function') {
-          const userData = await db.getUser(sender);
-          userData.xp = (userData.xp || 0) + juego.recompensa;
+        const userData = await db.getUser(sender);
+        if (userData) {
+          userData.xp = (userData.xp || 0) + recompensaGanada;
           if (userData.save) await userData.save();
         }
       } catch (e) {
-        console.log('Error de guardado en trivia, pero el juego continúa:', e);
+        console.log('Error de guardado en trivia:', e);
       }
       
       await sock.sendMessage(remoteJid, { 
-        text: `🎉 ¡CORRECTO, *${pushName}*!\n\n✅ La respuesta era *${juego.preguntaActual.a[0]}*.\n⭐ Has ganado *+${juego.recompensa} XP* ⚡\n\nSiguiente pregunta en 3 segundos...` 
+        text: `🎉 ¡CORRECTO, *${pushName}*!\n\n✅ La respuesta era *${respuestaCorrecta}*.\n⭐ Has ganado *+${recompensaGanada} XP* ⚡\n\nSiguiente pregunta en 3 segundos...` 
       });
 
-      // Lanza la siguiente pregunta en automático
       setTimeout(() => {
         iniciarRonda(remoteJid, sock);
       }, 3000);
