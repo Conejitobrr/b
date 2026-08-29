@@ -6,12 +6,8 @@ const path = require('path');
 const JAIL_PATH = path.join(process.cwd(), 'lib', 'jail.json');
 if (!fs.existsSync(path.dirname(JAIL_PATH))) fs.mkdirSync(path.dirname(JAIL_PATH), { recursive: true });
 
-function loadJail() {
-  try { return JSON.parse(fs.readFileSync(JAIL_PATH, 'utf8') || '{"jailed":{}}'); } catch { return { jailed: {} }; }
-}
-function saveJail(data) {
-  try { fs.writeFileSync(JAIL_PATH, JSON.stringify(data, null, 2)); } catch {}
-}
+function loadJail() { try { return JSON.parse(fs.readFileSync(JAIL_PATH, 'utf8') || '{"jailed":{}}'); } catch { return { jailed: {} }; } }
+function saveJail(data) { try { fs.writeFileSync(JAIL_PATH, JSON.stringify(data, null, 2)); } catch {} }
 
 const ITEMS = {
   ver: { key: 'verUses', name: '🎟️ Uso de .ver', price: 10000, desc: 'Permite usar .ver 1 vez' },
@@ -34,23 +30,23 @@ module.exports = {
   category: 'economía',
   desc: 'Compra ítems o usa los que ya tienes',
 
-  execute: async ({ sock, msg, remoteJid, sender, args, commandName, db, userData, reply }) => {
-    
-    if (!userData.inventory) userData.inventory = {};
+  execute: async ({ sock, msg, remoteJid, sender, args, commandName, db, reply }) => {
+    // 1. CARGAR DATOS 100% FRESCOS DE LA DB
+    const user = await db.getUser(sender);
+    const inv = user.inventory ? JSON.parse(JSON.stringify(user.inventory)) : {}; // Clonación profunda para Mongo
 
     if (commandName === 'usar') {
       const itemKey = (args[0] || '').toLowerCase();
 
       if (itemKey === 'llave') {
-        if ((userData.inventory.keys || 0) <= 0) return reply('❌ No tienes llaves en tu inventario.');
-        
+        if ((inv.keys || 0) <= 0) return reply('❌ No tienes llaves en tu inventario.');
         const jailDB = loadJail();
         if (!jailDB.jailed[sender]) return reply('✅ No estás arrestado.');
         
-        // 🔥 GUARDADO CORRECTO DEL INVENTARIO MONGODB
-        userData.inventory.keys -= 1;
-        if (userData.markModified) userData.markModified('inventory');
-        if (userData.save) await userData.save();
+        inv.keys -= 1;
+        user.inventory = inv;
+        if (typeof user.markModified === 'function') user.markModified('inventory');
+        await user.save();
         
         delete jailDB.jailed[sender];
         saveJail(jailDB);
@@ -58,16 +54,15 @@ module.exports = {
       }
 
       if (itemKey === 'caja') {
-        if ((userData.inventory.cajaUses || 0) <= 0) return reply('❌ No tienes cajas sorpresa.');
+        if ((inv.cajaUses || 0) <= 0) return reply('❌ No tienes cajas sorpresa en tu mochila.');
         
-        // 🔥 GUARDADO CORRECTO DEL INVENTARIO MONGODB
-        userData.inventory.cajaUses -= 1;
-        if (userData.markModified) userData.markModified('inventory');
+        inv.cajaUses -= 1;
+        user.inventory = inv;
+        if (typeof user.markModified === 'function') user.markModified('inventory');
 
         const ganar = Math.floor(Math.random() * 2000) + 500;
-        userData.xp = (userData.xp || 0) + ganar;
-        
-        if (userData.save) await userData.save();
+        user.xp = (user.xp || 0) + ganar;
+        await user.save();
         
         return reply(`📦 Abriste la caja y ganaste *+${ganar} XP*`);
       }
@@ -76,42 +71,35 @@ module.exports = {
 
     if (!args.length) {
       let txt = `🛒 *TIENDA SIRIUSBOT*\n\n`;
-      for (const [id, item] of Object.entries(ITEMS)) {
-        txt += `▪️ *${id}* (${item.price} XP)\n📝 _${item.desc}_\n\n`;
-      }
-      txt += `💳 *Tu saldo:* ${userData.xp || 0} XP\n📦 *Comprar:* .comprar [item] [cant]\n🔓 *Usar:* .usar [llave/caja]`;
+      for (const [id, item] of Object.entries(ITEMS)) { txt += `▪️ *${id}* (${item.price} XP)\n📝 _${item.desc}_\n\n`; }
+      txt += `💳 *Tu saldo:* ${user.xp || 0} XP\n📦 *Comprar:* .comprar [item] [cant]\n🔓 *Usar:* .usar [llave/caja]`;
       return reply(txt);
     }
 
     const itemName = args[0].toLowerCase();
     const amount = Math.max(1, Math.min(10, Number(args[1]) || 1));
     const item = ITEMS[itemName];
-    
     if (!item) return reply('❌ Producto no válido. Usa *.tienda* para ver el catálogo.');
 
     const total = item.price * amount;
-    if ((userData.xp || 0) < total) {
-      return reply(`❌ No tienes suficiente XP.\nCuesta *${total} XP* pero tienes *${userData.xp || 0} XP*.`);
-    }
+    if ((user.xp || 0) < total) return reply(`❌ No tienes suficiente XP.\nCuesta *${total} XP* pero tienes *${user.xp || 0} XP*.`);
 
-    // Descontar pago
-    userData.xp -= total;
+    // Descontar XP
+    user.xp -= total;
 
     if (itemName === 'vip') {
       const now = Date.now();
-      const currentPremium = Number(userData.premiumUntil || 0);
-      const baseTime = currentPremium > now ? currentPremium : now;
-      userData.premiumUntil = baseTime + (amount * 24 * 60 * 60 * 1000);
-      
-      if (userData.save) await userData.save();
+      const currentPremium = Number(user.premiumUntil || 0);
+      user.premiumUntil = (currentPremium > now ? currentPremium : now) + (amount * 24 * 60 * 60 * 1000);
+      await user.save();
       return reply(`✅ Has adquirido *${amount} Día(s) VIP* por ${total} XP.`);
     } else {
-      userData.inventory[item.key] = (userData.inventory[item.key] || 0) + amount;
+      // Modificar clon del inventario
+      inv[item.key] = (inv[item.key] || 0) + amount;
+      user.inventory = inv;
+      if (typeof user.markModified === 'function') user.markModified('inventory');
       
-      // 🔥 GUARDAR INVENTARIO 
-      if (userData.markModified) userData.markModified('inventory');
-      if (userData.save) await userData.save();
-      
+      await user.save();
       return reply(`✅ Compraste ${amount}x *${item.name}* por ${total} XP.\n🎒 Revisa tu mochila usando *.inventario*`);
     }
   }
