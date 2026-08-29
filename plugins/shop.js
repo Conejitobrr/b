@@ -1,8 +1,17 @@
 'use strict';
 
 const fs = require('fs');
-const path = path.join(process.cwd(), 'lib', 'jail.json');
-if (!fs.existsSync(path.dirname(path))) fs.mkdirSync(path.dirname(path), { recursive: true });
+const path = require('path');
+
+const JAIL_PATH = path.join(process.cwd(), 'lib', 'jail.json');
+if (!fs.existsSync(path.dirname(JAIL_PATH))) fs.mkdirSync(path.dirname(JAIL_PATH), { recursive: true });
+
+function loadJail() {
+  try { return JSON.parse(fs.readFileSync(JAIL_PATH, 'utf8') || '{"jailed":{}}'); } catch { return { jailed: {} }; }
+}
+function saveJail(data) {
+  try { fs.writeFileSync(JAIL_PATH, JSON.stringify(data, null, 2)); } catch {}
+}
 
 const ITEMS = {
   ver: { key: 'verUses', name: '🎟️ Uso de .ver', price: 10000, desc: 'Permite usar .ver 1 vez' },
@@ -10,10 +19,12 @@ const ITEMS = {
   llave: { key: 'keys', name: '🔑 Llave de celda', price: 1000, desc: 'Permite salir de la cárcel 1 vez' },
   cana_pro: { key: 'cana_pro', name: '🎣 Caña Profesional', price: 30000, desc: 'Pesca con mayor éxito y más XP' },
   arma_pro: { key: 'arma_pro', name: '🏹 Arco de Cacería', price: 30000, desc: 'Caza con mayor éxito y más XP' },
+  hacha_pro: { key: 'hacha_pro', name: '🪓 Hacha de Leñador', price: 30000, desc: 'Tala con mayor éxito y más XP' },
   pico_pro: { key: 'pico_pro', name: '⛏️ Pico de Diamante', price: 30000, desc: 'Mina con mayor éxito y más XP' },
   caja: { key: 'cajaUses', name: '📦 Caja Sorpresa XP', price: 2000, desc: 'Contiene XP aleatorio' },
-  escudo: { key: 'shieldUses', name: '🛡️ Escudo Anti-Robo', price: 5000, desc: 'Te protege del próximo robo' },
-  vip: { key: 'premium', name: '💎 Pase VIP (1 Día)', price: 100000, desc: 'Bono XP y cooldown reducido al trabajar' },
+  escudo: { key: 'shieldUses', name: '🛡️ Escudo Anti-Robo', price: 2500, desc: 'Te protege del próximo robo' },
+  vip: { key: 'premium', name: '💎 Pase VIP (1 Día)', price: 50000, desc: 'Bono XP y cooldown reducido al trabajar' },
+  mascota: { key: 'mascota', name: '🐶 Licencia de Mascota', price: 50000, desc: 'Permite adoptar un animal en el centro' },
   anillo: { key: 'anillo', name: '💍 Anillo de Bodas', price: 25000, desc: 'Requisito para casarte' }
 };
 
@@ -32,10 +43,15 @@ module.exports = {
       if (itemKey === 'llave') {
         if ((inv.keys || 0) <= 0) return reply('❌ No tienes llaves en tu inventario.');
         
+        const jailDB = loadJail();
+        if (!jailDB.jailed[sender]) return reply('✅ No estás arrestado.');
+        
         userData.inventory.keys -= 1;
         if (userData.save) await userData.save(); else await db.setUser(sender, userData);
         
-        return reply('🔑 Has usado una llave de celda.');
+        delete jailDB.jailed[sender];
+        saveJail(jailDB);
+        return reply('🔑 Has usado una llave de celda y escapaste de prisión.');
       }
 
       if (itemKey === 'caja') {
