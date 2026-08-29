@@ -10,11 +10,9 @@ if (!fs.existsSync(WARNS_PATH)) fs.writeFileSync(WARNS_PATH, '{}');
 function getWarns() { try { return JSON.parse(fs.readFileSync(WARNS_PATH, 'utf8')); } catch { return {}; } }
 function saveWarns(data) { fs.writeFileSync(WARNS_PATH, JSON.stringify(data, null, 2)); }
 
-// 🔥 CORRECCIÓN CRÍTICA: Destruye cualquier signo '+' o espacio para evitar el internal-server-error
-function cleanJid(jid = '') { 
-  const number = String(jid).replace(/\D/g, ''); 
-  return `${number}@s.whatsapp.net`;
-}
+// 🔥 Copiado 100% de tu reto.js para menciones y expulsiones infalibles
+function cleanJid(jid = '') { return String(jid).split(':')[0]; }
+function cleanNumber(jid = '') { return cleanJid(jid).split('@')[0].replace(/\D/g, ''); }
 
 module.exports = {
   name: 'antilink',
@@ -27,14 +25,15 @@ module.exports = {
     if (!remoteJid || !remoteJid.endsWith('@g.us') || !body) return;
     if (!groupData || groupData.antilink !== true) return;
 
-    const linkRegex = /chat\.whatsapp\.com\/[0-9A-Za-z]{10,}/i;
+    // 🔥 Simplificado: Atrapa TODO lo que diga chat.whatsapp.com, sin importar el formato
+    const linkRegex = /chat\.whatsapp\.com/i;
     if (!linkRegex.test(body)) return;
 
     if (isOwner || isAdmin) return;
 
-    // Genera el ID matemáticamente perfecto
-    const senderJid = cleanJid(sender);
-    const senderNum = senderJid.split('@')[0];
+    // Generamos el ID y número exactos
+    const pureNumber = cleanNumber(sender);
+    const senderJid = `${pureNumber}@s.whatsapp.net`;
 
     try {
       await sock.sendMessage(remoteJid, { delete: msg.key });
@@ -53,10 +52,11 @@ module.exports = {
       saveWarns(dbWarns);
 
       await sock.sendMessage(remoteJid, { 
-        text: `🚫 *LÍMITE ALCANZADO*\n\n@${senderNum} ha sido expulsado por enviar enlaces de otros grupos (3/3 advertencias).`, 
+        text: `🚫 *LÍMITE ALCANZADO*\n\n@${pureNumber} ha sido expulsado por enviar enlaces de otros grupos (3/3 advertencias).`, 
         mentions: [senderJid] 
       });
 
+      // Expulsión segura con ID purificado
       setTimeout(async () => {
         try {
           await sock.groupParticipantsUpdate(remoteJid, [senderJid], 'remove');
@@ -68,7 +68,7 @@ module.exports = {
     } else {
       saveWarns(dbWarns);
       await sock.sendMessage(remoteJid, { 
-        text: `⚠️ *ANTILINK DETECTADO*\n\n@${senderNum}, no se permiten enlaces de otros grupos aquí.\n🚨 Warns: *${currentWarns}/3*`, 
+        text: `⚠️ *ANTILINK DETECTADO*\n\n@${pureNumber}, no se permiten enlaces de otros grupos aquí.\n🚨 Warns: *${currentWarns}/3*`, 
         mentions: [senderJid] 
       });
     }
