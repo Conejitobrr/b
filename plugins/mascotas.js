@@ -74,10 +74,12 @@ async function sendMediaMsg(sock, remoteJid, media, text, msg, extra = {}) {
 function hoursPassed(timestamp, hours) { return (Date.now() - (timestamp || 0)) > (hours * 60 * 60 * 1000); }
 
 module.exports = {
-  commands: ['adoptar', 'mascota', 'alimentar', 'jugar', 'entrenar', 'pasear', 'dormir', 'curar', 'sacrificar', 'pelear', 'darmascota', 'editarnombre', 'darxpmascota', 'ruletamascota'],
+  name: 'mascotas',
+  aliases: ['adoptar', 'mascota', 'alimentar', 'jugar', 'entrenar', 'pasear', 'dormir', 'curar', 'sacrificar', 'pelear', 'darmascota', 'editarnombre', 'darxpmascota', 'ruletamascota'],
+  category: 'juegos',
+  desc: 'Sistema de mascotas',
   
-  async execute(ctx) {
-    const { sock, remoteJid, msg, sender, args, commandName, isOwner, pushName } = ctx;
+  execute: async ({ sock, remoteJid, msg, sender, args, commandName, isOwner, pushName }) => {
     const userKey = cleanJid(sender);
     const now = Date.now();
     const petCommands = ['mascota', 'alimentar', 'jugar', 'entrenar', 'pasear', 'dormir', 'curar', 'pelear', 'ruletamascota'];
@@ -227,7 +229,7 @@ module.exports = {
       p.level = Math.floor(p.xp / 200) + 1;
       enemyPet.level = Math.floor(enemyPet.xp / 200) + 1;
 
-      saveInv(dbInv); // Guarda los datos de ambos instantáneamente
+      saveInv(dbInv);
       return sock.sendMessage(remoteJid, { text: txtResumen, mentions: [target] }, { quoted: msg });
     }
 
