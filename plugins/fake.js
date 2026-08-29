@@ -1,6 +1,5 @@
 'use strict';
 
-// 🔥 FUNCIONES EXACTAS DEL PERFIL.JS (El secreto de la mención azul)
 function cleanJid(jid = '') { return String(jid).split(':')[0]; }
 function cleanNumber(jid = '') { return cleanJid(jid).split('@')[0].replace(/\D/g, ''); }
 
@@ -14,7 +13,6 @@ function getTarget(msg) {
   return null;
 }
 
-// Generador de ID realista para que WhatsApp no bloquee el cuadro
 function generateFakeId() {
   return 'BAE5' + Math.floor(Math.random() * 1000000000000000).toString(16).toUpperCase();
 }
@@ -34,43 +32,32 @@ module.exports = {
         return reply('❌ Uso correcto:\n\n.fake @usuario texto falso | tu respuesta\n\n📌 Ejemplo:\n.fake @usuario Hola | Adiós');
       }
 
-      // 1. Extraemos el número puro para construir la mención visual
-      const pureNumber = cleanNumber(target);
-
       let [fakeText, replyText] = fullText.split('|').map(v => v.trim());
 
       if (!fakeText || !replyText) {
         return reply('❌ Formato incorrecto. Recuerda usar el separador "|".');
       }
 
-      // 2. Limpiamos cualquier arroba rota que hayas escrito en el comando
+      // Limpiamos cualquier arroba que hayas escrito accidentalmente en el comando
       fakeText = fakeText.replace(/@\S+/g, '').trim();
 
-      // 🔥 TRUCO MAESTRO: Forzamos la mención azul DENTRO del cuadro citado
-      const finalFakeText = `@${pureNumber} ${fakeText}`;
-
-      // 🧠 CREACIÓN DEL MENSAJE FALSO (extendedTextMessage soporta menciones internas)
+      // 🧠 CREACIÓN DEL MENSAJE FALSO LIMPIO
       const fakeQuoted = {
         key: {
           fromMe: false,
-          participant: target,
+          participant: target,     // Carga el nombre (Ej. Bruno 2)
           remoteJid: remoteJid,
-          id: generateFakeId()
+          id: generateFakeId()     // Evita que el cuadro salga en blanco
         },
         message: {
-          extendedTextMessage: {
-            text: finalFakeText, // Aquí va el texto con el @Nombre
-            contextInfo: {
-              mentionedJid: [target] // Esto obliga a WhatsApp a pintarlo de azul en la cita
-            }
-          }
+          conversation: fakeText   // Texto 100% puro y limpio, sin @número al inicio
         }
       };
 
       // 📩 ENVIAR LA RESPUESTA
       await sock.sendMessage(remoteJid, {
         text: replyText,
-        mentions: [target] // Habilita la mención también en tu respuesta
+        mentions: [target]         // Mantiene la mención azul real en tu respuesta
       }, { quoted: fakeQuoted });
 
     } catch (e) {
