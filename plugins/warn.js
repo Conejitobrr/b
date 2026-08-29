@@ -11,6 +11,25 @@ if (!fs.existsSync(WARNS_PATH)) fs.writeFileSync(WARNS_PATH, '{}');
 function getWarns() { try { return JSON.parse(fs.readFileSync(WARNS_PATH, 'utf8')); } catch { return {}; } }
 function saveWarns(data) { fs.writeFileSync(WARNS_PATH, JSON.stringify(data, null, 2)); }
 
+// 🔥 FUNCIONES CLONADAS EXACTAMENTE DE TU PERFIL.JS
+function cleanJid(jid = '') {
+  return String(jid).split(':')[0];
+}
+
+function cleanNumber(jid = '') {
+  return cleanJid(jid).split('@')[0].replace(/\D/g, '');
+}
+
+function getTarget(msg) {
+  const quoted = msg.message?.extendedTextMessage?.contextInfo?.participant;
+  if (quoted) return cleanJid(quoted);
+
+  const mentioned = msg.message?.extendedTextMessage?.contextInfo?.mentionedJid?.[0];
+  if (mentioned) return cleanJid(mentioned);
+
+  return null;
+}
+
 const MAX_WARN = 3;
 
 module.exports = {
@@ -26,7 +45,7 @@ module.exports = {
     if (!dbWarns[remoteJid]) dbWarns[remoteJid] = {};
     const groupWarns = dbWarns[remoteJid];
 
-    // 1. COMANDO: VER TODOS LOS WARNS DEL GRUPO
+    // 1. COMANDO: VER TODOS LOS WARNS
     if (commandName === 'warnings') {
       const entries = Object.entries(groupWarns).filter(([_, count]) => count > 0);
       if (!entries.length) return reply('✅ No hay usuarios con advertencias en este grupo.');
@@ -35,7 +54,7 @@ module.exports = {
       const mentions = [];
       
       entries.forEach(([jid, count], i) => { 
-        const pureNum = String(jid).split('@')[0].replace(/\D/g, '');
+        const pureNum = cleanNumber(jid);
         const formatJid = `${pureNum}@s.whatsapp.net`;
         list += `${i + 1}. @${pureNum} — *${count}/${MAX_WARN}*\n`; 
         mentions.push(formatJid);
@@ -44,16 +63,14 @@ module.exports = {
       return sock.sendMessage(remoteJid, { text: list, mentions }, { quoted: msg });
     }
 
-    // 🛡️ Filtro de permisos
+    // 🛡️ Permisos
     if (!isAdmin && !isOwner) return reply('❌ Solo los administradores pueden usar este comando.');
 
-    // Capturar al objetivo
-    const targetRaw = msg.message?.extendedTextMessage?.contextInfo?.participant || msg.message?.extendedTextMessage?.contextInfo?.mentionedJid?.[0];
-    if (!targetRaw) return reply('❌ Debes mencionar o responder al mensaje del usuario.');
+    // Usamos el detector infalible de perfil.js
+    const target = getTarget(msg);
+    if (!target) return reply('❌ Debes mencionar o responder al mensaje del usuario.');
     
-    // 🔥 EXTRACCIÓN 100% IDÉNTICA AL ANTILINK (Forzará el color azul/Nick)
-    const userJidRaw = String(targetRaw).split(':')[0];
-    const pureNumber = userJidRaw.split('@')[0].replace(/\D/g, ''); 
+    const pureNumber = cleanNumber(target);
     const formatJid = `${pureNumber}@s.whatsapp.net`;
 
     // 2. COMANDO: REINICIAR WARNS (0/3)
@@ -90,9 +107,9 @@ module.exports = {
         mentions: [formatJid] 
       }, { quoted: msg });
 
-      // Expulsión si llega al máximo
+      // Expulsión si llega a 3
       if (current >= MAX_WARN) {
-        groupWarns[formatJid] = 0; // Reiniciar cuenta para el futuro
+        groupWarns[formatJid] = 0; 
         saveWarns(dbWarns);
 
         await sock.sendMessage(remoteJid, { 
@@ -100,7 +117,6 @@ module.exports = {
           mentions: [formatJid] 
         });
 
-        // Baneo limpio
         setTimeout(async () => {
           try {
             await sock.groupParticipantsUpdate(remoteJid, [formatJid], 'remove');
