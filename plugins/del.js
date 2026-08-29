@@ -1,6 +1,5 @@
 'use strict';
 
-// Funciones de purificación
 function cleanJid(jid = '') { return String(jid).split(':')[0]; }
 
 module.exports = {
@@ -11,7 +10,7 @@ module.exports = {
 
   execute: async ({ sock, msg, remoteJid, sender, fromGroup, isAdmin, isOwner, db, reply }) => {
     try {
-      // 1. Verificación de permisos (Owner, Admin o Premium)
+      // 1. Verificación de permisos del usuario (Owner, Admin o Premium)
       let isPremium = false;
       if (db && typeof db.getUser === 'function') {
         const user = await db.getUser(sender);
@@ -28,27 +27,16 @@ module.exports = {
         return reply('❌ Debes responder al mensaje que quieres eliminar.\n\nUso:\n.del\n.borrar\n.eliminar');
       }
 
-      // 3. Determinar quién envió el mensaje a borrar y quién es el bot
+      // 3. Determinar IDs (bot y citado)
       const botJid = cleanJid(sock.user.id) + '@s.whatsapp.net';
       const quotedParticipant = quotedInfo.participant ? cleanJid(quotedInfo.participant) + '@s.whatsapp.net' : remoteJid;
       const isOwnMessage = (quotedParticipant === botJid);
-
-      // 4. Filtro de permisos del bot según el entorno
-      if (fromGroup && !isOwnMessage) {
-        // Consultar metadatos para saber si el bot es admin
-        const groupMetadata = await sock.groupMetadata(remoteJid);
-        const isBotAdmin = groupMetadata.participants.some(p => p.id === botJid && (p.admin === 'admin' || p.admin === 'superadmin'));
-
-        if (!isBotAdmin) {
-          return reply('❌ Para eliminar mensajes de otras personas, necesito ser administrador del grupo.');
-        }
-      }
 
       if (!fromGroup && !isOwnMessage) {
         return reply('❌ En chats privados solo puedo eliminar los mensajes enviados por mí.');
       }
 
-      // 5. Crear la llave del mensaje a eliminar
+      // 4. Llaves de eliminación
       const deleteKey = {
         remoteJid: remoteJid,
         fromMe: isOwnMessage,
@@ -56,7 +44,6 @@ module.exports = {
         participant: quotedParticipant
       };
 
-      // 6. Crear la llave de tu mensaje (el comando .del)
       const commandDeleteKey = {
         remoteJid: msg.key.remoteJid,
         fromMe: !!msg.key.fromMe,
@@ -64,10 +51,15 @@ module.exports = {
         participant: msg.key.participant
       };
 
-      // 🔥 ACCIÓN: Borrar el mensaje objetivo
-      await sock.sendMessage(remoteJid, { delete: deleteKey });
+      // 🔥 FUERZA BRUTA: Ejecutar eliminación sin consultar metadata defectuosa
+      try {
+        await sock.sendMessage(remoteJid, { delete: deleteKey });
+      } catch (deleteErr) {
+        console.log('Error al intentar borrar el mensaje:', deleteErr?.message);
+        return reply('❌ No pude eliminar el mensaje.\n\nPosibles causas:\n* No soy administrador.\n* El mensaje es demasiado antiguo.');
+      }
 
-      // 🔥 ACCIÓN: Borrar el comando .del (con un ligero retraso para evitar bloqueos)
+      // 🔥 Borrar el comando .del (Retraso de medio segundo para fluidez)
       setTimeout(async () => {
         try {
           await sock.sendMessage(remoteJid, { delete: commandDeleteKey });
@@ -78,7 +70,7 @@ module.exports = {
 
     } catch (err) {
       console.log('❌ Error en plugin del:', err?.message || err);
-      return reply('❌ Ocurrió un error y no se pudo eliminar el mensaje.');
+      return reply('❌ Ocurrió un error inesperado al procesar la solicitud.');
     }
   }
 };
