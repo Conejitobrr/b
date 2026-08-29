@@ -3,16 +3,6 @@
 const preguntasBase = require('../assets/data/preguntas_trivia.json');
 const juegosTrivia = new Map();
 
-// Normaliza limpiando tildes y transformando signos de puntuación (?!.,) en espacios
-function normalize(text = '') {
-  return String(text)
-    .toLowerCase()
-    .normalize('NFD').replace(/[\u0300-\u036f]/g, '') // Quita tildes
-    .replace(/[^\w\s]/gi, ' ') // Cambia signos de puntuación por espacios
-    .replace(/\s+/g, ' ') // Reduce múltiples espacios a uno solo
-    .trim();
-}
-
 async function iniciarRonda(remoteJid, sock) {
   const juego = juegosTrivia.get(remoteJid);
   if (!juego) return;
@@ -29,7 +19,7 @@ async function iniciarRonda(remoteJid, sock) {
   juego.recompensa = recompensa;
 
   await sock.sendMessage(remoteJid, { 
-    text: `🎯 *TRIVIA EXPRESS*\n\n🧠 Pregunta: *${q.q}*\n💰 Recompensa: *+${recompensa} XP*\n⏳ Tienen 60 segundos.\n\n_¡Puedes responder dentro de una oración sin problemas!_` 
+    text: `🎯 *TRIVIA EXPRESS*\n\n🧠 Pregunta: *${q.q}*\n💰 Recompensa: *+${recompensa} XP*\n⏳ Tienen 60 segundos.\n\n_¡Puedes responder dentro de una frase!_` 
   });
 
   // Temporizador de inactividad
@@ -73,13 +63,17 @@ module.exports = {
     const juego = juegosTrivia.get(remoteJid);
     if (!juego.preguntaActual) return;
 
-    const respuestaUsuario = normalize(body);
+    // Limpia el texto del usuario de tildes y lo pasa a minúsculas
+    const userText = String(body).toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
     
-    // Búsqueda inteligente: rodeamos con límite de espacios para detección infalible
-    const acierto = juego.preguntaActual.a.some(r => {
-      const respLimpia = normalize(r);
-      const regex = new RegExp(`(^|\\s)${respLimpia}(\\s|$)`, 'i');
-      return regex.test(respuestaUsuario);
+    // Búsqueda inteligente e infalible
+    const acierto = juego.preguntaActual.a.some(ans => {
+      const cleanAns = String(ans).toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+      const escapedAns = cleanAns.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      
+      // El límite \b asegura que encuentre la palabra exacta, ignorando signos de puntuación o frases largas
+      const regex = new RegExp(`\\b${escapedAns}\\b`, 'i');
+      return regex.test(userText);
     });
 
     if (acierto) {
@@ -88,14 +82,14 @@ module.exports = {
       // Congelamos la pregunta de inmediato para que nadie más la conteste a la vez
       juego.preguntaActual = null; 
 
-      // 🔥 GUARDADO BLINDADO DE XP
+      // Guardado de XP seguro
       try {
-        const userData = await db.getUser(sender);
-        if (userData) {
+        if (db && typeof db.addXP === 'function') {
+          await db.addXP(sender, juego.recompensa);
+        } else if (db && typeof db.getUser === 'function') {
+          const userData = await db.getUser(sender);
           userData.xp = (userData.xp || 0) + juego.recompensa;
           if (userData.save) await userData.save();
-        } else if (typeof db.addXP === 'function') {
-          await db.addXP(sender, juego.recompensa);
         }
       } catch (e) {
         console.log('Error de guardado en trivia, pero el juego continúa:', e);
