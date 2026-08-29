@@ -25,7 +25,7 @@ function saveMemory(data) {
 
 function cleanText(text = '') { return String(text).replace(/\s+/g, ' ').trim(); }
 
-// 🔥 FUNCIONES INFALIBLES DE PURIFICACIÓN (Menciones reales)
+// 🔥 FUNCIONES EXACTAS DEL PERFIL.JS
 function cleanJid(jid = '') { return String(jid).split(':')[0]; }
 function cleanNumber(jid = '') { return cleanJid(jid).split('@')[0].replace(/\D/g, ''); }
 
@@ -36,7 +36,7 @@ function getTarget(msg, args) {
   const mentioned = msg.message?.extendedTextMessage?.contextInfo?.mentionedJid?.[0];
   if (mentioned) return cleanJid(mentioned);
 
-  if (args && args[0]) {
+  if (args && args[0] && args[0].includes('@')) {
     const cleanArgs = args[0].replace(/\D/g, '');
     if (cleanArgs) return `${cleanArgs}@s.whatsapp.net`;
   }
@@ -44,16 +44,15 @@ function getTarget(msg, args) {
 }
 
 function removeTargetFromQuestion(args = []) {
-  return args.join(' ').replace(/@\d+/g, '').replace(/\d{5,}/g, '').trim();
+  // Limpia el prompt para que no se filtre el JID con símbolo + y rompa la generación de Groq
+  return args.join(' ').replace(/@\+?\d+/g, '').replace(/\d{5,}/g, '').trim();
 }
 
 function getStyleStats(messages = []) {
   const joined = messages.join(' ');
   const emojis = joined.match(/[\u{1F300}-\u{1FAFF}]/gu) || [];
   const laughs = joined.match(/(jaja+|JAJA+|xd|XD|jsjs+|JSJS+|ksks+)/g) || [];
-
   const shortSamples = messages.filter(m => m.length <= 120).slice(-25);
-
   return {
     emojis: [...new Set(emojis)].slice(-10),
     laughs: [...new Set(laughs)].slice(-8),
@@ -70,13 +69,9 @@ Eres un generador de respuestas estilo chat de WhatsApp.
 Debes responder como si imitaras el estilo de escritura de una persona del grupo, usando sus frases, emojis, risas y tono.
 
 IMPORTANTE:
-- No digas que eres una IA.
-- No expliques nada.
-- No uses comillas.
-- No digas "simulación".
+- No digas que eres una IA ni expliques nada.
 - Responde corto, natural y como chat real.
-- Puedes usar humor, burla o tono picante si encaja con los ejemplos.
-- No repitas exactamente una frase antigua salvo que tenga sentido.
+- Puedes usar humor o tono picante si encaja con los ejemplos.
 - Responde coherentemente a la pregunta.
 
 Persona a imitar: ${targetName}
@@ -115,7 +110,6 @@ Genera SOLO la respuesta.
 
   const data = await res.json();
   if (!res.ok) throw new Error(data?.error?.message || 'Error llamando Groq');
-
   return cleanText(data.choices?.[0]?.message?.content || '');
 }
 
@@ -132,21 +126,19 @@ module.exports = {
   desc: 'Clona la forma de hablar de un usuario',
 
   execute: async ({ sock, msg, remoteJid, args, reply }) => {
-    const targetRaw = getTarget(msg, args);
+    const target = getTarget(msg, args);
 
-    if (!targetRaw) {
+    if (!target) {
       return reply('❌ Uso:\n\n.clon @usuario pregunta\n\nEjemplo:\n.clon @usuario qué opinas de mí?');
     }
 
-    // Purificación del ID para mención real y acceso a memoria
-    const pureNumber = cleanNumber(targetRaw);
-    const targetJid = `${pureNumber}@s.whatsapp.net`;
-    const targetName = `@${pureNumber}`;
-
+    // SEPARACIÓN ESTRICTA: Extraer número limpio solo para el diseño del texto
+    const pureNumber = cleanNumber(target);
+    const targetName = `@${pureNumber}`; 
     const question = removeTargetFromQuestion(args) || 'responde algo como tú responderías';
 
     const memory = loadMemory();
-    const messages = memory[targetJid]?.messages || [];
+    const messages = memory[target]?.messages || [];
     const stats = getStyleStats(messages);
 
     let answer;
@@ -165,31 +157,28 @@ module.exports = {
 
     await sock.sendMessage(remoteJid, {
       text: `🎭 *Clon de ${targetName}:*\n\n${answer}`,
-      mentions: [targetJid]
+      mentions: [target] // Mención real usando el ID completo
     }, { quoted: msg });
   },
 
-  // Escucha pasiva para aprender cómo hablan
   onMessage: async ({ body, sender }) => {
     if (!body || !sender) return;
 
     const text = cleanText(body);
     if (!text || text.startsWith('.') || text.length < 3 || text.length > 220 || /https?:\/\//i.test(text)) return;
 
-    // Purificar el remitente para guardarlo limpiamente en la base de datos
-    const pureNumber = cleanNumber(sender);
-    const senderJid = `${pureNumber}@s.whatsapp.net`;
-
+    // Almacena usando el JID completo (con el símbolo de + si lo tuviera)
+    const target = cleanJid(sender);
     const memory = loadMemory();
 
-    if (!memory[senderJid]) {
-      memory[senderJid] = { messages: [] };
+    if (!memory[target]) {
+      memory[target] = { messages: [] };
     }
 
-    memory[senderJid].messages.push(text);
+    memory[target].messages.push(text);
 
-    if (memory[senderJid].messages.length > MAX_MESSAGES) {
-      memory[senderJid].messages = memory[senderJid].messages.slice(-MAX_MESSAGES);
+    if (memory[target].messages.length > MAX_MESSAGES) {
+      memory[target].messages = memory[target].messages.slice(-MAX_MESSAGES);
     }
 
     saveMemory(memory);
