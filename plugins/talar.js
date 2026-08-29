@@ -63,7 +63,8 @@ module.exports = {
             resTxt = `${pick(talaBasura)}\n💸 No ganas nada de XP.`;
         } else { 
             let castigo = randXP(500, 1000);
-            userData.xp = Math.max(0, (userData.xp || 0) - castigo); // Resta segura
+            // 🔥 Resta matemática segura de XP
+            userData.xp = Math.max(0, (userData.xp || 0) - castigo);
             resTxt = `${pick(talaCastigo)}\n❌ Perdiste *${castigo} XP*.`;
         }
 
@@ -73,10 +74,20 @@ module.exports = {
             resTxt += `\n✨ ¡Tu mascota *${userData.pet.name}* te ayudó y encontró *+${bono} XP* extra!`;
         }
 
-        if (premio > 0) userData.xp = (userData.xp || 0) + premio;
+        if (premio > 0) {
+            userData.xp = (userData.xp || 0) + premio;
+        }
 
-        // Guardado seguro
-        if (userData.save) await userData.save(); else await db.setUser(sender, userData);
+        // Recalcular nivel de forma segura
+        userData.level = Math.floor((userData.xp || 0) / 10000) + 1;
+        if (userData.level < 1) userData.level = 1;
+
+        // Guardado seguro en base de datos
+        if (userData.save) {
+            await userData.save();
+        } else {
+            await db.setUser(sender, userData);
+        }
 
         const fMsg = `*RESULTADO DE LA TALA* 🪓\n\n${resTxt}\n👤 Leñador: @${cleanNumber(sender)}`;
         try { await sock.sendMessage(remoteJid, { text: fMsg, edit: msgSent.key, mentions: [sender] }); } 
