@@ -34,23 +34,23 @@ module.exports = {
   category: 'economía',
   desc: 'Compra ítems o usa los que ya tienes',
 
-  execute: async ({ sock, msg, remoteJid, sender, args, commandName, db, reply }) => {
+  execute: async ({ sock, msg, remoteJid, sender, args, commandName, db, userData, reply }) => {
     
-    // 🔥 PASO 1: LEER DIRECTAMENTE DESDE LA BASE DE DATOS
-    const user = await db.getUser(sender);
-    if (!user.inventory) user.inventory = {};
+    if (!userData.inventory) userData.inventory = {};
 
     if (commandName === 'usar') {
       const itemKey = (args[0] || '').toLowerCase();
 
       if (itemKey === 'llave') {
-        if ((user.inventory.keys || 0) <= 0) return reply('❌ No tienes llaves en tu inventario.');
+        if ((userData.inventory.keys || 0) <= 0) return reply('❌ No tienes llaves en tu inventario.');
         
         const jailDB = loadJail();
         if (!jailDB.jailed[sender]) return reply('✅ No estás arrestado.');
         
-        user.inventory.keys -= 1;
-        await db.setUser(sender, user); // 🔥 GUARDAR
+        // 🔥 GUARDADO CORRECTO DEL INVENTARIO MONGODB
+        userData.inventory.keys -= 1;
+        if (userData.markModified) userData.markModified('inventory');
+        if (userData.save) await userData.save();
         
         delete jailDB.jailed[sender];
         saveJail(jailDB);
@@ -58,13 +58,16 @@ module.exports = {
       }
 
       if (itemKey === 'caja') {
-        if ((user.inventory.cajaUses || 0) <= 0) return reply('❌ No tienes cajas sorpresa.');
+        if ((userData.inventory.cajaUses || 0) <= 0) return reply('❌ No tienes cajas sorpresa.');
         
-        user.inventory.cajaUses -= 1;
+        // 🔥 GUARDADO CORRECTO DEL INVENTARIO MONGODB
+        userData.inventory.cajaUses -= 1;
+        if (userData.markModified) userData.markModified('inventory');
+
         const ganar = Math.floor(Math.random() * 2000) + 500;
-        user.xp = (user.xp || 0) + ganar;
+        userData.xp = (userData.xp || 0) + ganar;
         
-        await db.setUser(sender, user); // 🔥 GUARDAR
+        if (userData.save) await userData.save();
         
         return reply(`📦 Abriste la caja y ganaste *+${ganar} XP*`);
       }
@@ -76,7 +79,7 @@ module.exports = {
       for (const [id, item] of Object.entries(ITEMS)) {
         txt += `▪️ *${id}* (${item.price} XP)\n📝 _${item.desc}_\n\n`;
       }
-      txt += `💳 *Tu saldo:* ${user.xp || 0} XP\n📦 *Comprar:* .comprar [item] [cant]\n🔓 *Usar:* .usar [llave/caja]`;
+      txt += `💳 *Tu saldo:* ${userData.xp || 0} XP\n📦 *Comprar:* .comprar [item] [cant]\n🔓 *Usar:* .usar [llave/caja]`;
       return reply(txt);
     }
 
@@ -87,25 +90,28 @@ module.exports = {
     if (!item) return reply('❌ Producto no válido. Usa *.tienda* para ver el catálogo.');
 
     const total = item.price * amount;
-    if ((user.xp || 0) < total) {
-      return reply(`❌ No tienes suficiente XP.\nCuesta *${total} XP* pero tienes *${user.xp || 0} XP*.`);
+    if ((userData.xp || 0) < total) {
+      return reply(`❌ No tienes suficiente XP.\nCuesta *${total} XP* pero tienes *${userData.xp || 0} XP*.`);
     }
 
     // Descontar pago
-    user.xp -= total;
+    userData.xp -= total;
 
     if (itemName === 'vip') {
       const now = Date.now();
-      const currentPremium = Number(user.premiumUntil || 0);
+      const currentPremium = Number(userData.premiumUntil || 0);
       const baseTime = currentPremium > now ? currentPremium : now;
-      user.premiumUntil = baseTime + (amount * 24 * 60 * 60 * 1000);
+      userData.premiumUntil = baseTime + (amount * 24 * 60 * 60 * 1000);
       
-      await db.setUser(sender, user); // 🔥 GUARDAR
+      if (userData.save) await userData.save();
       return reply(`✅ Has adquirido *${amount} Día(s) VIP* por ${total} XP.`);
     } else {
-      user.inventory[item.key] = (user.inventory[item.key] || 0) + amount;
+      userData.inventory[item.key] = (userData.inventory[item.key] || 0) + amount;
       
-      await db.setUser(sender, user); // 🔥 GUARDAR
+      // 🔥 GUARDAR INVENTARIO 
+      if (userData.markModified) userData.markModified('inventory');
+      if (userData.save) await userData.save();
+      
       return reply(`✅ Compraste ${amount}x *${item.name}* por ${total} XP.\n🎒 Revisa tu mochila usando *.inventario*`);
     }
   }
