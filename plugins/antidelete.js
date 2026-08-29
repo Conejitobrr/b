@@ -2,13 +2,13 @@
 
 const { downloadContentFromMessage } = require('@whiskeysockets/baileys');
 
-// 🗄️ CACHÉ EN MEMORIA RAM PARA MENSAJES (Rápido y volátil)
+// 🗄️ CACHÉ EN MEMORIA RAM
 const deletedCache = new Map();
 const handledDeletes = new Set();
 
 const MAX_CACHE = 1000;
 const CACHE_TIME = 2 * 60 * 60 * 1000; // 2 horas
-const MAX_MEDIA_BUFFER = 60 * 1024 * 1024; // 60 MB máximo para evitar crasheos
+const MAX_MEDIA_BUFFER = 60 * 1024 * 1024; // 60 MB
 
 // 🔥 FÓRMULA INFALIBLE PARA MENCIONES REALES
 function cleanJid(jid = '') { return String(jid).split(':')[0]; }
@@ -18,20 +18,28 @@ function formatMention(jid) { return `${cleanNumber(jid)}@s.whatsapp.net`; }
 function getMsgKey(remoteJid, id) { return `${remoteJid}:${id}`; }
 function getHandledKey(remoteJid, id) { return `${remoteJid}:${id}:handled`; }
 
+// 🧠 DESEMPAQUETADOR ABSOLUTO (Rompe los mensajes temporales y de única visualización)
+function unwrapMessage(message = {}) {
+  if (!message) return {};
+  if (message.ephemeralMessage?.message) return unwrapMessage(message.ephemeralMessage.message);
+  if (message.viewOnceMessage?.message) return unwrapMessage(message.viewOnceMessage.message);
+  if (message.viewOnceMessageV2?.message) return unwrapMessage(message.viewOnceMessageV2.message);
+  if (message.viewOnceMessageV2Extension?.message) return unwrapMessage(message.viewOnceMessageV2Extension.message);
+  if (message.documentWithCaptionMessage?.message) return unwrapMessage(message.documentWithCaptionMessage.message);
+  return message;
+}
+
+// 👁️ DETECTOR DE BORRADO (Ahora sí lee a través de las capas invisibles)
 function isDeleteMessage(msg) {
-  const protocol = msg.message?.protocolMessage;
+  const message = unwrapMessage(msg.message);
+  const protocol = message?.protocolMessage;
   if (!protocol) return false;
   return protocol.type === 0 || protocol.type === 'REVOKE' || protocol.key?.id;
 }
 
 function getDeletedKey(msg) {
-  return msg.message?.protocolMessage?.key || null;
-}
-
-function unwrapMessage(message = {}) {
-  if (message.ephemeralMessage?.message) return unwrapMessage(message.ephemeralMessage.message);
-  if (message.documentWithCaptionMessage?.message) return unwrapMessage(message.documentWithCaptionMessage.message);
-  return message;
+  const message = unwrapMessage(msg.message);
+  return message?.protocolMessage?.key || null;
 }
 
 function getContextInfo(message = {}) {
@@ -117,21 +125,21 @@ module.exports = {
   category: 'administración',
   desc: 'Recupera mensajes eliminados',
 
-  // 1. ESCUCHA ACTIVA (Atrapa todos los mensajes y detecta si borran uno)
+  // 1. ESCUCHA ACTIVA (Atrapa todos los mensajes)
   onMessage: async (ctx) => {
     const { sock, msg, remoteJid, sender, pushName, fromGroup, groupData } = ctx;
 
     try {
       cleanOldCache();
 
-      // Si NO es un borrado, guarda el mensaje en el historial y termina
+      // Si NO es un borrado, guarda el mensaje en la memoria RAM y termina
       if (!isDeleteMessage(msg)) {
         await saveMessage(msg, remoteJid, sender, pushName);
         return;
       }
 
-      // Verifica si el antidelete está activado en el grupo
-      const isEnabled = fromGroup ? (groupData && groupData.antidelete === true) : true;
+      // 🔥 Por defecto está activado (true) a menos que lo hayan apagado explícitamente (false)
+      const isEnabled = fromGroup ? (groupData?.antidelete !== false) : true;
       if (!isEnabled) return;
 
       const deletedKey = getDeletedKey(msg);
@@ -147,13 +155,12 @@ module.exports = {
       const cacheKey = getMsgKey(remoteJid, deletedId);
       const saved = deletedCache.get(cacheKey);
 
-      if (!saved) return; // Si era muy viejo o no se guardó
+      if (!saved) return; // Si era muy viejo o se borró antes de encender el bot
 
       // 🔥 Separación de IDs para la mención azul
       const targetJid = formatMention(saved.sender);
       const pureNumber = cleanNumber(saved.sender);
       
-      // Mantiene también las menciones que la persona hizo originalmente
       const originalMentions = (saved.mentions || []).map(formatMention);
       const finalMentions = [...new Set([targetJid, ...originalMentions])];
 
@@ -171,7 +178,7 @@ module.exports = {
         return;
       }
 
-      // CASO B: Mensaje con multimedia
+      // CASO B: Mensaje multimedia
       let buffer = saved.mediaBuffer;
       if (!buffer || !buffer.length) {
         try { buffer = await downloadMediaBuffer(media); } catch {}
@@ -207,14 +214,15 @@ module.exports = {
     }
   },
 
-  // 2. COMANDO DE CONTROL (Encender / Apagar)
+  // 2. COMANDO DE CONTROL
   execute: async ({ remoteJid, args, fromGroup, isAdmin, isOwner, db, groupData, reply }) => {
     try {
       if (!fromGroup) return reply('✅ En chats privados, *antidelete* siempre está activo.');
       if (!isOwner && !isAdmin) return reply('❌ Solo los administradores pueden usar este comando.');
 
       const option = (args[0] || '').toLowerCase();
-      const currentStatus = groupData?.antidelete === true;
+      // Verificamos estado (Por defecto asume true)
+      const currentStatus = groupData?.antidelete !== false;
 
       if (!option) {
         return reply(`🕵️ *ANTIDELETE*\n\nEstado actual: *${currentStatus ? 'Activado ✅' : 'Desactivado ❌'}*\n\nUso:\n.antidelete on\n.antidelete off`);
@@ -226,13 +234,11 @@ module.exports = {
 
       const newState = option === 'on';
 
-      // Actualizar en base de datos (Compatible con tu bot moderno)
       if (db && typeof db.updateGroup === 'function') {
         await db.updateGroup(remoteJid, { antidelete: newState });
       } else if (db && typeof db.setGroupSetting === 'function') {
         await db.setGroupSetting(remoteJid, 'antidelete', newState);
       } else {
-        // Fallback en memoria por si las funciones de DB tienen otro nombre
         if (groupData) groupData.antidelete = newState;
       }
 
