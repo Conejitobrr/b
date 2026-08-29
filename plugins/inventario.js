@@ -1,7 +1,20 @@
 'use strict';
 
+const fs = require('fs');
+const path = require('path');
+const INV_PATH = path.join(process.cwd(), 'lib', 'inventario.json');
+
+function getInv() { try { return JSON.parse(fs.readFileSync(INV_PATH, 'utf8')); } catch { return {}; } }
 function cleanJid(jid = '') { return String(jid).split(':')[0]; }
 function cleanNumber(jid = '') { return cleanJid(jid).split('@')[0].replace(/\D/g, ''); }
+
+function getTarget(msg, sender) {
+  const quoted = msg.message?.extendedTextMessage?.contextInfo?.participant;
+  if (quoted) return cleanJid(quoted);
+  const mentioned = msg.message?.extendedTextMessage?.contextInfo?.mentionedJid?.[0];
+  if (mentioned) return cleanJid(mentioned);
+  return cleanJid(sender);
+}
 
 const DICCIONARIO_ITEMS = {
   licencia_mascota: { nombre: '🐶 Licencia de Mascota', uso: 'Usa *.adoptar [Nombre]* para obtener tu mascota.' },
@@ -23,25 +36,25 @@ module.exports = {
   category: 'economía',
   desc: 'Muestra tu mochila con los ítems que has comprado',
   
-  execute: async ({ sock, msg, remoteJid, sender, userData, reply }) => {
+  execute: async ({ sock, msg, remoteJid, sender, reply }) => {
     try {
-      const number = cleanNumber(sender);
-      let texto = `🎒 *INVENTARIO DE @${number}*\n\n`;
+      const target = getTarget(msg, sender);
+      const dbInv = getInv();
+      const myInv = dbInv[target] || {};
+
+      let texto = `🎒 *INVENTARIO DE @${cleanNumber(target)}*\n\n`;
       let count = 0;
 
       for (const [key, info] of Object.entries(DICCIONARIO_ITEMS)) {
-        const cantidad = Number(userData[key] || 0);
+        const cantidad = Number(myInv[key] || 0);
         if (cantidad > 0) {
           texto += `*\u27A4 ${cantidad}x* ${info.nombre}\n💡 _${info.uso}_\n\n`;
           count++;
         }
       }
 
-      if (count === 0) {
-        texto += `_La mochila está vacía. Visita la *.tienda* para adquirir ítems._`;
-      }
-
-      return sock.sendMessage(remoteJid, { text: texto.trim(), mentions: [sender] }, { quoted: msg });
+      if (count === 0) texto += `_La mochila está vacía. Visita la *.tienda* para adquirir ítems._`;
+      return sock.sendMessage(remoteJid, { text: texto.trim(), mentions: [target] }, { quoted: msg });
     } catch (err) {
       console.log('❌ Error cargando inventario:', err);
       return reply('❌ Ocurrió un error al intentar abrir la mochila.');
