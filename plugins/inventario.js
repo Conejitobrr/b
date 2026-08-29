@@ -27,7 +27,7 @@ const DICCIONARIO_ITEMS = {
   arma_pro: { nombre: '🏹 Arco de Cacería', uso: 'Pasivo. Bono permanente en *.cazar*.' },
   hacha_pro: { nombre: '🪓 Hacha de Leñador', uso: 'Pasivo. Bono permanente en *.talar*.' },
   pico_pro: { nombre: '⛏️ Pico de Diamante', uso: 'Pasivo. Bono permanente en *.minar*.' },
-  anillo: { nombre: '💍 Anillo de Bodas', uso: 'Sirve para proponer matrimonio.' }
+  anillo: { nombre: '💍 Anillo de Bodas', uso: 'Sirve para proponer matrimonio con .casarse' }
 };
 
 module.exports = {
@@ -45,6 +45,7 @@ module.exports = {
       let texto = `🎒 *INVENTARIO DE @${cleanNumber(target)}*\n\n`;
       let count = 0;
 
+      // Imprime los ítems comprados
       for (const [key, info] of Object.entries(DICCIONARIO_ITEMS)) {
         const cantidad = Number(myInv[key] || 0);
         if (cantidad > 0) {
@@ -53,7 +54,18 @@ module.exports = {
         }
       }
 
-      if (count === 0) texto += `_La mochila está vacía. Visita la *.tienda* para adquirir ítems._`;
+      if (count === 0) {
+        texto += `_La mochila está vacía. Visita la *.tienda* para adquirir ítems._\n`;
+      }
+
+      // 🔥 SECCIÓN ESPECIAL: GUÍA DE MASCOTA VIVA
+      if (myInv.pet) {
+        texto += `\n🐾 *TU MASCOTA ACTUAL*\n`;
+        texto += `*\u27A4 Nombre:* ${myInv.pet.name} (${myInv.pet.type})\n`;
+        texto += `*\u27A4 Nivel:* ${myInv.pet.level}\n`;
+        texto += `💡 _Comandos:_ *.mascota, .alimentar, .jugar, .entrenar, .pasear, .dormir, .curar, .pelear @user*\n`;
+      }
+
       return sock.sendMessage(remoteJid, { text: texto.trim(), mentions: [target] }, { quoted: msg });
     } catch (err) {
       console.log('❌ Error cargando inventario:', err);
