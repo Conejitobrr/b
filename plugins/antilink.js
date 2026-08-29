@@ -3,31 +3,39 @@
 const fs = require('fs');
 const path = require('path');
 
-// 🔥 RUTA BLINDADA PARA WARNS
+// 🔥 RUTA BLINDADA PARA WARNS (Corregido el error de sintaxis)
 const WARNS_PATH = path.join(process.cwd(), 'lib', 'warns.json');
 if (!fs.existsSync(path.dirname(WARNS_PATH))) fs.mkdirSync(path.dirname(WARNS_PATH), { recursive: true });
-if (!fs.existsSync(WARNS_PATH)) fs.writeFileSync(WARNS_PATH, '{}'); // Lo crea automáticamente
+if (!fs.existsSync(WARNS_PATH)) fs.writeFileSync(WARNS_PATH, '{}');
 
 function getWarns() { try { return JSON.parse(fs.readFileSync(WARNS_PATH, 'utf8')); } catch { return {}; } }
 function saveWarns(data) { fs.writeFileSync(WARNS_PATH, JSON.stringify(data, null, 2)); }
-
-// Estandariza los números para evitar errores de lectura
 function cleanJid(jid = '') { return String(jid).split(':')[0] + '@s.whatsapp.net'; }
 
 module.exports = {
   name: 'antilink',
   category: 'moderación',
-  desc: 'Elimina enlaces y expulsa a los usuarios al llegar a 3 advertencias',
-  
-  onMessage: async ({ sock, msg, remoteJid, body, sender, isOwner }) => {
-    // Solo actuar en grupos y si hay texto
-    if (!remoteJid.endsWith('@g.us') || !body) return;
+  desc: 'Elimina enlaces de WhatsApp y advierte a los usuarios',
 
-    // Regex para detectar enlaces de grupos de WhatsApp
+  onMessage: async ({ sock, msg, remoteJid, body, sender, isOwner, db }) => {
+    if (!remoteJid || !remoteJid.endsWith('@g.us') || !body) return;
+
+    // 1. LEER CONFIGURACIÓN DEL GRUPO (.enable antilink)
+    let groupData = {};
+    try {
+      if (db && typeof db.getGroup === 'function') {
+        groupData = await db.getGroup(remoteJid) || {};
+      }
+    } catch (e) {}
+
+    // 🔥 Si el antilink NO está activado en este grupo, el bot ignora el mensaje
+    if (!groupData.antilink) return;
+
+    // 2. DETECTAR EL ENLACE
     const linkRegex = /chat\.whatsapp\.com\/[0-9A-Za-z]{10,}/i;
     if (!linkRegex.test(body)) return;
 
-    if (isOwner) return; // El Owner es inmune y puede mandar links
+    if (isOwner) return; // El Owner es inmune
 
     const senderJid = cleanJid(sender);
     const botJid = cleanJid(sock.user.id);
@@ -35,37 +43,36 @@ module.exports = {
     let isBotAdmin = false;
     let isAdmin = false;
 
-    // Verificamos quién es admin de forma nativa
     try {
       const groupMetadata = await sock.groupMetadata(remoteJid);
       const participants = groupMetadata.participants || [];
       isBotAdmin = participants.some(p => p.id === botJid && (p.admin === 'admin' || p.admin === 'superadmin'));
       isAdmin = participants.some(p => p.id === senderJid && (p.admin === 'admin' || p.admin === 'superadmin'));
     } catch (e) {
-      console.log('Error obteniendo metadata del grupo en antilink', e);
+      console.log('Error al verificar administradores:', e);
     }
 
-    if (isAdmin) return; // Los admins son inmunes
-    if (!isBotAdmin) return; // Si el bot no es admin, aborta silenciosamente
+    if (isAdmin) return; // Los admins del grupo pueden enviar links
+    if (!isBotAdmin) return; // Si el bot no es admin, aborta para evitar errores
 
-    // 1. ELIMINAR EL MENSAJE
+    // 3. ELIMINAR EL MENSAJE
     try {
       await sock.sendMessage(remoteJid, { delete: msg.key });
     } catch (err) {
-      console.log('Error eliminando link:', err);
+      console.log('No se pudo eliminar el enlace:', err);
     }
 
-    // 2. SISTEMA DE WARNS INDESTRUCTIBLE
+    // 4. GESTIÓN DE WARNS (ARCHIVO BLINDADO LOCAL)
     const dbWarns = getWarns();
-    if (!dbWarns[remoteJid]) dbWarns[remoteJid] = {}; // Crea el grupo en el archivo si no existe
-    
+    if (!dbWarns[remoteJid]) dbWarns[remoteJid] = {};
+
     const currentWarns = (dbWarns[remoteJid][senderJid] || 0) + 1;
     dbWarns[remoteJid][senderJid] = currentWarns;
 
-    // 3. EJECUCIÓN DE CASTIGOS
+    // 5. EXPULSIÓN O ADVERTENCIA
     if (currentWarns >= 3) {
-      dbWarns[remoteJid][senderJid] = 0; // Reinicia el contador
-      saveWarns(dbWarns); // Guarda el reinicio
+      dbWarns[remoteJid][senderJid] = 0;
+      saveWarns(dbWarns);
 
       await sock.sendMessage(remoteJid, { 
         text: `🚫 *LÍMITE ALCANZADO*\n\n@${senderJid.split('@')[0]} ha sido expulsado por enviar enlaces de otros grupos (3/3 advertencias).`, 
@@ -74,11 +81,9 @@ module.exports = {
 
       try {
         await sock.groupParticipantsUpdate(remoteJid, [senderJid], 'remove');
-      } catch (err) {
-        console.log('Error al expulsar:', err);
-      }
+      } catch (err) {}
     } else {
-      saveWarns(dbWarns); // Guarda el nuevo strike
+      saveWarns(dbWarns);
 
       await sock.sendMessage(remoteJid, { 
         text: `⚠️ *ANTILINK DETECTADO*\n\n@${senderJid.split('@')[0]}, no se permiten enlaces de otros grupos aquí.\n🚨 Warns: *${currentWarns}/3*`, 
