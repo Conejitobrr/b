@@ -1,21 +1,20 @@
 'use strict';
 
-// 🔥 LA FÓRMULA INFALIBLE PARA MENCIONES REALES
-function getTargetInfo(msg) {
+// 🔥 FUNCIONES EXACTAS DEL PERFIL.JS (El secreto de la mención azul)
+function cleanJid(jid = '') { return String(jid).split(':')[0]; }
+function cleanNumber(jid = '') { return cleanJid(jid).split('@')[0].replace(/\D/g, ''); }
+
+function getTarget(msg) {
   const quoted = msg.message?.extendedTextMessage?.contextInfo?.participant;
   const mentioned = msg.message?.extendedTextMessage?.contextInfo?.mentionedJid?.[0];
   
-  const rawJid = quoted || mentioned;
-  if (!rawJid) return null;
-
-  // Extraemos únicamente los números destruyendo signos, espacios o letras
-  const pureNumber = String(rawJid).split('@')[0].replace(/\D/g, '');
-  const target = `${pureNumber}@s.whatsapp.net`;
+  if (quoted) return cleanJid(quoted);
+  if (mentioned) return cleanJid(mentioned);
   
-  return { target, pureNumber };
+  return null;
 }
 
-// 🧠 ENGAÑO DE SISTEMA: Genera un ID realista para que WhatsApp renderice el nombre
+// Generador de ID realista para que WhatsApp no bloquee el cuadro
 function generateFakeId() {
   return 'BAE5' + Math.floor(Math.random() * 1000000000000000).toString(16).toUpperCase();
 }
@@ -28,14 +27,15 @@ module.exports = {
 
   execute: async ({ sock, msg, remoteJid, args, reply }) => {
     try {
-      const targetInfo = getTargetInfo(msg);
+      const target = getTarget(msg);
       const fullText = args.join(' ');
 
-      if (!targetInfo || !fullText.includes('|')) {
+      if (!target || !fullText.includes('|')) {
         return reply('❌ Uso correcto:\n\n.fake @usuario texto falso | tu respuesta\n\n📌 Ejemplo:\n.fake @usuario Hola | Adiós');
       }
 
-      const { target } = targetInfo;
+      // 1. Extraemos el número puro para construir la mención visual
+      const pureNumber = cleanNumber(target);
 
       let [fakeText, replyText] = fullText.split('|').map(v => v.trim());
 
@@ -43,26 +43,34 @@ module.exports = {
         return reply('❌ Formato incorrecto. Recuerda usar el separador "|".');
       }
 
-      // Limpia la etiqueta @mención del texto falso para que no salga escrito en la burbuja
+      // 2. Limpiamos cualquier arroba rota que hayas escrito en el comando
       fakeText = fakeText.replace(/@\S+/g, '').trim();
 
-      // 🧠 CREACIÓN DEL MENSAJE FALSO 100% REALISTA
+      // 🔥 TRUCO MAESTRO: Forzamos la mención azul DENTRO del cuadro citado
+      const finalFakeText = `@${pureNumber} ${fakeText}`;
+
+      // 🧠 CREACIÓN DEL MENSAJE FALSO (extendedTextMessage soporta menciones internas)
       const fakeQuoted = {
         key: {
-          fromMe: false,        
-          participant: target,   // 🔥 Clave para el color del Nick
-          remoteJid: remoteJid,  // 🔥 Para que el mensaje nazca en el chat actual
-          id: generateFakeId()   // 🔥 CRÍTICO: Sin esto, WhatsApp Web/Móvil deja el nombre en blanco
+          fromMe: false,
+          participant: target,
+          remoteJid: remoteJid,
+          id: generateFakeId()
         },
         message: {
-          conversation: fakeText // El texto que aparecerá dentro del cuadrito
+          extendedTextMessage: {
+            text: finalFakeText, // Aquí va el texto con el @Nombre
+            contextInfo: {
+              mentionedJid: [target] // Esto obliga a WhatsApp a pintarlo de azul en la cita
+            }
+          }
         }
       };
 
       // 📩 ENVIAR LA RESPUESTA
       await sock.sendMessage(remoteJid, {
         text: replyText,
-        mentions: [target] // Mención real azul en el texto de afuera
+        mentions: [target] // Habilita la mención también en tu respuesta
       }, { quoted: fakeQuoted });
 
     } catch (e) {
