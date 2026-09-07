@@ -49,122 +49,72 @@ function createExif(packName = STICKER_PACK_NAME, author = STICKER_AUTHOR) {
   return Buffer.concat([exifHeader, jsonBuffer]);
 }
 
-// 🎨 COLORES Y FORMATOS PERMITIDOS
-const COLORS = { verde: '0x00FF00', blanco: '0xFFFFFF', negro: '0x000000', azul: '0x0000FF', rojo: '0xFF0000' };
-const FORMATS = ['sticker', 'gif', 'video', 'foto'];
+// 🎨 COLORES SOPORTADOS PARA BORRAR (Formato Hexadecimal)
+const COLORS = {
+  verde: '0x00FF00',
+  blanco: '0xFFFFFF',
+  negro: '0x000000',
+  azul: '0x0000FF',
+  rojo: '0xFF0000'
+};
 
 module.exports = {
   name: 'sbg',
   aliases: ['schroma', 'chroma', 'sinfondo'],
   category: 'multimedia',
-  desc: 'Borra el fondo. Formatos: sticker, gif, video, foto',
+  desc: 'Crea un sticker borrando un color de fondo (Chroma Key)',
 
   execute: async ({ sock, msg, remoteJid, args, reply }) => {
-    let input = null, output = null, exif = null, finalOutput = null, tempGif = null;
+    let input = null, output = null, exif = null, finalOutput = null;
 
     try {
-      let format = 'sticker'; // Por defecto es sticker
-      let colorName = 'verde'; // Por defecto verde
-
-      // 🔍 Filtrar opciones que escribió el usuario
-      for (const arg of args) {
-        const a = arg.toLowerCase();
-        if (FORMATS.includes(a)) format = a;
-        else if (COLORS[a]) colorName = a;
-      }
-
+      const colorName = (args[0] || 'verde').toLowerCase();
       const hexColor = COLORS[colorName];
 
       if (!hexColor) {
-        return reply(`❌ Color no soportado. Usa:\n*${Object.keys(COLORS).join(', ')}*`);
+        return reply(`❌ Color no soportado. Usa uno de estos:\n*${Object.keys(COLORS).join(', ')}*\n\n📌 Ejemplo: *.sbg blanco*`);
       }
 
       const message = getQuotedMessage(msg) || msg.message;
       const info = getMediaInfo(message);
 
       if (!info || (!info.media.url && !info.media.mediaKey)) {
-        return reply(`❌ Envía o responde a un archivo.\n\n📌 *Opciones:*\nFormatos: sticker, gif, video, foto\nColores: verde, blanco, negro, azul, rojo\n\n👉 Ejemplo: *.sbg gif blanco*`);
+        return reply('❌ Envía o responde a una imagen/video con fondo sólido.\n\n📌 Ejemplo: *.sbg verde*');
       }
 
       const buffer = await downloadMedia(info.media, info.downloadType);
+      
       const id = `${Date.now()}_${Math.floor(Math.random() * 9999)}`;
       const ext = info.isImage ? 'jpg' : 'mp4';
-
+      
       input = path.join(TEMP_DIR, `sbg_in_${id}.${ext}`);
+      output = path.join(TEMP_DIR, `sbg_out_${id}.webp`);
+      exif = path.join(TEMP_DIR, `sbg_exif_${id}.exif`);
+      finalOutput = path.join(TEMP_DIR, `sbg_final_${id}.webp`);
+
       fs.writeFileSync(input, buffer);
 
-      await sock.sendMessage(remoteJid, { text: `⏳ Procesando *${format}* sin fondo *${colorName}*...` }, { quoted: msg });
-
-      // Filtro mágico que transparenta el color elegido
+      // 🔥 MAGIA FFMPEG: format=rgba + colorkey para transparentar el color seleccionado
       const chromaFilter = `format=rgba,colorkey=${hexColor}:0.3:0.1`;
+      const baseScale = 'scale=512:512:force_original_aspect_ratio=decrease:flags=lanczos,pad=512:512:(ow-iw)/2:(oh-ih)/2:color=0x00000000';
 
-      if (format === 'foto') {
-        output = path.join(TEMP_DIR, `sbg_out_${id}.png`);
-        await execFileAsync('ffmpeg', ['-y', '-i', input, '-vf', chromaFilter, '-c:v', 'png', output]);
-        
-        await sock.sendMessage(remoteJid, {
-          document: fs.readFileSync(output), // Como documento para que WhatsApp no le ponga fondo negro
-          mimetype: 'image/png',
-          fileName: 'SinFondo.png',
-          caption: '🖼️ Imagen sin fondo (Transparente)'
-        }, { quoted: msg });
+      const ffmpegArgs = info.isImage
+        ? ['-y', '-i', input, '-vf', `${chromaFilter},${baseScale}`, '-vcodec', 'libwebp', '-q:v', '60', '-preset', 'picture', '-loop', '0', output]
+        : ['-y', '-i', input, '-t', '5', '-vf', `${chromaFilter},fps=10,${baseScale}`, '-vcodec', 'libwebp', '-fs', '700k', '-loop', '0', '-an', output];
 
-      } else if (format === 'video') {
-        output = path.join(TEMP_DIR, `sbg_out_${id}.mp4`);
-        await execFileAsync('ffmpeg', ['-y', '-i', input, '-vf', chromaFilter, '-c:v', 'libx264', '-pix_fmt', 'yuv420p', output]);
-        
-        await sock.sendMessage(remoteJid, {
-          video: fs.readFileSync(output),
-          mimetype: 'video/mp4',
-          caption: '🎥 Video procesado (WhatsApp pone fondo negro a los videos transparentes)'
-        }, { quoted: msg });
+      await sock.sendMessage(remoteJid, { text: `⏳ Borrando fondo *${colorName}*, un momento...` }, { quoted: msg });
 
-      } else if (format === 'gif') {
-        output = path.join(TEMP_DIR, `sbg_out_${id}.gif`);
-        // Paleta de colores para que el GIF sea de altísima calidad y sin fondo
-        const filterGif = `${chromaFilter},fps=12,scale=512:-1:flags=lanczos,split[s0][s1];[s0]palettegen=reserve_transparent=on:transparency_color=ffffff[p];[s1][p]paletteuse`;
-        await execFileAsync('ffmpeg', ['-y', '-i', input, '-t', '5', '-vf', filterGif, output]);
-        
-        await sock.sendMessage(remoteJid, {
-          document: fs.readFileSync(output), // Como documento para que mantenga transparencia
-          mimetype: 'image/gif',
-          fileName: 'Animacion.gif',
-          caption: '🎞️ GIF 100% Transparente'
-        }, { quoted: msg });
+      await execFileAsync('ffmpeg', ffmpegArgs);
+      fs.writeFileSync(exif, createExif());
+      await execFileAsync('webpmux', ['-set', 'exif', exif, output, '-o', finalOutput]);
 
-      } else { // Si pidió formato 'sticker' (o no puso formato y es por defecto)
-        output = path.join(TEMP_DIR, `sbg_out_${id}.webp`);
-        exif = path.join(TEMP_DIR, `sbg_exif_${id}.exif`);
-        finalOutput = path.join(TEMP_DIR, `sbg_final_${id}.webp`);
-        const baseScale = 'scale=512:512:force_original_aspect_ratio=decrease:flags=lanczos,pad=512:512:(ow-iw)/2:(oh-ih)/2:color=0x00000000';
-
-        if (info.isImage) {
-          await execFileAsync('ffmpeg', ['-y', '-i', input, '-vf', `${chromaFilter},${baseScale}`, '-vcodec', 'libwebp', '-q:v', '60', '-preset', 'picture', '-loop', '0', output]);
-        } else {
-          tempGif = path.join(TEMP_DIR, `sbg_temp_${id}.gif`);
-          const filterGif = `${chromaFilter},fps=10,${baseScale},split[s0][s1];[s0]palettegen=reserve_transparent=on:transparency_color=ffffff[p];[s1][p]paletteuse`;
-          
-          await execFileAsync('ffmpeg', ['-y', '-i', input, '-t', '5', '-vf', filterGif, '-loop', '0', tempGif]);
-
-          // 🔥 INTERCEPTOR DE ERRORES: Si falta el paquete webp, el bot le avisa al dueño qué comando ejecutar
-          try {
-            await execFileAsync('gif2webp', [tempGif, '-lossy', '-q', '60', '-m', '4', '-o', output]);
-          } catch (webPErr) {
-            return reply('❌ *ERROR DE TERMUX*\nTe falta una herramienta para crear stickers animados sin fondo.\n\n👉 Ve a tu consola de Termux y escribe este comando:\n\n*pkg install webp -y*');
-          }
-        }
-
-        fs.writeFileSync(exif, createExif());
-        await execFileAsync('webpmux', ['-set', 'exif', exif, output, '-o', finalOutput]);
-        await sock.sendMessage(remoteJid, { sticker: fs.readFileSync(finalOutput) }, { quoted: msg });
-      }
+      await sock.sendMessage(remoteJid, { sticker: fs.readFileSync(finalOutput) }, { quoted: msg });
 
     } catch (err) {
       console.log('❌ Error en sbg:', err?.message || err);
-      await reply('❌ Ocurrió un error al procesar el archivo.');
+      await reply('❌ Error al procesar el chroma. Verifica que el archivo tenga un color sólido claro.');
     } finally {
-      // 🧹 Limpieza masiva de archivos temporales
-      [input, output, exif, finalOutput, tempGif].forEach(file => {
+      [input, output, exif, finalOutput].forEach(file => {
         try { if (file && fs.existsSync(file)) fs.unlinkSync(file); } catch {}
       });
     }
