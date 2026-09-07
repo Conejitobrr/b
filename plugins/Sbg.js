@@ -145,7 +145,7 @@ module.exports = {
           const framePattern = path.join(TEMP_DIR, `sbg_frame_${id}_%03d.png`);
           
           await execFileAsync('ffmpeg', [
-            '-y', '-i', input, '-t', '3', 
+            '-y', '-i', input, '-t', '4', 
             '-vf', `${chromaFilter},fps=10,${scaleVid}`, 
             framePattern
           ]);
