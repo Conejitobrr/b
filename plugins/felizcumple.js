@@ -35,12 +35,24 @@ module.exports = {
 
       const targetNum = cleanNumber(target);
 
-      // 📝 TEXTO UNIVERSAL (Hombre/Mujer)
+      // 📝 TEXTO UNIVERSAL
       const texto = `🎂✨ *FELIZ CUMPLEAÑOS* ✨🎂\n\n🎉 Hoy es el cumpleaños de una persona muy especial 🥳💖\n\n💌 ¡Feliz cumpleaños, @${targetNum}!\n\nEspero que tengas un día increíble,\nlleno de amor, regalos y muchísima felicidad ✨\n\n💖 Que nunca te falten motivos para sonreír\n🌟 Que todos tus sueños se hagan realidad\n🎁 Y que este nuevo año de vida sea muchísimo mejor\n\nTe mereces todo lo bonito del mundo 🎉🎂✨`;
 
       let messageOptions = {
         caption: texto,
         mentions: [target]
+      };
+
+      // 🔥 EL SECRETO PARA LA CITA AZUL: Cita Falsa (Fake Quote)
+      // Engañamos a WhatsApp para que renderice la burbuja de respuesta con la mención forzada
+      const fakeQuote = {
+        key: msg.key,
+        message: {
+          extendedTextMessage: {
+            text: `.felizcumple @${targetNum}`,
+            contextInfo: { mentionedJid: [target] }
+          }
+        }
       };
 
       // 📸 INTENTAR OBTENER FOTO DE PERFIL
@@ -60,11 +72,10 @@ module.exports = {
 
       // 🚀 ENVIAR EL MENSAJE
       try {
-        await sock.sendMessage(remoteJid, messageOptions, { quoted: msg });
+        await sock.sendMessage(remoteJid, messageOptions, { quoted: fakeQuote });
       } catch (sendError) {
         console.log('⚠️ Error al enviar imagen, enviando solo texto:', sendError?.message);
-        // Si la imagen falla por alguna restricción de WhatsApp, se envía solo el texto
-        await sock.sendMessage(remoteJid, { text: texto, mentions: [target] }, { quoted: msg });
+        await sock.sendMessage(remoteJid, { text: texto, mentions: [target] }, { quoted: fakeQuote });
       }
 
     } catch (err) {
