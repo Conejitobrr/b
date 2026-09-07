@@ -25,7 +25,7 @@ module.exports = {
   name: 'attp',
   aliases: ['ttp', 'texto', 'letras'],
   category: 'multimedia',
-  desc: 'Crea un sticker de texto personalizado con borde',
+  desc: 'Crea un sticker de texto estilizado de forma directa',
 
   execute: async ({ sock, msg, remoteJid, args, sender, db, reply }) => {
     let img = null, webp = null, exif = null, finalOutput = null;
@@ -55,7 +55,7 @@ module.exports = {
       exif = path.join(TEMP_DIR, `attp_exif_${id}.exif`);
       finalOutput = path.join(TEMP_DIR, `attp_final_${id}.webp`);
 
-      // 🔥 SEGURIDAD MÁXIMA: Pasamos los argumentos como un Array para evitar inyección de código
+      // 🔥 ALARGAMIENTO VERTICAL (100% ancho x 118% alto)
       const imArgs = [
         '-background', 'none',
         '-fill', 'white',
@@ -68,21 +68,20 @@ module.exports = {
         '-interline-spacing', '8',
         `caption:${text}`,
         '-trim', '+repage',
-        '-resize', '440x440>',
+        '-resize', '100%x118%!', // 👈 Alarga las letras un poco hacia arriba
+        '-resize', '450x450>',
         '-gravity', 'center',
         '-background', 'none',
         '-extent', '512x512',
         img
       ];
 
-      await sock.sendMessage(remoteJid, { text: '⏳ Generando sticker de texto...' }, { quoted: msg });
-
       // 1️⃣ Crear imagen base transparente (ImageMagick)
       try {
         await execFileAsync('convert', imArgs);
       } catch (imErr) {
         console.log('Error ImageMagick:', imErr.message);
-        return reply('❌ *ERROR DE TERMUX*\nNecesitas instalar ImageMagick para procesar texto.\n\n👉 Ve a Termux y escribe:\n*pkg install imagemagick -y*');
+        return reply('❌ *ERROR DE TERMUX*\nNecesitas instalar ImageMagick.\n\n👉 Ejecuta: *pkg install imagemagick -y*');
       }
 
       // 2️⃣ Convertir a formato Sticker (FFmpeg)
@@ -103,10 +102,11 @@ module.exports = {
         return reply('❌ Error interno al convertir el sticker con FFmpeg.');
       }
 
-      // 3️⃣ Inyectar Metadatos y enviar
+      // 3️⃣ Inyectar Metadatos y enviar de forma DIRECTA
       fs.writeFileSync(exif, createExif());
       await execFileAsync('webpmux', ['-set', 'exif', exif, webp, '-o', finalOutput]);
 
+      // 🚀 Enviar sticker directo sin avisos previos
       await sock.sendMessage(remoteJid, { sticker: fs.readFileSync(finalOutput) }, { quoted: msg });
 
       // ⭐ Bono de XP 
@@ -122,7 +122,7 @@ module.exports = {
       console.log('❌ Error en plugin attp:', err?.message || err);
       return reply('❌ Ocurrió un error inesperado al procesar tu texto.');
     } finally {
-      // 🧹 Limpieza de rastros
+      // 🧹 Limpieza silenciosa de archivos temporales
       [img, webp, exif, finalOutput].forEach(file => {
         try { if (file && fs.existsSync(file)) fs.unlinkSync(file); } catch {}
       });
