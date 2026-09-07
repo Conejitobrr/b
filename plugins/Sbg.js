@@ -49,7 +49,6 @@ function createExif(packName = STICKER_PACK_NAME, author = STICKER_AUTHOR) {
   return Buffer.concat([exifHeader, jsonBuffer]);
 }
 
-// 🎨 COLORES Y FORMATOS PERMITIDOS (Usamos nombres nativos de FFmpeg para mayor precisión)
 const COLORS = { verde: 'green', blanco: 'white', negro: 'black', azul: 'blue', rojo: 'red' };
 const FORMATS = ['sticker', 'gif', 'video', 'foto'];
 
@@ -61,7 +60,7 @@ module.exports = {
 
   execute: async ({ sock, msg, remoteJid, args, reply }) => {
     let input = null, output = null, exif = null, finalOutput = null;
-    let frames = []; // Array para guardar los frames generados
+    let frames = []; 
 
     try {
       let format = 'sticker'; 
@@ -95,7 +94,6 @@ module.exports = {
 
       await sock.sendMessage(remoteJid, { text: `⏳ Procesando *${format}* sin fondo *${colorName}*...\n_Optimizando para WhatsApp_ 🚀` }, { quoted: msg });
 
-      // 🔥 CHROMAKEY MÁGICO: similarity=0.3 y blend=0.1 maneja sombras y bordes comprimidos
       const chromaFilter = `chromakey=${ffmpegColor}:0.3:0.1`;
 
       if (format === 'foto') {
@@ -106,7 +104,7 @@ module.exports = {
           document: fs.readFileSync(output), 
           mimetype: 'image/png',
           fileName: 'SinFondo.png',
-          caption: '🖼️ Imagen sin fondo (Transparente)'
+          caption: '🖼️ Imagen sin fondo'
         }, { quoted: msg });
 
       } else if (format === 'video') {
@@ -116,44 +114,42 @@ module.exports = {
         await sock.sendMessage(remoteJid, {
           video: fs.readFileSync(output),
           mimetype: 'video/mp4',
-          caption: '🎥 Video procesado (WhatsApp le pone fondo negro a videos transparentes)'
+          caption: '🎥 Video procesado'
         }, { quoted: msg });
 
       } else if (format === 'gif') {
         output = path.join(TEMP_DIR, `sbg_out_${id}.gif`);
-        const filterGif = `${chromaFilter},fps=12,scale=512:-1:flags=lanczos,split[s0][s1];[s0]palettegen=reserve_transparent=on:transparency_color=black[p];[s1][p]paletteuse=alpha_threshold=128`;
-        await execFileAsync('ffmpeg', ['-y', '-i', input, '-t', '5', '-vf', filterGif, output]);
+        // GIF cortado a 3 segundos para que no pese tanto
+        const filterGif = `${chromaFilter},fps=10,scale=320:-1:flags=lanczos,split[s0][s1];[s0]palettegen=reserve_transparent=on:transparency_color=black[p];[s1][p]paletteuse=alpha_threshold=128`;
+        await execFileAsync('ffmpeg', ['-y', '-i', input, '-t', '3', '-vf', filterGif, output]);
         
         await sock.sendMessage(remoteJid, {
           document: fs.readFileSync(output), 
           mimetype: 'image/gif',
           fileName: 'Animacion.gif',
-          caption: '🎞️ GIF 100% Transparente'
+          caption: '🎞️ GIF Transparente'
         }, { quoted: msg });
 
       } else { 
-        // 💎 FORMATO STICKER (LA SOLUCIÓN SUPREMA)
+        // 💎 FORMATO STICKER
         output = path.join(TEMP_DIR, `sbg_out_${id}.webp`);
         exif = path.join(TEMP_DIR, `sbg_exif_${id}.exif`);
         finalOutput = path.join(TEMP_DIR, `sbg_final_${id}.webp`);
         
         if (info.isImage) {
-          // Para imágenes estáticas usamos 512x512 porque no hay límite estricto de peso
           const scaleImg = 'scale=512:512:force_original_aspect_ratio=decrease:flags=lanczos,pad=512:512:(ow-iw)/2:(oh-ih)/2:color=0x00000000';
           await execFileAsync('ffmpeg', ['-y', '-i', input, '-vf', `${chromaFilter},${scaleImg}`, '-c:v', 'libwebp', '-q:v', '60', '-preset', 'picture', '-loop', '0', output]);
         } else {
-          // Para video: Escalar a 320x320 (baja el peso enormemente y se sigue viendo HD)
-          const scaleVid = 'scale=320:320:force_original_aspect_ratio=decrease:flags=lanczos,pad=320:320:(ow-iw)/2:(oh-ih)/2:color=0x00000000';
+          // 🔥 SUGERENCIA APLICADA: Bajamos la resolución a 256x256 y cortamos a 3 segundos máximos
+          const scaleVid = 'scale=256:256:force_original_aspect_ratio=decrease:flags=lanczos,pad=256:256:(ow-iw)/2:(oh-ih)/2:color=0x00000000';
           const framePattern = path.join(TEMP_DIR, `sbg_frame_${id}_%03d.png`);
           
-          // 1. Extraer los cuadros en formato PNG (Mantiene la transparencia Alfa perfecta)
           await execFileAsync('ffmpeg', [
-            '-y', '-i', input, '-t', '5', 
+            '-y', '-i', input, '-t', '3', 
             '-vf', `${chromaFilter},fps=10,${scaleVid}`, 
             framePattern
           ]);
 
-          // Recopilar todos los frames generados
           frames = fs.readdirSync(TEMP_DIR)
             .filter(f => f.startsWith(`sbg_frame_${id}_`) && f.endsWith('.png'))
             .sort()
@@ -161,17 +157,14 @@ module.exports = {
 
           if (frames.length === 0) throw new Error("No frames generated");
 
-          // 2. Crear WebP animado usando img2webp
-          // -dispose 1: Limpia la pantalla en cada movimiento (Elimina los clones)
-          // -q 40: Comprime para no exceder los 500 KB (Evita el sticker borroso y estático)
+          // 🔥 Eliminamos el parámetro que hacía crashear a Termux
           const img2webpArgs = [
             '-o', output,
             '-loop', '0',
             '-lossy',
             '-q', '40', 
             '-m', '4',
-            '-d', '100', // Velocidad del sticker
-            '-dispose', '1', 
+            '-d', '100', // (100ms = 10fps, sincronización perfecta)
             ...frames
           ];
 
@@ -185,9 +178,9 @@ module.exports = {
 
     } catch (err) {
       console.log('❌ Error en sbg:', err?.message || err);
-      await reply('❌ Ocurrió un error. Si es un video, intenta con un clip de menos de 5 segundos para que WhatsApp lo acepte.');
+      await reply('❌ Ocurrió un error al procesar el archivo. Intenta nuevamente.');
     } finally {
-      // 🧹 Limpieza exhaustiva de todos los frames e imágenes
+      // 🧹 Limpieza exhaustiva
       [input, output, exif, finalOutput, ...frames].forEach(file => {
         try { if (file && fs.existsSync(file)) fs.unlinkSync(file); } catch {}
       });
