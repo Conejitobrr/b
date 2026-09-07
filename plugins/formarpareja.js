@@ -6,10 +6,10 @@ module.exports = {
   category: 'diversión',
   desc: 'Forma una pareja aleatoria entre los miembros del grupo',
 
-  execute: async ({ sock, msg, remoteJid, sender, isGroup, db, reply }) => {
+  execute: async ({ sock, msg, remoteJid, sender, db, reply }) => {
     try {
-      // 🛡️ Validación estricta: Solo funciona en grupos
-      if (!isGroup) {
+      // 🛡️ Validación 100% segura: Verifica si el ID del chat termina en "@g.us" (identificador oficial de grupos)
+      if (!remoteJid.endsWith('@g.us')) {
         return reply('❌ Este comando es exclusivo para grupos.');
       }
 
