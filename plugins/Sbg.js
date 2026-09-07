@@ -49,83 +49,124 @@ function createExif(packName = STICKER_PACK_NAME, author = STICKER_AUTHOR) {
   return Buffer.concat([exifHeader, jsonBuffer]);
 }
 
-// 🎨 COLORES SOPORTADOS PARA BORRAR
-const COLORS = {
-  verde: '0x00FF00',
-  blanco: '0xFFFFFF',
-  negro: '0x000000',
-  azul: '0x0000FF',
-  rojo: '0xFF0000'
-};
+// 🎨 COLORES Y FORMATOS PERMITIDOS
+const COLORS = { verde: '0x00FF00', blanco: '0xFFFFFF', negro: '0x000000', azul: '0x0000FF', rojo: '0xFF0000' };
+const FORMATS = ['sticker', 'gif', 'video', 'foto'];
 
 module.exports = {
   name: 'sbg',
   aliases: ['schroma', 'chroma', 'sinfondo'],
   category: 'multimedia',
-  desc: 'Crea un sticker borrando un color de fondo sin efecto de clones',
+  desc: 'Borra el fondo. Formatos: sticker, gif, video, foto',
 
   execute: async ({ sock, msg, remoteJid, args, reply }) => {
-    let input = null, output = null, exif = null, finalOutput = null, tempGif = null;
+    let input = null, output = null, exif = null, finalOutput = null;
 
     try {
-      const colorName = (args[0] || 'verde').toLowerCase();
+      let format = 'sticker'; 
+      let colorName = 'verde'; 
+
+      // 🔍 Filtrar opciones que escribió el usuario
+      for (const arg of args) {
+        const a = arg.toLowerCase();
+        if (FORMATS.includes(a)) format = a;
+        else if (COLORS[a]) colorName = a;
+      }
+
       const hexColor = COLORS[colorName];
 
       if (!hexColor) {
-        return reply(`❌ Color no soportado. Usa uno de estos:\n*${Object.keys(COLORS).join(', ')}*`);
+        return reply(`❌ Color no soportado. Usa:\n*${Object.keys(COLORS).join(', ')}*`);
       }
 
       const message = getQuotedMessage(msg) || msg.message;
       const info = getMediaInfo(message);
 
       if (!info || (!info.media.url && !info.media.mediaKey)) {
-        return reply('❌ Envía o responde a una imagen/video con fondo sólido.');
+        return reply(`❌ Envía o responde a un archivo.\n\n📌 *Opciones:*\nFormatos: sticker, gif, video, foto\nColores: verde, blanco, negro, azul, rojo\n\n👉 Ejemplo: *.sbg gif blanco*`);
       }
 
       const buffer = await downloadMedia(info.media, info.downloadType);
-      
       const id = `${Date.now()}_${Math.floor(Math.random() * 9999)}`;
       const ext = info.isImage ? 'jpg' : 'mp4';
-      
-      input = path.join(TEMP_DIR, `sbg_in_${id}.${ext}`);
-      output = path.join(TEMP_DIR, `sbg_out_${id}.webp`);
-      exif = path.join(TEMP_DIR, `sbg_exif_${id}.exif`);
-      finalOutput = path.join(TEMP_DIR, `sbg_final_${id}.webp`);
 
+      input = path.join(TEMP_DIR, `sbg_in_${id}.${ext}`);
       fs.writeFileSync(input, buffer);
 
-      const chromaFilter = `format=rgba,colorkey=${hexColor}:0.3:0.1`;
-      const baseScale = 'scale=512:512:force_original_aspect_ratio=decrease:flags=lanczos,pad=512:512:(ow-iw)/2:(oh-ih)/2:color=0x00000000';
+      await sock.sendMessage(remoteJid, { text: `⏳ Procesando *${format}* sin fondo *${colorName}*...` }, { quoted: msg });
 
-      await sock.sendMessage(remoteJid, { text: `⏳ Borrando fondo *${colorName}*, un momento...` }, { quoted: msg });
+      // 🔥 MAGIA FFMPEG: Usamos 'chromakey' y forzamos formato 'yuva420p' para transparencias de máxima calidad sin clones
+      const chromaFilter = `chromakey=${hexColor}:0.3:0.1,format=yuva420p`;
 
-      if (info.isImage) {
-        // Para imágenes, WebP directo funciona perfecto
-        const ffmpegArgs = ['-y', '-i', input, '-vf', `${chromaFilter},${baseScale}`, '-vcodec', 'libwebp', '-q:v', '60', '-preset', 'picture', '-loop', '0', output];
-        await execFileAsync('ffmpeg', ffmpegArgs);
-      } else {
-        // 🔥 SOLUCIÓN A LOS CLONES: Video -> GIF -> WebP
-        tempGif = path.join(TEMP_DIR, `sbg_temp_${id}.gif`);
-        const ffmpegArgs = ['-y', '-i', input, '-t', '5', '-vf', `${chromaFilter},fps=10,${baseScale}`, '-loop', '0', tempGif];
+      if (format === 'foto') {
+        output = path.join(TEMP_DIR, `sbg_out_${id}.png`);
+        await execFileAsync('ffmpeg', ['-y', '-i', input, '-vf', chromaFilter, '-c:v', 'png', output]);
         
-        await execFileAsync('ffmpeg', ffmpegArgs);
-        // Convierte el GIF limpio a WebP manteniendo las transparencias puras y con pérdida ligera para no superar el peso de WhatsApp
-        await execFileAsync('gif2webp', [tempGif, '-lossy', '-q', '60', '-m', '4', '-o', output]);
+        await sock.sendMessage(remoteJid, {
+          document: fs.readFileSync(output), 
+          mimetype: 'image/png',
+          fileName: 'SinFondo.png',
+          caption: '🖼️ Imagen sin fondo (Transparente)'
+        }, { quoted: msg });
+
+      } else if (format === 'video') {
+        output = path.join(TEMP_DIR, `sbg_out_${id}.mp4`);
+        await execFileAsync('ffmpeg', ['-y', '-i', input, '-vf', chromaFilter, '-c:v', 'libx264', '-pix_fmt', 'yuv420p', output]);
+        
+        await sock.sendMessage(remoteJid, {
+          video: fs.readFileSync(output),
+          mimetype: 'video/mp4',
+          caption: '🎥 Video procesado (WhatsApp le pone fondo negro a videos transparentes)'
+        }, { quoted: msg });
+
+      } else if (format === 'gif') {
+        output = path.join(TEMP_DIR, `sbg_out_${id}.gif`);
+        const filterGif = `${chromaFilter},fps=12,scale=512:-1:flags=lanczos,split[s0][s1];[s0]palettegen=reserve_transparent=on:transparency_color=ffffff[p];[s1][p]paletteuse`;
+        await execFileAsync('ffmpeg', ['-y', '-i', input, '-t', '5', '-vf', filterGif, output]);
+        
+        await sock.sendMessage(remoteJid, {
+          document: fs.readFileSync(output), 
+          mimetype: 'image/gif',
+          fileName: 'Animacion.gif',
+          caption: '🎞️ GIF 100% Transparente'
+        }, { quoted: msg });
+
+      } else { 
+        // 💎 FORMATO STICKER (Directo, Ultra Ligero y sin Clones)
+        output = path.join(TEMP_DIR, `sbg_out_${id}.webp`);
+        exif = path.join(TEMP_DIR, `sbg_exif_${id}.exif`);
+        finalOutput = path.join(TEMP_DIR, `sbg_final_${id}.webp`);
+        
+        const baseScale = 'scale=512:512:force_original_aspect_ratio=decrease:flags=lanczos,pad=512:512:(ow-iw)/2:(oh-ih)/2:color=0x00000000';
+        
+        if (info.isImage) {
+          await execFileAsync('ffmpeg', ['-y', '-i', input, '-vf', `${chromaFilter},${baseScale}`, '-c:v', 'libwebp', '-q:v', '50', '-preset', 'picture', '-loop', '0', output]);
+        } else {
+          // Procesamos el video directamente a WebP aplicando compresión fuerte para engañar el límite de WhatsApp
+          await execFileAsync('ffmpeg', [
+            '-y', '-i', input, '-t', '5', 
+            '-vf', `${chromaFilter},fps=12,${baseScale}`, 
+            '-c:v', 'libwebp', 
+            '-lossless', '0', 
+            '-q:v', '40', // Reducimos la calidad un poco para asegurar el peso
+            '-compression_level', '6', // Nivel máximo de compresión
+            '-preset', 'picture', 
+            '-loop', '0', 
+            '-an', output
+          ]);
+        }
+
+        fs.writeFileSync(exif, createExif());
+        await execFileAsync('webpmux', ['-set', 'exif', exif, output, '-o', finalOutput]);
+        await sock.sendMessage(remoteJid, { sticker: fs.readFileSync(finalOutput) }, { quoted: msg });
       }
-
-      // Aplicar metadatos EXIF
-      fs.writeFileSync(exif, createExif());
-      await execFileAsync('webpmux', ['-set', 'exif', exif, output, '-o', finalOutput]);
-
-      // Enviar Sticker final
-      await sock.sendMessage(remoteJid, { sticker: fs.readFileSync(finalOutput) }, { quoted: msg });
 
     } catch (err) {
       console.log('❌ Error en sbg:', err?.message || err);
-      await reply('❌ Error al procesar el chroma. Verifica que el archivo no sea muy pesado.');
+      await reply('❌ Ocurrió un error al procesar el archivo. Intenta con un clip más corto.');
     } finally {
-      // 🧹 Limpieza exhaustiva para cuidar tu almacenamiento
-      [input, output, exif, finalOutput, tempGif].forEach(file => {
+      // 🧹 Limpieza
+      [input, output, exif, finalOutput].forEach(file => {
         try { if (file && fs.existsSync(file)) fs.unlinkSync(file); } catch {}
       });
     }
