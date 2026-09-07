@@ -49,7 +49,7 @@ function createExif(packName = STICKER_PACK_NAME, author = STICKER_AUTHOR) {
   return Buffer.concat([exifHeader, jsonBuffer]);
 }
 
-// 🎨 COLORES SOPORTADOS PARA BORRAR (Formato Hexadecimal)
+// 🎨 COLORES SOPORTADOS PARA BORRAR
 const COLORS = {
   verde: '0x00FF00',
   blanco: '0xFFFFFF',
@@ -62,24 +62,24 @@ module.exports = {
   name: 'sbg',
   aliases: ['schroma', 'chroma', 'sinfondo'],
   category: 'multimedia',
-  desc: 'Crea un sticker borrando un color de fondo (Chroma Key)',
+  desc: 'Crea un sticker borrando un color de fondo sin efecto de clones',
 
   execute: async ({ sock, msg, remoteJid, args, reply }) => {
-    let input = null, output = null, exif = null, finalOutput = null;
+    let input = null, output = null, exif = null, finalOutput = null, tempGif = null;
 
     try {
       const colorName = (args[0] || 'verde').toLowerCase();
       const hexColor = COLORS[colorName];
 
       if (!hexColor) {
-        return reply(`❌ Color no soportado. Usa uno de estos:\n*${Object.keys(COLORS).join(', ')}*\n\n📌 Ejemplo: *.sbg blanco*`);
+        return reply(`❌ Color no soportado. Usa uno de estos:\n*${Object.keys(COLORS).join(', ')}*`);
       }
 
       const message = getQuotedMessage(msg) || msg.message;
       const info = getMediaInfo(message);
 
       if (!info || (!info.media.url && !info.media.mediaKey)) {
-        return reply('❌ Envía o responde a una imagen/video con fondo sólido.\n\n📌 Ejemplo: *.sbg verde*');
+        return reply('❌ Envía o responde a una imagen/video con fondo sólido.');
       }
 
       const buffer = await downloadMedia(info.media, info.downloadType);
@@ -94,27 +94,38 @@ module.exports = {
 
       fs.writeFileSync(input, buffer);
 
-      // 🔥 MAGIA FFMPEG: format=rgba + colorkey para transparentar el color seleccionado
       const chromaFilter = `format=rgba,colorkey=${hexColor}:0.3:0.1`;
       const baseScale = 'scale=512:512:force_original_aspect_ratio=decrease:flags=lanczos,pad=512:512:(ow-iw)/2:(oh-ih)/2:color=0x00000000';
 
-      const ffmpegArgs = info.isImage
-        ? ['-y', '-i', input, '-vf', `${chromaFilter},${baseScale}`, '-vcodec', 'libwebp', '-q:v', '60', '-preset', 'picture', '-loop', '0', output]
-        : ['-y', '-i', input, '-t', '5', '-vf', `${chromaFilter},fps=10,${baseScale}`, '-vcodec', 'libwebp', '-fs', '700k', '-loop', '0', '-an', output];
-
       await sock.sendMessage(remoteJid, { text: `⏳ Borrando fondo *${colorName}*, un momento...` }, { quoted: msg });
 
-      await execFileAsync('ffmpeg', ffmpegArgs);
+      if (info.isImage) {
+        // Para imágenes, WebP directo funciona perfecto
+        const ffmpegArgs = ['-y', '-i', input, '-vf', `${chromaFilter},${baseScale}`, '-vcodec', 'libwebp', '-q:v', '60', '-preset', 'picture', '-loop', '0', output];
+        await execFileAsync('ffmpeg', ffmpegArgs);
+      } else {
+        // 🔥 SOLUCIÓN A LOS CLONES: Video -> GIF -> WebP
+        tempGif = path.join(TEMP_DIR, `sbg_temp_${id}.gif`);
+        const ffmpegArgs = ['-y', '-i', input, '-t', '5', '-vf', `${chromaFilter},fps=10,${baseScale}`, '-loop', '0', tempGif];
+        
+        await execFileAsync('ffmpeg', ffmpegArgs);
+        // Convierte el GIF limpio a WebP manteniendo las transparencias puras y con pérdida ligera para no superar el peso de WhatsApp
+        await execFileAsync('gif2webp', [tempGif, '-lossy', '-q', '60', '-m', '4', '-o', output]);
+      }
+
+      // Aplicar metadatos EXIF
       fs.writeFileSync(exif, createExif());
       await execFileAsync('webpmux', ['-set', 'exif', exif, output, '-o', finalOutput]);
 
+      // Enviar Sticker final
       await sock.sendMessage(remoteJid, { sticker: fs.readFileSync(finalOutput) }, { quoted: msg });
 
     } catch (err) {
       console.log('❌ Error en sbg:', err?.message || err);
-      await reply('❌ Error al procesar el chroma. Verifica que el archivo tenga un color sólido claro.');
+      await reply('❌ Error al procesar el chroma. Verifica que el archivo no sea muy pesado.');
     } finally {
-      [input, output, exif, finalOutput].forEach(file => {
+      // 🧹 Limpieza exhaustiva para cuidar tu almacenamiento
+      [input, output, exif, finalOutput, tempGif].forEach(file => {
         try { if (file && fs.existsSync(file)) fs.unlinkSync(file); } catch {}
       });
     }
