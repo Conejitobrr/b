@@ -1,6 +1,5 @@
 'use strict';
 
-// 🔥 Función blindada: Extrae solo los números y crea el ID perfecto sin duplicar terminaciones
 function getPureJid(jid = '') {
   const str = String(jid);
   if (!str) return '';
@@ -8,11 +7,13 @@ function getPureJid(jid = '') {
   return `${num}@s.whatsapp.net`;
 }
 
-// 🔥 Función agresiva de tu código original para forzar el borrado
-async function tryDeleteMessage(sock, remoteJid, key, isOwnMessage) {
-  const attempts = isOwnMessage
-    ? [ { ...key, fromMe: true }, { ...key, fromMe: false } ]
-    : [ { ...key, fromMe: false } ];
+// 🔥 Función blindada de intentos múltiples para asegurar el borrado
+async function tryDeleteMessage(sock, remoteJid, key) {
+  const attempts = [
+    key,
+    { ...key, fromMe: true },
+    { ...key, fromMe: false }
+  ];
 
   let lastError = null;
   for (const deleteKey of attempts) {
@@ -30,11 +31,11 @@ module.exports = {
   name: 'del',
   aliases: ['delete', 'borrar', 'eliminar'],
   category: 'administración',
-  desc: 'Elimina un mensaje (y borra el comando automáticamente)',
+  desc: 'Elimina primero el mensaje seleccionado y luego el comando',
 
   execute: async ({ sock, msg, remoteJid, sender, fromGroup, isAdmin, isOwner, db, reply }) => {
     try {
-      // 1. Verificación de permisos
+      // 1. Verificación de permisos (Owner, Admin o Premium)
       let isPremium = false;
       if (db && typeof db.getUser === 'function') {
         const user = await db.getUser(sender);
@@ -48,48 +49,51 @@ module.exports = {
       // 2. Obtener la ID del mensaje al que respondiste
       const quotedInfo = msg.message?.extendedTextMessage?.contextInfo;
       if (!quotedInfo?.stanzaId) {
-        return reply('❌ Debes responder al mensaje que quieres eliminar.\n\nUso:\n.del\n.borrar\n.eliminar');
+        return reply('❌ Debes responder al mensaje que quieres eliminar.\n\n📌 Uso:\n*.del*');
       }
 
-      // 3. Crear los JIDs matemáticamente perfectos
       const botJid = getPureJid(sock.user.id);
-      const quotedParticipant = quotedInfo.participant ? getPureJid(quotedInfo.participant) : remoteJid;
-      const isOwnMessage = (quotedParticipant === botJid);
+      const isFromMe = quotedInfo.fromMe === true;
+      const quotedParticipant = quotedInfo.participant ? getPureJid(quotedInfo.participant) : (isFromMe ? botJid : remoteJid);
+      const isOwnMessage = isFromMe || (quotedParticipant === botJid);
 
       if (!fromGroup && !isOwnMessage) {
         return reply('❌ En chats privados solo puedo eliminar los mensajes enviados por mí.');
       }
 
-      // 4. Llave del mensaje objetivo a eliminar
+      // 3. Llave del mensaje objetivo a eliminar
       const targetKey = {
         remoteJid: remoteJid,
         id: quotedInfo.stanzaId,
-        participant: quotedParticipant
+        participant: quotedInfo.participant || (isOwnMessage ? botJid : undefined),
+        fromMe: isFromMe
       };
 
-      // 5. Llave de tu comando (.del)
+      // 4. Llave del comando (.del)
       const commandKey = {
         remoteJid: msg.key.remoteJid,
         id: msg.key.id,
-        participant: msg.key.participant
+        participant: msg.key.participant,
+        fromMe: !!msg.key.fromMe
       };
 
-      // 💥 6. Ejecutar borrado del mensaje citado usando fuerza bruta
+      // 💥 5. ELIMINAR PRIMERO EL MENSAJE SELECCIONADO (Con Await estricto)
       try {
-        await tryDeleteMessage(sock, remoteJid, targetKey, isOwnMessage);
+        await tryDeleteMessage(sock, remoteJid, targetKey);
       } catch (deleteErr) {
-        console.log('Error al borrar el objetivo:', deleteErr?.message);
+        console.log('❌ Error al borrar el objetivo:', deleteErr?.message);
         return reply('❌ No pude eliminar el mensaje. Es posible que sea demasiado antiguo o que WhatsApp haya rechazado la acción.');
       }
 
-      // 💥 7. Auto-eliminar tu comando (.del)
-      setTimeout(async () => {
-        try {
-          await tryDeleteMessage(sock, remoteJid, commandKey, !!msg.key.fromMe);
-        } catch (e) {
-          console.log('⚠️ No se pudo borrar el comando:', e?.message || e);
-        }
-      }, 500);
+      // Pequeña pausa de 300ms para mantener el orden secuencial en los servidores de WhatsApp
+      await new Promise(resolve => setTimeout(resolve, 300));
+
+      // 💥 6. ELIMINAR DESPUÉS EL MENSAJE DEL COMANDO (.del)
+      try {
+        await tryDeleteMessage(sock, remoteJid, commandKey);
+      } catch (e) {
+        console.log('⚠️ No se pudo borrar el comando:', e?.message || e);
+      }
 
     } catch (err) {
       console.log('❌ Error en plugin del:', err?.message || err);
