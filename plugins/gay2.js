@@ -21,7 +21,7 @@ function getTarget(msg, sender) {
 
 module.exports = {
   name: 'gay2',
-  aliases: ['gay', 'filtrogay'],
+  aliases: ['filtrogay'],
   category: 'diversión',
   desc: 'Aplica un filtro arcoíris a la foto de perfil y envía un audio',
 
