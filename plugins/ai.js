@@ -52,7 +52,7 @@ REGLAS ESTRICTAS:
         Authorization: `Bearer ${apiKey}`
       },
       body: JSON.stringify({
-        model: 'llama-3.3-70b-versatile', // El modelo más inteligente y rápido
+        model: 'llama3-70b-8192', // El modelo más inteligente y rápido
         temperature: 0.8,
         max_tokens: 500,
         messages: messages
