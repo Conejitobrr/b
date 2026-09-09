@@ -1,7 +1,5 @@
 'use strict';
 
-const GROQ_MODEL = process.env.GROQ_MODEL || 'openai/gpt-oss-20b';
-
 module.exports = {
   name: 'oraculo',
   aliases: ['consejo', 'psicologo', 'basado'],
@@ -31,16 +29,17 @@ REGLAS ESTRICTAS:
 4. El consejo final debe ser lógico pero dicho de la forma más cruda posible.
 5. Sé conciso y directo, máximo 120 palabras.`;
 
+      // 🤖 Conexión directa idéntica a tu ai.js
       const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
         method: 'POST',
         headers: {
-          Authorization: `Bearer ${apiKey}`,
-          'Content-Type': 'application/json'
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${apiKey}`
         },
         body: JSON.stringify({
-          model: GROQ_MODEL,
+          model: 'openai/gpt-oss-120b', // 🔥 Fijado directamente al modelo que funciona perfecto
           temperature: 0.9,
-          max_tokens: 150,
+          max_tokens: 400, // 🔥 Aumentado para que no se corte a medias
           messages: [
             { role: 'system', content: 'Eres un psicólogo de WhatsApp sumamente crudo y sarcástico.' },
             { role: 'user', content: prompt }
@@ -49,17 +48,17 @@ REGLAS ESTRICTAS:
       });
 
       const data = await res.json();
-      if (!res.ok) throw new Error(data?.error?.message || 'Error en Groq');
+      if (!res.ok) throw new Error(data.error?.message || 'Error en Groq');
       
-      const respuesta = data.choices?.[0]?.message?.content || 'Sufre en silencio pe, mi bola de cristal se apagó.';
+      const respuesta = data.choices[0].message.content.trim();
 
       await sock.sendMessage(remoteJid, {
         text: `🔮 *EL ORÁCULO BASADO RESPONDE* 🔮\n\n${respuesta}`
       }, { quoted: msg });
 
     } catch (err) {
-      console.log('❌ Error en Oráculo:', err?.message || err);
-      return reply('❌ Ocurrió un error. Se me cruzaron los cables espirituales.');
+      console.log('❌ Error en Oráculo:', err.message || err);
+      return reply('❌ Ocurrió un error. Se me cruzaron los cables espirituales pe.');
     }
   }
 };
