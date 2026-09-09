@@ -19,38 +19,40 @@ module.exports = {
       const apiKey = process.env.GROQ_API_KEY;
       if (!apiKey) return reply('❌ Falta configurar GROQ_API_KEY en el archivo .env');
 
-      const prompt = `Eres SiriusBot, el oráculo y psicólogo más basado, tóxico y sin filtros del Perú.
-El usuario ${pushName} te pide ayuda con este triste problema: "${problema}".
+      const systemPrompt = `Eres SiriusBot, el oráculo y psicólogo más basado, tóxico y sin filtros del Perú creado por Jose Velazco.
+Tu personalidad es divertida, natural, algo troll, sarcástica y muy sociable. 
+Hablas con jerga peruana moderna (pe, causa, mano, webada, etc.) pero sin exagerar.`;
+
+      const userPrompt = `El usuario ${pushName || 'Usuario'} te pide ayuda con este triste problema: "${problema}".
 
 REGLAS ESTRICTAS:
 1. NO seas empático. Dale una cachetada de realidad.
-2. Búrlate de su miseria y de lo ingenuo/a que es antes de darle el "consejo".
-3. Usa jerga peruana callejera pero inteligente (causa, mano, gil, pavo, tarao, ptm, etc).
-4. El consejo final debe ser lógico pero dicho de la forma más cruda posible.
-5. Sé conciso y directo, máximo 120 palabras.`;
+2. Búrlate de su miseria y de lo ingenuo/a que es antes de darle el consejo.
+3. El consejo final debe ser lógico pero dicho de la forma más cruda posible.
+4. Sé conciso y directo, máximo 120 palabras.`;
 
-      // 🤖 Conexión directa idéntica a tu ai.js
-      const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+      const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${apiKey}`
         },
         body: JSON.stringify({
-          model: 'openai/gpt-oss-120b', // 🔥 Fijado directamente al modelo que funciona perfecto
+          model: 'openai/gpt-oss-120b', // El mismo modelo perfecto de tu ai.js
           temperature: 0.9,
-          max_tokens: 400, // 🔥 Aumentado para que no se corte a medias
+          max_tokens: 400,
           messages: [
-            { role: 'system', content: 'Eres un psicólogo de WhatsApp sumamente crudo y sarcástico.' },
-            { role: 'user', content: prompt }
+            { role: 'system', content: systemPrompt },
+            { role: 'user', content: userPrompt }
           ]
         })
       });
 
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error?.message || 'Error en Groq');
-      
-      const respuesta = data.choices[0].message.content.trim();
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error?.message || 'Error en Groq');
+
+      // 🔥 Extracción segura idéntica a tu ai.js para evitar que llegue vacío
+      const respuesta = data.choices?.[0]?.message?.content?.trim() || 'Sufre en silencio pe, mi bola de cristal falló.';
 
       await sock.sendMessage(remoteJid, {
         text: `🔮 *EL ORÁCULO BASADO RESPONDE* 🔮\n\n${respuesta}`
