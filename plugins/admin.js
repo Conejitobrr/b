@@ -1,78 +1,93 @@
 'use strict';
 
+const fs = require('fs');
+const path = require('path');
+
 module.exports = {
-  name: 'admin',
-  aliases: ['kick', 'promote', 'demote', 'revoke', 'abrirgrupo', 'cerrargrupo'],
-  category: 'administración',
-  desc: 'Comandos administrativos de grupo',
-
-  execute: async ({ sock, msg, remoteJid, args, commandName, isAdmin, isOwner, reply }) => {
-    if (!remoteJid.endsWith('@g.us')) return reply('❌ Este comando solo funciona en grupos.');
-    if (!isAdmin && !isOwner) return reply('❌ Solo los administradores pueden usar esto.');
-
+  name: 'menu',
+  aliases: ['help', 'ayuda', 'comandos', 'list'],
+  category: 'utilidad',
+  desc: 'Muestra el menú principal de comandos',
+  
+  execute: async ({ sock, msg, remoteJid, pushName, config, isOwner, reply }) => {
     try {
-      // 🌐 ACCIONES GENERALES
-      if (commandName === 'cerrargrupo') {
-        await sock.groupSettingUpdate(remoteJid, 'announcement');
-        return reply('🔒 Grupo cerrado. Solo los administradores pueden enviar mensajes.');
+      const PLUGINS_DIR = path.join(process.cwd(), 'plugins');
+      const files = fs.readdirSync(PLUGINS_DIR).filter(file => file.endsWith('.js'));
+      
+      const categories = {};
+      let totalCommands = 0;
+
+      for (const file of files) {
+        try {
+          const filepath = path.join(PLUGINS_DIR, file);
+          const plugin = require(filepath); 
+          
+          if (plugin.name && typeof plugin.execute === 'function') {
+            const category = plugin.category ? plugin.category.toUpperCase() : 'SIN CATEGORÍA';
+            
+            if (category === 'OWNER' && !isOwner) continue;
+
+            if (!categories[category]) {
+              categories[category] = [];
+            }
+            
+            categories[category].push({
+              name: plugin.name,
+              // 🔥 AHORA CAPTURA LOS ALIASES
+              aliases: (plugin.aliases && Array.isArray(plugin.aliases)) ? plugin.aliases.filter(a => a !== plugin.name) : [],
+              desc: plugin.desc || 'Sin descripción'
+            });
+            totalCommands++;
+          }
+        } catch (e) {}
       }
 
-      if (commandName === 'abrirgrupo') {
-        await sock.groupSettingUpdate(remoteJid, 'not_announcement');
-        return reply('🔓 Grupo abierto. Todos los participantes pueden enviar mensajes.');
+      let menuText = `╔══════════════════════╗
+        🌌 *SIRIUS BOT PRO* 🌌
+╚══════════════════════╝
+
+👤 Hola *${pushName || 'Usuario'}* ✨
+⚙️ Prefijo: *${config.prefix}*
+📦 Plugins Activos: *${totalCommands}*\n\n`;
+
+      const sortedCategories = Object.keys(categories).sort();
+
+      for (const category of sortedCategories) {
+        let icon = '📌';
+        if (category.includes('ADMINISTRACIÓN') || category.includes('MODERACIÓN')) icon = '🛡️';
+        else if (category.includes('DIVERSIÓN') || category.includes('JUEGOS')) icon = '🎲';
+        else if (category.includes('MULTIMEDIA') || category.includes('DESCARGAS')) icon = '🎵';
+        else if (category.includes('ECONOMÍA') || category.includes('RPG')) icon = '💰';
+        else if (category.includes('OWNER')) icon = '👑';
+        else if (category.includes('INTELIGENCIA ARTIFICIAL') || category.includes('IA')) icon = '🤖';
+        else if (category.includes('MASCOTA')) icon = '🐾';
+        else if (category.includes('POLICÍA') || category.includes('CARCEL')) icon = '🚔';
+        else if (category.includes('SOCIAL') || category.includes('ROMANCE')) icon = '💖';
+        else if (category.includes('TOPS') || category.includes('RANKING')) icon = '🏆';
+        else if (category.includes('BROMAS') || category.includes('CALCULADOR')) icon = '🤡';
+        else if (category.includes('PREMIUM')) icon = '💎';
+
+        menuText += `━━━━━━━━━━━━━━━━━━━\n`;
+        menuText += `${icon} *${category}*\n`;
+        menuText += `━━━━━━━━━━━━━━━━━━━\n`;
+        
+        categories[category].sort((a, b) => a.name.localeCompare(b.name));
+
+        for (const cmd of categories[category]) {
+          // 🔥 AHORA IMPRIME LOS ALIASES AL LADO DEL NOMBRE
+          const aliasStr = cmd.aliases.length > 0 ? ` _[${cmd.aliases.join(', ')}]_` : '';
+          menuText += `➤ *${config.prefix}${cmd.name}*${aliasStr} → ${cmd.desc}\n`;
+        }
+        menuText += `\n`;
       }
 
-      if (commandName === 'revoke') {
-        await sock.groupRevokeInvite(remoteJid);
-        const code = await sock.groupInviteCode(remoteJid);
-        return reply(`✅ *Enlace de invitación restablecido*\n\n🔗 Nuevo enlace:\nhttps://chat.whatsapp.com/${code}`);
-      }
+      menuText += `🚀 _Usa los comandos y sube de nivel_`;
 
-      // 🎯 CAPTURA EXACTA DEL OBJETIVO (Sin modificar sufijos para evitar el error 500)
-      const contextInfo = msg.message?.extendedTextMessage?.contextInfo;
-      let targetJid = contextInfo?.participant || contextInfo?.mentionedJid?.[0];
-
-      if (!targetJid && args.length > 0) {
-        const cleanArg = args.join('').replace(/\D/g, '');
-        if (cleanArg) targetJid = `${cleanArg}@s.whatsapp.net`;
-      }
-
-      if (!targetJid) {
-        return reply('❌ Debes mencionar, responder al mensaje o escribir el número de la persona.');
-      }
-
-      const cleanNum = String(targetJid).split('@')[0].split(':')[0].replace(/\D/g, '');
-      const botNum = String(sock.user.id).split(':')[0].replace(/\D/g, '');
-
-      if (cleanNum === botNum) {
-        return reply('❌ No puedes aplicar esta acción en el bot.');
-      }
-
-      // 👤 ACCIONES SOBRE PARTICIPANTES
-      if (commandName === 'kick') {
-        await sock.groupParticipantsUpdate(remoteJid, [targetJid], 'remove');
-        return reply(`✅ Usuario expulsado correctamente del grupo.`);
-      }
-
-      if (commandName === 'promote') {
-        await sock.groupParticipantsUpdate(remoteJid, [targetJid], 'promote');
-        return sock.sendMessage(remoteJid, {
-          text: `✅ Se ha concedido el rango de Administrador a @${cleanNum}`,
-          mentions: [targetJid]
-        }, { quoted: msg });
-      }
-
-      if (commandName === 'demote') {
-        await sock.groupParticipantsUpdate(remoteJid, [targetJid], 'demote');
-        return sock.sendMessage(remoteJid, {
-          text: `✅ Se ha retirado el rango de Administrador a @${cleanNum}`,
-          mentions: [targetJid]
-        }, { quoted: msg });
-      }
-
+      await sock.sendMessage(remoteJid, { text: menuText.trim() }, { quoted: msg });
+      
     } catch (err) {
-      console.log(`❌ Error en comando administrativo (${commandName}):`, err);
-      return reply('❌ La acción falló en los servidores de WhatsApp. Asegúrate de que el bot tenga el rol de Administrador en el grupo.');
+      console.log('❌ Error en menú:', err);
+      return reply('❌ Ocurrió un error al generar el menú dinámico.');
     }
   }
 };
