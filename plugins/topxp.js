@@ -22,9 +22,9 @@ module.exports = {
   // ===============================
   // 🔥 SISTEMA DE XP PASIVA 
   // ===============================
-  onMessage: async ({ sender, remoteJid, isGroup, db }) => {
-    // Solo da XP si están en un grupo
-    if (!isGroup || !db) return;
+  onMessage: async ({ sender, remoteJid, db }) => {
+    // 🔥 CORRECCIÓN: Validación directa del ID para saber si es un grupo
+    if (!remoteJid.endsWith('@g.us') || !db) return;
 
     const key = `${remoteJid}:${sender}`;
     const now = Date.now();
@@ -43,14 +43,14 @@ module.exports = {
         }
       }
     } catch (err) {
-      // Silencioso para no hacer spam en la consola de Termux
+      // Silencioso para no hacer spam en la consola
     }
   },
 
   // ===============================
   // 🏆 COMANDOS (topxp / topglobal)
   // ===============================
-  execute: async ({ sock, msg, remoteJid, commandName, sender, isGroup, db, reply }) => {
+  execute: async ({ sock, msg, remoteJid, commandName, sender, db, reply }) => {
     try {
       if (!db) return reply('❌ Error: Base de datos no conectada.');
 
@@ -65,7 +65,7 @@ module.exports = {
         const usersObj = data.users || data || {};
         allUsers = Object.entries(usersObj).map(([id, u]) => ({ id, ...u }));
       } else if (db.User && typeof db.User.find === 'function') { 
-        allUsers = await db.User.find({}); // Soporte nativo para MongoDB/Mongoose
+        allUsers = await db.User.find({}); 
       } else {
         return reply('❌ Error: No se encontró el método para leer la lista de usuarios en la base de datos.');
       }
@@ -83,7 +83,10 @@ module.exports = {
       // 🏆 TOP GRUPO REAL
       // ===============================
       if (!isGlobal) {
-        if (!isGroup) return reply('❌ El comando *.topxp* solo funciona en grupos. Para ver el global usa *.topglobal*');
+        // 🔥 CORRECCIÓN APLICADA AQUÍ TAMBIÉN
+        if (!remoteJid.endsWith('@g.us')) {
+          return reply('❌ El comando *.topxp* solo funciona en grupos. Para ver el global usa *.topglobal*');
+        }
 
         const metadata = await sock.groupMetadata(remoteJid);
         const participants = metadata.participants.map(p => cleanJid(p.id));
