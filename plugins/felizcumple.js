@@ -23,47 +23,104 @@ function generateFakeId() {
   return 'BAE5' + Math.floor(Math.random() * 1000000000000000).toString(16).toUpperCase();
 }
 
-// 🎨 CREADOR DE PÓSTER ÉPICO A PANTALLA COMPLETA
+// ✨ FUNCIÓN PARA DIBUJAR CONFETI GEOMÉTRICO (Generado por código)
+function drawParticles(ctx, width, height) {
+  const colors = ['#FFD700', '#DAA520', '#FFFFFF', '#F5DEB3', '#FF4500'];
+  for (let i = 0; i < 150; i++) {
+    const x = Math.random() * width;
+    const y = Math.random() * height;
+    const size = Math.random() * 6 + 2;
+    const color = colors[Math.floor(Math.random() * colors.length)];
+    const shapeType = Math.random();
+
+    ctx.fillStyle = color;
+    ctx.globalAlpha = Math.random() * 0.8 + 0.2; // Transparencia aleatoria
+
+    ctx.beginPath();
+    if (shapeType < 0.33) {
+      // Círculos (Estrellas desenfocadas)
+      ctx.arc(x, y, size, 0, Math.PI * 2);
+      ctx.fill();
+    } else if (shapeType < 0.66) {
+      // Cuadrados girados (Confeti)
+      ctx.save();
+      ctx.translate(x, y);
+      ctx.rotate(Math.random() * Math.PI);
+      ctx.fillRect(-size / 2, -size / 2, size, size);
+      ctx.restore();
+    } else {
+      // Triángulos
+      ctx.moveTo(x, y);
+      ctx.lineTo(x + size, y + size * 1.5);
+      ctx.lineTo(x - size, y + size * 1.5);
+      ctx.fill();
+    }
+    ctx.closePath();
+  }
+  ctx.globalAlpha = 1.0; // Restaurar transparencia
+}
+
+// 🎨 CREADOR DE PÓSTER LUXURY (ORO Y CRISTAL)
 async function createBirthdayCard(pfpUrl, pushName = 'Amigo') {
-  const width = 800;
-  const height = 1000; // Formato vertical tipo póster para WhatsApp
+  const width = 1080;
+  const height = 1350; 
   const canvas = createCanvas(width, height);
   const ctx = canvas.getContext('2d');
 
-  // 🌌 1. Fondo inmersivo: Usar la foto de perfil difuminada y oscurecida como atmósfera
-  try {
-    const bgImage = await loadImage(pfpUrl);
-    ctx.save();
-    ctx.drawImage(bgImage, 0, 0, width, height);
-    // Capa oscura translúcida con tinte nocturno para que el texto resalte
-    ctx.fillStyle = 'rgba(10, 2, 25, 0.85)';
-    ctx.fillRect(0, 0, width, height);
-    ctx.restore();
-  } catch {
-    ctx.fillStyle = '#15002b';
-    ctx.fillRect(0, 0, width, height);
-  }
+  // 🌌 1. FONDO PREMIUM OSCURO
+  const bgGradient = ctx.createLinearGradient(0, 0, width, height);
+  bgGradient.addColorStop(0, '#0a0a0a'); // Negro carbón
+  bgGradient.addColorStop(0.5, '#1a1025'); // Morado muy oscuro
+  bgGradient.addColorStop(1, '#050505'); // Negro absoluto
+  ctx.fillStyle = bgGradient;
+  ctx.fillRect(0, 0, width, height);
 
-  // ✨ 2. Círculo neón central principal para la foto de perfil
-  const centerX = width / 2;
-  const centerY = 360;
-  const radius = 170;
+  // ✨ 2. LLUVIA DE PARTICULAS Y CONFETI
+  drawParticles(ctx, width, height);
 
+  // 📦 3. TARJETA DE CRISTAL ESMERILADO (Glassmorphism central)
   ctx.save();
-  ctx.shadowColor = '#ff007f';
-  ctx.shadowBlur = 40;
   ctx.beginPath();
-  ctx.arc(centerX, centerY, radius + 12, 0, Math.PI * 2, true);
-  const neonGradient = ctx.createLinearGradient(0, 0, width, height);
-  neonGradient.addColorStop(0, '#ff007f');
-  neonGradient.addColorStop(0.5, '#7b2cbf');
-  neonGradient.addColorStop(1, '#00f5d4');
-  ctx.fillStyle = neonGradient;
+  ctx.roundRect(80, 250, width - 160, height - 350, 40); // Requiere Canvas moderno, si falla usamos rect simple
+  ctx.fillStyle = 'rgba(255, 255, 255, 0.03)';
   ctx.fill();
-  ctx.closePath();
+  ctx.lineWidth = 2;
+  ctx.strokeStyle = 'rgba(255, 215, 0, 0.3)'; // Borde dorado sutil
+  ctx.stroke();
   ctx.restore();
 
-  // 📸 3. Dibujar la foto de perfil nítida dentro del círculo
+  // 📸 4. MARCO DE FOTO LUXURY DOBLE ANILLO
+  const centerX = width / 2;
+  const centerY = 450;
+  const radius = 220;
+
+  // Anillo exterior brillante
+  ctx.save();
+  ctx.shadowColor = '#FFD700';
+  ctx.shadowBlur = 60;
+  ctx.beginPath();
+  ctx.arc(centerX, centerY, radius + 25, 0, Math.PI * 2, true);
+  
+  const ringGradient = ctx.createLinearGradient(centerX - radius, centerY - radius, centerX + radius, centerY + radius);
+  ringGradient.addColorStop(0, '#FFD700'); // Oro vivo
+  ringGradient.addColorStop(0.5, '#FFA500'); // Naranja brillante
+  ringGradient.addColorStop(1, '#DAA520'); // Oro oscuro
+  
+  ctx.strokeStyle = ringGradient;
+  ctx.lineWidth = 12;
+  ctx.stroke();
+  ctx.restore();
+
+  // Anillo interior blanco elegante
+  ctx.save();
+  ctx.beginPath();
+  ctx.arc(centerX, centerY, radius + 8, 0, Math.PI * 2, true);
+  ctx.strokeStyle = '#FFFFFF';
+  ctx.lineWidth = 4;
+  ctx.stroke();
+  ctx.restore();
+
+  // 🖼️ 5. DIBUJAR LA FOTO DE PERFIL
   ctx.save();
   ctx.beginPath();
   ctx.arc(centerX, centerY, radius, 0, Math.PI * 2, true);
@@ -74,71 +131,65 @@ async function createBirthdayCard(pfpUrl, pushName = 'Amigo') {
     const avatar = await loadImage(pfpUrl);
     ctx.drawImage(avatar, centerX - radius, centerY - radius, radius * 2, radius * 2);
   } catch {
-    ctx.fillStyle = '#333';
+    ctx.fillStyle = '#222';
     ctx.fillRect(centerX - radius, centerY - radius, radius * 2, radius * 2);
   }
   ctx.restore();
 
-  // 📝 4. Textos y elementos visuales con diseño profesional
+  // 📝 6. TEXTOS Y TIPOGRAFÍAS AVANZADAS
   ctx.textAlign = 'center';
   ctx.shadowColor = 'rgba(0, 0, 0, 0.9)';
-  ctx.shadowBlur = 15;
+  ctx.shadowBlur = 20;
 
-  // Cabecera
-  ctx.fillStyle = '#ffdf00';
-  ctx.font = 'bold 36px sans-serif';
-  ctx.fillText('✨ 🎂 ¡FELIZ CUMPLEAÑOS! 🎂 ✨', centerX, 110);
+  // Título: Degradado Metálico
+  const textGradient = ctx.createLinearGradient(0, 750, 0, 850);
+  textGradient.addColorStop(0, '#FFF8DC');
+  textGradient.addColorStop(0.5, '#FFD700');
+  textGradient.addColorStop(1, '#B8860B');
 
-  // Nombre del usuario grande y destacado
-  ctx.fillStyle = '#ffffff';
-  ctx.font = 'bold 50px sans-serif';
-  const displayName = pushName.length > 16 ? pushName.substring(0, 16) + '...' : pushName;
-  ctx.fillText(displayName, centerX, 615);
+  ctx.fillStyle = textGradient;
+  ctx.font = 'bold 85px sans-serif';
+  ctx.fillText('FELIZ CUMPLEAÑOS', centerX, 840);
 
-  // Subtítulo
-  ctx.fillStyle = '#00ffff';
-  ctx.font = '26px sans-serif';
-  ctx.fillText('🎉 Que tengas un día extraordinario 🎉', centerX, 680);
+  // Nombre del cumpleañero (Gigante y blanco puro)
+  ctx.fillStyle = '#FFFFFF';
+  ctx.font = 'bold 110px sans-serif';
+  const displayName = pushName.length > 12 ? pushName.substring(0, 12) + '...' : pushName;
+  ctx.fillText(displayName, centerX, 970);
 
-  // 📦 Tarjeta decorativa inferior
-  ctx.save();
+  // Línea separadora decorativa
   ctx.beginPath();
-  const boxX = 90, boxY = 740, boxW = 620, boxH = 180, cornerRadius = 25;
-  ctx.moveTo(boxX + cornerRadius, boxY);
-  ctx.lineTo(boxX + boxW - cornerRadius, boxY);
-  ctx.quadraticCurveTo(boxX + boxW, boxY, boxX + boxW, boxY + cornerRadius);
-  ctx.lineTo(boxX + boxW, boxY + boxH - cornerRadius);
-  ctx.quadraticCurveTo(boxX + boxW, boxY + boxH, boxX + boxW - cornerRadius, boxY + boxH);
-  ctx.lineTo(boxX + cornerRadius, boxY + boxH);
-  ctx.quadraticCurveTo(boxX, boxY + boxH, boxX, boxY + boxH - cornerRadius);
-  ctx.lineTo(boxX, boxY + cornerRadius);
-  ctx.quadraticCurveTo(boxX, boxY, boxX + cornerRadius, boxY);
-  ctx.closePath();
-
-  ctx.fillStyle = 'rgba(255, 255, 255, 0.07)';
-  ctx.fill();
-  ctx.lineWidth = 2;
-  ctx.strokeStyle = 'rgba(255, 0, 127, 0.4)';
+  ctx.moveTo(centerX - 250, 1030);
+  ctx.lineTo(centerX + 250, 1030);
+  ctx.lineWidth = 4;
+  ctx.strokeStyle = '#FFD700';
   ctx.stroke();
+  
+  // Diamante en el centro de la línea
+  ctx.save();
+  ctx.translate(centerX, 1030);
+  ctx.rotate(Math.PI / 4);
+  ctx.fillStyle = '#FFD700';
+  ctx.fillRect(-8, -8, 16, 16);
   ctx.restore();
 
-  // Textos dentro de la caja inferior
-  ctx.fillStyle = '#ff99cc';
-  ctx.font = '22px sans-serif';
-  ctx.fillText('🌟 Disfruta al máximo este gran día 🌟', centerX, 810);
+  // Subtítulo elegante final
+  ctx.fillStyle = '#E0E0E0';
+  ctx.font = 'italic 45px serif'; // Cambiamos la fuente a Serif para darle el toque clásico/profesional
+  ctx.fillText('Que la vida te siga sorprendiendo', centerX, 1120);
+  
+  ctx.fillStyle = '#A9A9A9';
+  ctx.font = '30px sans-serif';
+  ctx.fillText('Te deseamos lo mejor hoy y siempre', centerX, 1180);
 
-  ctx.fillStyle = '#cccccc';
-  ctx.font = '18px sans-serif';
-  ctx.fillText('De parte de todo el grupo de WhatsApp', centerX, 865);
-
-  return canvas.toBuffer('image/jpeg');
+  return canvas.toBuffer('image/jpeg', { quality: 0.95 });
 }
 
 module.exports = {
   name: 'felizcumple',
   aliases: ['cumpleaños', 'hb', 'hbd'],
   category: 'diversión',
-  desc: 'Felicita a un usuario con un póster visual épico a pantalla completa',
+  desc: 'Felicita a un usuario con una tarjeta de nivel Profesional Luxury',
 
   execute: async ({ sock, remoteJid, msg, args, reply }) => {
     try {
@@ -150,10 +201,16 @@ module.exports = {
 
       const targetNum = cleanNumber(target);
 
+      // 🔥 Extraer nombre oficial de WhatsApp
       let targetName = targetNum;
       try {
         const contact = await sock.onWhatsApp(target);
-        targetName = contact[0]?.notify || 'Amigo';
+        if (contact && contact[0] && contact[0].notify) {
+          targetName = contact[0].notify;
+        } else {
+          // Fallback si no tiene notify name guardado
+          targetName = 'Amigo/a'; 
+        }
       } catch {
         targetName = 'Amigo/a';
       }
@@ -179,7 +236,10 @@ module.exports = {
         pfpUrl = 'https://i.imgur.com/JP3QZ7B.jpeg';
       }
 
-      // 🎨 Generar la nueva imagen épica en formato póster vertical
+      // ⏳ Mensaje de espera porque esta imagen tiene gráficos pesados
+      const loadMsg = await sock.sendMessage(remoteJid, { text: '⏳ _Diseñando tarjeta premium..._' }, { quoted: msg });
+
+      // 🎨 Generar la nueva imagen Luxury
       const imageBuffer = await createBirthdayCard(pfpUrl, targetName);
 
       let messageOptions = {
@@ -188,6 +248,7 @@ module.exports = {
         mentions: [target]
       };
 
+      await sock.sendMessage(remoteJid, { delete: loadMsg.key }); // Borrar mensaje de carga
       await sock.sendMessage(remoteJid, messageOptions, { quoted: fakeQuoted });
 
     } catch (err) {
