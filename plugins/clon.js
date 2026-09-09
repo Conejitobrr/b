@@ -4,8 +4,8 @@ const fs = require('fs');
 const path = require('path');
 
 const MEMORY_PATH = path.join(process.cwd(), 'lib', 'clon_memory.json');
-const MAX_MESSAGES = 200; // 🔥 Memoria ampliada a 200 mensajes
-const GROQ_MODEL = process.env.GROQ_MODEL || 'openai/gpt-oss-20b'; // 🔥 Modelo gratuito y rápido
+const MAX_MESSAGES = 200; 
+const GROQ_MODEL = 'openai/gpt-oss-120b'; // 🔥 Actualizado al modelo potente que sí funciona
 
 function ensureMemory() {
   const dir = path.dirname(MEMORY_PATH);
@@ -45,21 +45,17 @@ function removeTargetFromQuestion(args = []) {
   return args.join(' ').replace(/@\+?\d+/g, '').replace(/\d{5,}/g, '').trim();
 }
 
-// 🧠 MOTOR DE ANÁLISIS PSICOLÓGICO Y ORTOGRÁFICO
 function getStyleStats(messages = []) {
   const joined = messages.join(' ');
   
-  // Extraer las palabras más frecuentes (muletillas)
   const words = joined.toLowerCase().match(/\b[a-záéíóúñ]{4,}\b/g) || [];
   const wordFreq = {};
   words.forEach(w => wordFreq[w] = (wordFreq[w] || 0) + 1);
   const topWords = Object.entries(wordFreq).sort((a, b) => b[1] - a[1]).slice(0, 8).map(x => x[0]);
 
-  // Extraer estilo visual
   const emojis = joined.match(/[\u{1F300}-\u{1FAFF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}]/gu) || [];
   const laughs = joined.match(/(ja+ja+|je+je+|js+js+|ks+ks+|xd+|lo+l)/ig) || [];
   
-  // Extraer formato ortográfico
   const usesPunctuation = /[.,!?]/.test(joined) ? 'Usa signos de puntuación.' : 'Casi NO usa signos de puntuación (escribe de corrido).';
   const lowercaseRatio = (joined.match(/[a-z]/g) || []).length / (joined.match(/[A-Z]/g) || [1]).length;
   const letterCase = lowercaseRatio > 10 ? 'Escribe casi siempre en minúsculas ignorando las reglas ortográficas.' : 'Respeta mayúsculas y minúsculas.';
@@ -75,53 +71,50 @@ function getStyleStats(messages = []) {
   };
 }
 
+// 🤖 Conexión directa idéntica a tu ai.js para evitar fallos de respuesta vacía
 async function askGroq({ targetName, question, stats }) {
   const apiKey = process.env.GROQ_API_KEY;
   if (!apiKey) throw new Error('Falta GROQ_API_KEY en .env');
 
-  const prompt = `
-Eres un clon exacto de WhatsApp de una persona llamada ${targetName}.
-Tu objetivo es responder a la pregunta imitando PERFECTAMENTE su forma de escribir, su ortografía, sus errores, sus risas y sus groserías.
+  const systemPrompt = `Eres un simulador avanzado de clones de chat en WhatsApp. Tu objetivo es responder imitando PERFECTAMENTE el estilo, ortografía, jerga, muletillas y risas de una persona específica.`;
 
-CONTEXTO DEL USUARIO A IMITAR:
-- Formato de escritura: ${stats.style}
-- Palabras que más repite (muletillas): ${stats.topWords.join(', ') || 'Ninguna'}
-- Emojis favoritos: ${stats.emojis.join(' ') || 'Ninguno'}
-- Formas de reírse: ${stats.laughs.join(', ') || 'Ninguna'}
+  const userPrompt = `Imita a ${targetName} basándote en estos datos de su forma de escribir:
+- Estilo: ${stats.style}
+- Palabras frecuentes: ${stats.topWords.join(', ') || 'Ninguna'}
+- Emojis: ${stats.emojis.join(' ') || 'Ninguno'}
+- Risas: ${stats.laughs.join(', ') || 'Ninguna'}
 
-MENSAJES REALES DE ESTA PERSONA (ÚSALOS COMO BASE):
-${stats.samples.map(x => `- ${x}`).join('\n') || '- Aún no hay mensajes.'}
+MENSAJES REALES DE ESTA PERSONA:
+${stats.samples.map(x => `- ${x}`).join('\n') || '- Aún no hay suficientes mensajes guardados.'}
 
-PREGUNTA A RESPONDER:
-${question}
+PREGUNTA QUE TE HACEN: "${question}"
 
 REGLAS ESTRICTAS:
-1. Responde SOLO con lo que diría el clon. Ni una palabra más.
-2. NO digas que eres una IA. Eres esa persona.
-3. Imita sus faltas ortográficas si en los ejemplos escribe mal.
-4. Si la pregunta es ofensiva, responde como lo haría esta persona según sus ejemplos.
-`;
+1. Responde SOLO con lo que diría esta persona, imitando sus faltas o forma de redactar.
+2. NUNCA digas que eres una IA.
+3. Sé directo y natural, máximo 150 tokens.`;
 
   const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
     method: 'POST',
     headers: {
-      Authorization: `Bearer ${apiKey}`,
-      'Content-Type': 'application/json'
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${apiKey}`
     },
     body: JSON.stringify({
       model: GROQ_MODEL,
       temperature: 0.9,
-      max_tokens: 150,
+      max_tokens: 300,
       messages: [
-        { role: 'system', content: 'Eres un simulador de clones de chat. Imita el estilo al 100% basándote en los datos dados.' },
-        { role: 'user', content: prompt }
+        { role: 'system', content: systemPrompt },
+        { role: 'user', content: userPrompt }
       ]
     })
   });
 
   const data = await res.json();
-  if (!res.ok) throw new Error(data?.error?.message || 'Error llamando Groq');
-  return cleanText(data.choices?.[0]?.message?.content || '');
+  if (!res.ok) throw new Error(data.error?.message || 'Error en Groq');
+  
+  return data.choices?.[0]?.message?.content?.trim() || '';
 }
 
 function fallbackReply(question, samples = []) {
@@ -162,6 +155,10 @@ module.exports = {
         answer = fallbackReply(question, stats.samples);
       }
 
+      if (!answer) {
+        answer = fallbackReply(question, stats.samples);
+      }
+
       await sock.sendMessage(remoteJid, {
         text: `🎭 *Clon de ${targetName}:*\n\n${answer}`,
         mentions: [target] 
@@ -173,12 +170,10 @@ module.exports = {
     }
   },
 
-  // 📝 Escucha y guarda silenciosamente la forma de hablar de todos
   onMessage: async ({ msg, body, sender, isCommand }) => {
     if (!body || !sender || isCommand || msg.key.fromMe) return;
 
     const text = cleanText(body);
-    // Ignoramos links, mensajes muy largos y textos muy cortos
     if (!text || text.length < 3 || text.length > 250 || /https?:\/\//i.test(text)) return;
 
     const target = cleanJid(sender);
