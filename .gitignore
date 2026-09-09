@@ -6,3 +6,5 @@ lib/shop_inventory.json
 lib/jail.json
 *.tmp
 .DS_Store
+lib/custom_audios.json
+media/custom_*
