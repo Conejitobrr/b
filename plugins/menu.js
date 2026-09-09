@@ -7,7 +7,7 @@ module.exports = {
   name: 'menu',
   aliases: ['help', 'ayuda', 'comandos', 'list'],
   category: 'utilidad',
-  desc: 'Muestra este menú dinámico de comandos',
+  desc: 'Muestra el menú principal de comandos',
   
   execute: async ({ sock, msg, remoteJid, pushName, config, isOwner, reply }) => {
     try {
@@ -21,12 +21,12 @@ module.exports = {
       for (const file of files) {
         try {
           const filepath = path.join(PLUGINS_DIR, file);
-          const plugin = require(filepath); // Obtiene la info del comando
+          const plugin = require(filepath); 
           
           if (plugin.name && typeof plugin.execute === 'function') {
             const category = plugin.category ? plugin.category.toUpperCase() : 'SIN CATEGORÍA';
             
-            // 🔥 TRUCO: Ocultar los comandos del Owner a los usuarios normales
+            // 🚫 Ocultar los comandos del Owner a los usuarios normales
             if (category === 'OWNER' && !isOwner) continue;
 
             if (!categories[category]) {
@@ -40,43 +40,55 @@ module.exports = {
             totalCommands++;
           }
         } catch (e) {
-          // Ignorar archivos que no sean comandos válidos
+          // Ignorar archivos que tengan errores o no sean comandos válidos
         }
       }
 
-      let menuText = `╭─❖「 *SIRIUS BOT PRO* 」
-│ 👋 Hola, *${pushName}*
-│ ⚙️ Prefijo: [ *${config.prefix}* ]
-│ 📦 Comandos: *${totalCommands}*
-╰─────────────────\n\n`;
+      // 🎨 ENCABEZADO CON ESTILO CLÁSICO
+      let menuText = `╔══════════════════════╗
+        🌌 *SIRIUS BOT PRO* 🌌
+╚══════════════════════╝
+
+👤 Hola *${pushName || 'Usuario'}* ✨
+⚙️ Prefijo: *${config.prefix}*
+📦 Comandos Activos: *${totalCommands}*\n\n`;
 
       // Ordenar las categorías alfabéticamente
       const sortedCategories = Object.keys(categories).sort();
 
       for (const category of sortedCategories) {
-        // Emojis dinámicos según la categoría
-        let icon = '❖';
-        if (category.includes('UTILIDAD') || category.includes('HERRAMIENTA')) icon = '🛠️';
+        // 🔥 Emojis dinámicos ampliados basados en tu menú antiguo
+        let icon = '📌';
         if (category.includes('ADMINISTRACIÓN') || category.includes('MODERACIÓN')) icon = '🛡️';
-        if (category.includes('DIVERSIÓN') || category.includes('JUEGOS')) icon = '🎮';
-        if (category.includes('MULTIMEDIA') || category.includes('DESCARGAS')) icon = '📥';
-        if (category.includes('ECONOMÍA') || category.includes('RPG')) icon = '💰';
-        if (category.includes('OWNER')) icon = '👑';
-        if (category.includes('CONFIGURACIÓN')) icon = '⚙️';
-        if (category.includes('INTELIGENCIA ARTIFICIAL')) icon = '🤖';
+        else if (category.includes('DIVERSIÓN') || category.includes('JUEGOS')) icon = '🎲';
+        else if (category.includes('MULTIMEDIA') || category.includes('DESCARGAS')) icon = '🎵';
+        else if (category.includes('ECONOMÍA') || category.includes('RPG')) icon = '💰';
+        else if (category.includes('OWNER')) icon = '👑';
+        else if (category.includes('INTELIGENCIA ARTIFICIAL') || category.includes('IA')) icon = '🤖';
+        else if (category.includes('MASCOTA')) icon = '🐾';
+        else if (category.includes('POLICÍA') || category.includes('CARCEL')) icon = '🚔';
+        else if (category.includes('SOCIAL') || category.includes('ROMANCE')) icon = '💖';
+        else if (category.includes('TOPS') || category.includes('RANKING')) icon = '🏆';
+        else if (category.includes('BROMAS') || category.includes('CALCULADOR')) icon = '🤡';
+        else if (category.includes('PREMIUM')) icon = '💎';
 
-        menuText += `*${icon} ${category}*\n`;
+        // 🎨 SEPARADORES CLÁSICOS
+        menuText += `━━━━━━━━━━━━━━━━━━━\n`;
+        menuText += `${icon} *${category}*\n`;
+        menuText += `━━━━━━━━━━━━━━━━━━━\n`;
         
         // Ordenar los comandos alfabéticamente dentro de cada categoría
         categories[category].sort((a, b) => a.name.localeCompare(b.name));
 
         for (const cmd of categories[category]) {
-          menuText += ` ✦ ${config.prefix}${cmd.name} - _${cmd.desc}_\n`;
+          // 🎨 FORMATO DE ITEMS CLÁSICO CON FLECHITA
+          menuText += `➤ *${config.prefix}${cmd.name}* → ${cmd.desc}\n`;
         }
         menuText += `\n`;
       }
 
-      menuText += `_SiriusBot Pro - Refactorizado al 100%_ 🚀`;
+      // 🎨 PIE DE PÁGINA
+      menuText += `🚀 _Usa los comandos y sube de nivel_`;
 
       // Enviar el menú directamente
       await sock.sendMessage(
