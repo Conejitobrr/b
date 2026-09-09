@@ -15,6 +15,46 @@ const CUSTOM_DB = path.join(process.cwd(), 'lib', 'custom_audios.json');
 
 const AUDIO_EXTENSIONS = ['.mp3', '.ogg', '.opus', '.wav', '.m4a', '.aac', '.flac', '.webm', '.mp4', '.mpeg'];
 
+// 🧠 Memoria Anti-Spam
+const cooldowns = new Map();
+const COOLDOWN_TIME = 10000; // 10 segundos
+
+// 🎵 AUDIOS BASE (Movidos aquí arriba para usarlos en el menú y en la escucha)
+const BASE_AUDIOS = [
+  { triggers: ['hola'], file: 'hola' },
+  { triggers: ['autoestima'], file: 'Autoestima' },
+  { triggers: ['tetas'], file: 'ATetas' },
+  { triggers: ['añanin'], file: 'Añañin' },
+  { triggers: ['chaoo'], file: 'Chaoo' },
+  { triggers: ['coge'], file: 'Coger' },
+  { triggers: ['viernes'], file: 'viernes' },
+  { triggers: ['siu', 'siuu', 'siuuu', 'siuuuu'], file: 'siu' },
+  { triggers: ['noche de paz'], file: 'Noche' },
+  { triggers: ['sexo'], file: 'S3x0g' },
+  { triggers: ['mff'], file: 'Mff' },
+  { triggers: ['linda'], file: 'Linda' },
+  { triggers: ['chamba'], file: 'Chamba' },
+  { triggers: ['uwu'], file: 'UwU' },
+  { triggers: ['ag'], file: 'Asco' },
+  { triggers: ['tu no mete'], file: 'Tu no mete' },
+  { triggers: ['telepatia', 'telepatía'], file: 'Telepatía' },
+  { triggers: ['un pato'], file: 'pato' },
+  { triggers: ['duermete alv', 'duérmete alv'], file: 'Duerme' },
+  { triggers: ['bendicion', 'bendición'], file: 'Bendicion' },
+  { triggers: ['compartan'], file: 'Compartan' },
+  { triggers: ['brr'], file: 'Brr' },
+  { triggers: ['llamaba charly'], file: 'Llamaba charly' },
+  { triggers: ['mis ojos'], file: 'Mis ojos' },
+  { triggers: ['pipipi'], file: 'Pipipi' },
+  { triggers: ['epico','épico'], file: 'Épico' },
+  { triggers: ['me voy'], file: 'Me voy' },
+  { triggers: ['una basura'], file: 'Basura' },
+  { triggers: ['cancer','cáncer'], file: 'Cáncer' },
+  { triggers: ['doxean', 'me doxean'], file: 'Me doxean' },
+  { triggers: ['no es jueves'], file: 'No es jueves' },
+  { triggers: ['jejeje'], file: 'Jejeje' }
+];
+
 function ensureSetup() {
   if (!fs.existsSync(MEDIA_DIR)) fs.mkdirSync(MEDIA_DIR, { recursive: true });
   if (!fs.existsSync(TEMP_DIR)) fs.mkdirSync(TEMP_DIR, { recursive: true });
@@ -68,14 +108,44 @@ async function convertToVoice(input, output) {
 
 module.exports = {
   name: 'audios_pasivos',
-  aliases: ['addaudio', 'añadiraudio', 'delaudio', 'borraraudio'],
+  aliases: ['addaudio', 'añadiraudio', 'delaudio', 'borraraudio', 'audios', 'listaaudios'],
   category: 'multimedia',
-  desc: 'Añade o elimina audios automáticos para el chat',
+  desc: 'Añade, elimina o mira la lista de audios automáticos',
 
-  // 1️⃣ SISTEMA DE COMANDOS DIRECTOS (Agregar y Borrar)
-  execute: async ({ sock, msg, remoteJid, args, commandName, reply }) => {
+  // 1️⃣ SISTEMA DE COMANDOS DIRECTOS
+  execute: async ({ sock, msg, remoteJid, args, commandName, isAdmin, isOwner, reply }) => {
     ensureSetup();
     
+    // 📋 LÓGICA PARA VER LA LISTA DE AUDIOS (Público para todos)
+    if (commandName === 'audios' || commandName === 'listaaudios' || commandName === 'audios_pasivos') {
+      let customAudios = [];
+      try { customAudios = JSON.parse(fs.readFileSync(CUSTOM_DB, 'utf-8')); } catch {}
+
+      let texto = `╔══════════════════════╗\n`;
+      texto += `        🎵 *LISTA DE AUDIOS* 🎵\n`;
+      texto += `╚══════════════════════╝\n\n`;
+
+      texto += `📌 *Audios Predeterminados:*\n`;
+      const baseTriggers = BASE_AUDIOS.map(a => a.triggers[0]).sort();
+      texto += `_${baseTriggers.join(' • ')}_\n\n`;
+
+      if (customAudios.length > 0) {
+        texto += `💎 *Audios Personalizados:*\n`;
+        const customTriggers = customAudios.map(a => a.triggers[0]).sort();
+        texto += `_${customTriggers.join(' • ')}_\n`;
+      } else {
+        texto += `💎 *Audios Personalizados:*\n_Aún no hay audios añadidos por los administradores._\n`;
+      }
+
+      texto += `\n💡 _Escribe cualquiera de estas palabras en el chat y el bot enviará la nota de voz._`;
+      return reply(texto);
+    }
+
+    // ⛔ RESTRICCIÓN DE ADMINISTRADOR PARA AGREGAR O BORRAR
+    if (!isAdmin && !isOwner) {
+      return reply('❌ Comando denegado. Solo los Administradores o el Creador del bot pueden añadir o borrar audios.');
+    }
+
     const triggerWord = args.join(' ').trim().toLowerCase();
 
     // 🗑️ LÓGICA PARA ELIMINAR AUDIO
@@ -91,11 +161,9 @@ module.exports = {
         return reply(`❌ No encontré ningún audio guardado con la palabra "${triggerWord}".`);
       }
 
-      // Borrar el archivo físico de la carpeta media/
       const fileToDelete = path.join(MEDIA_DIR, customAudios[index].file);
       try { if (fs.existsSync(fileToDelete)) fs.unlinkSync(fileToDelete); } catch {}
 
-      // Borrar el registro del JSON y guardar
       customAudios.splice(index, 1);
       fs.writeFileSync(CUSTOM_DB, JSON.stringify(customAudios, null, 2));
 
@@ -103,74 +171,71 @@ module.exports = {
     }
 
     // ➕ LÓGICA PARA AGREGAR AUDIO
-    try {
-      const quoted = msg.message?.extendedTextMessage?.contextInfo?.quotedMessage;
-      const isVideo = quoted?.videoMessage;
-      const isAudio = quoted?.audioMessage;
-      const isDocument = quoted?.documentMessage;
+    if (commandName.startsWith('add') || commandName.startsWith('añadir')) {
+      try {
+        const quoted = msg.message?.extendedTextMessage?.contextInfo?.quotedMessage;
+        const isVideo = quoted?.videoMessage;
+        const isAudio = quoted?.audioMessage;
+        const isDocument = quoted?.documentMessage;
 
-      if (!isVideo && !isAudio && !isDocument) {
-        return reply('❌ Debes responder a un *Video* o *Audio*.\n\n📌 *Ejemplo:* Responde al video y escribe:\n*.addaudio wazaa*');
+        if (!isVideo && !isAudio && !isDocument) {
+          return reply('❌ Debes responder a un *Video* o *Audio*.\n\n📌 *Ejemplo:* Responde al video y escribe:\n*.addaudio wazaa*');
+        }
+
+        if (!triggerWord) {
+          return reply('❌ Escribe la palabra que activará el audio.\n\n📌 *Ejemplo:*\n.addaudio ahhh');
+        }
+
+        await sock.sendPresenceUpdate('composing', remoteJid);
+
+        const id = `${Date.now()}`;
+        const extIn = isVideo ? 'mp4' : 'ogg';
+        const inputMedia = path.join(TEMP_DIR, `in_${id}.${extIn}`);
+        
+        const safeName = `custom_${triggerWord.replace(/[^a-z0-9]/gi, '')}_${id}.mp3`;
+        const outputMp3 = path.join(MEDIA_DIR, safeName);
+
+        let mediaType = 'video';
+        let mediaContent = quoted.videoMessage;
+        if (isAudio) { mediaType = 'audio'; mediaContent = quoted.audioMessage; }
+        if (isDocument) { mediaType = 'document'; mediaContent = quoted.documentMessage; }
+        
+        const stream = await downloadContentFromMessage(mediaContent, mediaType);
+        let buffer = Buffer.from([]);
+        for await (const chunk of stream) buffer = Buffer.concat([buffer, chunk]);
+        fs.writeFileSync(inputMedia, buffer);
+
+        await execFileAsync('ffmpeg', [
+          '-y', '-i', inputMedia,
+          '-vn', '-c:a', 'libmp3lame', '-b:a', '128k', 
+          outputMp3
+        ]);
+
+        let customAudios = [];
+        try { customAudios = JSON.parse(fs.readFileSync(CUSTOM_DB, 'utf-8')); } catch {}
+        
+        if (customAudios.some(a => a.triggers.includes(triggerWord)) || BASE_AUDIOS.some(a => a.triggers.includes(triggerWord))) {
+           return reply(`⚠️ La palabra "${triggerWord}" ya tiene un audio asignado. Intenta con otra palabra o usa *.delaudio* primero.`);
+        }
+
+        customAudios.push({ triggers: [triggerWord], file: safeName });
+        fs.writeFileSync(CUSTOM_DB, JSON.stringify(customAudios, null, 2));
+
+        if (fs.existsSync(inputMedia)) fs.unlinkSync(inputMedia);
+
+        await sock.sendMessage(remoteJid, { 
+          text: `✅ *¡Audio registrado con éxito!*\n\n🎙️ Ahora, cuando alguien escriba *"${triggerWord}"*, enviaré la nota de voz.` 
+        }, { quoted: msg });
+
+      } catch (err) {
+        console.log('❌ Error en addaudio:', err?.message || err);
+        return reply('❌ Ocurrió un error al intentar guardar el nuevo audio.');
       }
-
-      if (!triggerWord) {
-        return reply('❌ Escribe la palabra que activará el audio.\n\n📌 *Ejemplo:*\n.addaudio ahhh');
-      }
-
-      await sock.sendPresenceUpdate('composing', remoteJid);
-
-      const id = `${Date.now()}`;
-      const extIn = isVideo ? 'mp4' : 'ogg';
-      const inputMedia = path.join(TEMP_DIR, `in_${id}.${extIn}`);
-      
-      const safeName = `custom_${triggerWord.replace(/[^a-z0-9]/gi, '')}_${id}.mp3`;
-      const outputMp3 = path.join(MEDIA_DIR, safeName);
-
-      let mediaType = 'video';
-      let mediaContent = quoted.videoMessage;
-      if (isAudio) { mediaType = 'audio'; mediaContent = quoted.audioMessage; }
-      if (isDocument) { mediaType = 'document'; mediaContent = quoted.documentMessage; }
-      
-      const stream = await downloadContentFromMessage(mediaContent, mediaType);
-      let buffer = Buffer.from([]);
-      for await (const chunk of stream) buffer = Buffer.concat([buffer, chunk]);
-      fs.writeFileSync(inputMedia, buffer);
-
-      // Extracción blindada
-      await execFileAsync('ffmpeg', [
-        '-y', '-i', inputMedia,
-        '-vn', '-c:a', 'libmp3lame', '-b:a', '128k', 
-        outputMp3
-      ]);
-
-      let customAudios = [];
-      try { customAudios = JSON.parse(fs.readFileSync(CUSTOM_DB, 'utf-8')); } catch {}
-      
-      if (customAudios.some(a => a.triggers.includes(triggerWord))) {
-         return reply(`⚠️ La palabra "${triggerWord}" ya tiene un audio asignado. Si quieres cambiarlo, usa *.delaudio ${triggerWord}* primero.`);
-      }
-
-      customAudios.push({
-        triggers: [triggerWord],
-        file: safeName
-      });
-      fs.writeFileSync(CUSTOM_DB, JSON.stringify(customAudios, null, 2));
-
-      if (fs.existsSync(inputMedia)) fs.unlinkSync(inputMedia);
-
-      await sock.sendMessage(remoteJid, { 
-        text: `✅ *¡Audio registrado con éxito!*\n\n🎙️ Ahora, cuando alguien escriba *"${triggerWord}"*, enviaré la nota de voz.` 
-      }, { quoted: msg });
-
-    } catch (err) {
-      console.log('❌ Error en addaudio:', err?.message || err);
-      return reply('❌ Ocurrió un error al intentar guardar el nuevo audio.');
     }
   },
 
   // 2️⃣ SISTEMA AUTOMÁTICO DE ESCUCHA
   onMessage: async ({ sock, remoteJid, body, fromGroup, msg, groupData, userData }) => {
-    // 🔥 AQUÍ ESTABA EL ERROR: Ya le quité el msg.key.fromMe para que te haga caso a ti mismo
     if (!body) return;
 
     if (fromGroup && groupData && groupData.audios === false) return;
@@ -179,46 +244,10 @@ module.exports = {
     ensureSetup();
     const text = normalize(body);
 
-    // Audios base clásicos
-    const baseAudios = [
-      { triggers: ['hola'], file: 'hola' },
-      { triggers: ['autoestima'], file: 'Autoestima' },
-      { triggers: ['tetas'], file: 'ATetas' },
-      { triggers: ['añanin'], file: 'Añañin' },
-      { triggers: ['chaoo'], file: 'Chaoo' },
-      { triggers: ['coge'], file: 'Coger' },
-      { triggers: ['viernes'], file: 'viernes' },
-      { triggers: ['siu', 'siuu', 'siuuu', 'siuuuu'], file: 'siu' },
-      { triggers: ['noche de paz'], file: 'Noche' },
-      { triggers: ['sexo'], file: 'S3x0g' },
-      { triggers: ['mff'], file: 'Mff' },
-      { triggers: ['linda'], file: 'Linda' },
-      { triggers: ['chamba'], file: 'Chamba' },
-      { triggers: ['uwu'], file: 'UwU' },
-      { triggers: ['ag'], file: 'Asco' },
-      { triggers: ['tu no mete'], file: 'Tu no mete' },
-      { triggers: ['telepatia', 'telepatía'], file: 'Telepatía' },
-      { triggers: ['un pato'], file: 'pato' },
-      { triggers: ['duermete alv', 'duérmete alv'], file: 'Duerme' },
-      { triggers: ['bendicion', 'bendición'], file: 'Bendicion' },
-      { triggers: ['compartan'], file: 'Compartan' },
-      { triggers: ['brr'], file: 'Brr' },
-      { triggers: ['llamaba charly'], file: 'Llamaba charly' },
-      { triggers: ['mis ojos'], file: 'Mis ojos' },
-      { triggers: ['pipipi'], file: 'Pipipi' },
-      { triggers: ['epico','épico'], file: 'Épico' },
-      { triggers: ['me voy'], file: 'Me voy' },
-      { triggers: ['una basura'], file: 'Basura' },
-      { triggers: ['cancer','cáncer'], file: 'Cáncer' },
-      { triggers: ['doxean', 'me doxean'], file: 'Me doxean' },
-      { triggers: ['no es jueves'], file: 'No es jueves' },
-      { triggers: ['jejeje'], file: 'Jejeje' }
-    ];
-
     let customAudios = [];
     try { customAudios = JSON.parse(fs.readFileSync(CUSTOM_DB, 'utf-8')); } catch {}
 
-    const allAudios = [...baseAudios, ...customAudios];
+    const allAudios = [...BASE_AUDIOS, ...customAudios];
     let selected = null;
 
     for (const audio of allAudios) {
@@ -236,16 +265,20 @@ module.exports = {
 
     if (!selected) return;
 
+    // 🛡️ FILTRO ANTI-SPAM
+    const lastUsed = cooldowns.get(remoteJid) || 0;
+    if (Date.now() - lastUsed < COOLDOWN_TIME) return;
+
     const input = resolveAudioFile(selected.file);
     if (!input || !fs.existsSync(input)) return;
 
     const output = path.join(TEMP_DIR, `voice_${Date.now()}_${Math.floor(Math.random() * 9999)}.ogg`);
 
     try {
+      cooldowns.set(remoteJid, Date.now()); 
       await sock.sendPresenceUpdate('recording', remoteJid);
       
       await convertToVoice(input, output);
-      
       if (!fs.existsSync(output) || fs.statSync(output).size <= 0) return;
 
       await sock.sendMessage(
