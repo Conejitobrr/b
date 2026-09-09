@@ -4,7 +4,6 @@ const fs = require('fs');
 const path = require('path');
 const { createCanvas, loadImage } = require('canvas');
 
-// --- UTILIDADES ---
 function cleanJid(jid = '') { return String(jid).split(':')[0]; }
 function cleanNumber(jid = '') { return cleanJid(jid).split('@')[0].replace(/\D/g, ''); }
 
@@ -24,75 +23,130 @@ function generateFakeId() {
   return 'BAE5' + Math.floor(Math.random() * 1000000000000000).toString(16).toUpperCase();
 }
 
-// 🎈 FUNCIÓN: DIBUJAR BANDERINES DE FIESTA
-function drawBunting(ctx, width) {
-  const colors = ['#FF3B30', '#FF9500', '#FFCC00', '#4CD964', '#5AC8FA', '#007AFF', '#5856D6', '#FF2D55'];
-  const numFlags = 9;
-  const flagWidth = width / numFlags;
+// 🎆 FUNCIÓN: DIBUJAR FUEGOS ARTIFICIALES
+function drawFirework(ctx, x, y, color) {
+  ctx.save();
+  ctx.translate(x, y);
+  for (let i = 0; i < 16; i++) {
+    const angle = (Math.PI * 2 / 16) * i;
+    ctx.beginPath();
+    ctx.moveTo(Math.cos(angle) * 15, Math.sin(angle) * 15);
+    ctx.lineTo(Math.cos(angle) * 70, Math.sin(angle) * 70);
+    ctx.strokeStyle = color;
+    ctx.lineWidth = 4;
+    ctx.lineCap = 'round';
+    ctx.stroke();
+    
+    // Chispa en la punta
+    ctx.beginPath();
+    ctx.arc(Math.cos(angle) * 85, Math.sin(angle) * 85, 4, 0, Math.PI * 2);
+    ctx.fillStyle = '#FFFFFF';
+    ctx.fill();
+  }
+  ctx.restore();
+}
+
+// 🎈 FUNCIÓN: DIBUJAR GLOBOS REALISTAS
+function drawBalloon(ctx, x, y, color) {
+  ctx.save();
+  ctx.translate(x, y);
   
-  // Cuerda de los banderines
+  // Hilo del globo
   ctx.beginPath();
-  ctx.moveTo(0, 50);
-  ctx.quadraticCurveTo(width / 2, 120, width, 50);
-  ctx.lineWidth = 3;
-  ctx.strokeStyle = '#FFFFFF';
+  ctx.moveTo(0, 45);
+  ctx.quadraticCurveTo(15, 80, -10, 150);
+  ctx.strokeStyle = 'rgba(255, 255, 255, 0.6)';
+  ctx.lineWidth = 2;
   ctx.stroke();
 
-  // Dibujar cada triángulo
-  for (let i = 0; i < numFlags; i++) {
-    const startX = i * flagWidth;
-    const endX = (i + 1) * flagWidth;
-    const midX = (startX + endX) / 2;
-    
-    // Altura del triángulo simulando la curva de la cuerda
-    const curveOffset = Math.sin((i / numFlags) * Math.PI) * 50; 
-    const yTop = 50 + curveOffset;
-    
-    ctx.beginPath();
-    ctx.moveTo(startX + 10, yTop);
-    ctx.lineTo(endX - 10, yTop);
-    ctx.lineTo(midX, yTop + 130 + (Math.random() * 40)); // Punta hacia abajo
-    ctx.fillStyle = colors[i % colors.length];
-    ctx.fill();
-    
-    // Sombra interior del banderín
-    ctx.lineWidth = 4;
-    ctx.strokeStyle = 'rgba(0,0,0,0.1)';
-    ctx.stroke();
-  }
-}
-
-// 🎉 FUNCIÓN: DIBUJAR SERPENTINAS Y CONFETI
-function drawPartyDecorations(ctx, width, height) {
-  const colors = ['#FF3B30', '#4CD964', '#FFCC00', '#5AC8FA', '#FF2D55'];
+  // Cuerpo del globo
+  ctx.beginPath();
+  ctx.moveTo(0, 40);
+  ctx.bezierCurveTo(45, 40, 55, -45, 0, -55);
+  ctx.bezierCurveTo(-55, -45, -45, 40, 0, 40);
+  ctx.fillStyle = color;
+  ctx.fill();
   
-  // Serpentinas (Líneas curvas)
-  for (let i = 0; i < 15; i++) {
-    ctx.beginPath();
-    ctx.moveTo(Math.random() * width, -50);
-    ctx.bezierCurveTo(
-      Math.random() * width, Math.random() * height / 2,
-      Math.random() * width, Math.random() * height / 2,
-      Math.random() * width, height + 50
-    );
-    ctx.lineWidth = Math.random() * 8 + 4;
-    ctx.strokeStyle = colors[Math.floor(Math.random() * colors.length)];
-    ctx.stroke();
-  }
+  // Nudo del globo
+  ctx.beginPath();
+  ctx.moveTo(-8, 40);
+  ctx.lineTo(8, 40);
+  ctx.lineTo(12, 50);
+  ctx.lineTo(-12, 50);
+  ctx.fill();
 
-  // Confeti de colores
-  for (let i = 0; i < 200; i++) {
-    ctx.fillStyle = colors[Math.floor(Math.random() * colors.length)];
-    ctx.beginPath();
-    ctx.arc(Math.random() * width, Math.random() * height, Math.random() * 8 + 4, 0, Math.PI * 2);
-    ctx.fill();
-  }
+  // Brillo (Reflejo de luz)
+  ctx.beginPath();
+  ctx.ellipse(-15, -20, 8, 15, Math.PI / 6, 0, Math.PI * 2);
+  ctx.fillStyle = 'rgba(255, 255, 255, 0.4)';
+  ctx.fill();
+  
+  ctx.restore();
 }
 
-// 🎨 CREADOR DE TARJETA FESTIVA DEFINITIVA
-async function createFestiveCard(pfpUrl, pushName = 'Amigo') {
+// 🎂 FUNCIÓN: DIBUJAR PASTEL DE DOS PISOS
+function drawCake(ctx, x, y) {
+  ctx.save();
+  ctx.translate(x, y);
+
+  // Piso Inferior
+  ctx.fillStyle = '#FF9500'; // Naranja
+  ctx.beginPath();
+  ctx.roundRect(-120, -70, 240, 70, 10);
+  ctx.fill();
+  
+  // Glaseado piso inferior
+  ctx.fillStyle = '#FFFFFF';
+  ctx.beginPath();
+  ctx.roundRect(-125, -75, 250, 30, 10);
+  ctx.fill();
+  for(let i = -110; i < 110; i+= 30) {
+    ctx.beginPath();
+    ctx.arc(i + 15, -45, 15, 0, Math.PI);
+    ctx.fill();
+  }
+
+  // Piso Superior
+  ctx.fillStyle = '#FF2D55'; // Rosa fiesta
+  ctx.beginPath();
+  ctx.roundRect(-80, -130, 160, 60, 10);
+  ctx.fill();
+
+  // Glaseado piso superior
+  ctx.fillStyle = '#FFDF00'; // Amarillo dorado
+  ctx.beginPath();
+  ctx.roundRect(-85, -135, 170, 25, 10);
+  ctx.fill();
+  for(let i = -70; i < 70; i+= 25) {
+    ctx.beginPath();
+    ctx.arc(i + 12.5, -110, 12.5, 0, Math.PI);
+    ctx.fill();
+  }
+
+  // Velas
+  const candleColors = ['#007AFF', '#4CD964', '#007AFF'];
+  const candleX = [-40, 0, 40];
+  for(let i = 0; i < 3; i++) {
+    // Cuerpo
+    ctx.fillStyle = candleColors[i];
+    ctx.fillRect(candleX[i] - 6, -170, 12, 40);
+    // Llama
+    ctx.fillStyle = '#FF9500';
+    ctx.beginPath();
+    ctx.arc(candleX[i], -180, 8, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = '#FFDF00';
+    ctx.beginPath();
+    ctx.arc(candleX[i], -180, 4, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  ctx.restore();
+}
+
+// 🎨 CREADOR DE TARJETA CUADRADA FESTIVA
+async function createSquareFestiveCard(pfpUrl, pushName = 'Amigo') {
   const width = 1080;
-  const height = 1350;
+  const height = 1080; // Formato 1:1 Cuadrado Perfecto
   const canvas = createCanvas(width, height);
   const ctx = canvas.getContext('2d');
 
@@ -100,139 +154,120 @@ async function createFestiveCard(pfpUrl, pushName = 'Amigo') {
   try {
     avatarImage = await loadImage(pfpUrl);
   } catch {
-    // Imagen por defecto colorida si falla la descarga
     const fallbackCanvas = createCanvas(500, 500);
     const fallbackCtx = fallbackCanvas.getContext('2d');
-    fallbackCtx.fillStyle = '#FF9500';
+    fallbackCtx.fillStyle = '#800080';
     fallbackCtx.fillRect(0,0,500,500);
     avatarImage = fallbackCanvas;
   }
 
-  // 🌌 1. FONDO: LA FOTO DE PERFIL DIFUMINADA
+  // 🌌 1. FONDO DIFUMINADO
   ctx.save();
-  // Aplicamos un filtro de desenfoque nativo (Si la versión de canvas lo soporta)
-  if (ctx.filter) ctx.filter = 'blur(15px)';
-  // Dibujamos la imagen gigante para cubrir el fondo
+  if (ctx.filter) ctx.filter = 'blur(12px)';
   ctx.drawImage(avatarImage, -50, -50, width + 100, height + 100);
   ctx.restore();
 
-  // Capa oscura translúcida para que los colores de la fiesta resalten
-  ctx.fillStyle = 'rgba(20, 0, 40, 0.65)'; 
+  // Capa oscura vibrante
+  ctx.fillStyle = 'rgba(15, 0, 30, 0.75)'; 
   ctx.fillRect(0, 0, width, height);
 
-  // 🎉 2. DIBUJAR DECORACIÓN FESTIVA (Banderines y Serpentinas)
-  drawPartyDecorations(ctx, width, height);
-  drawBunting(ctx, width);
+  // 🎆 2. DIBUJAR FUEGOS ARTIFICIALES
+  drawFirework(ctx, 200, 200, '#00FFFF'); // Cyan
+  drawFirework(ctx, 880, 250, '#FF2D55'); // Rosa
+  drawFirework(ctx, 150, 750, '#FFD700'); // Dorado
+  drawFirework(ctx, 900, 700, '#4CD964'); // Verde
 
-  // 🎁 3. DIBUJAR OBJETOS DE FIESTA (Usando emojis renderizados como gráficos HD)
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'middle';
-  
-  // Sombra para que los objetos destaquen
-  ctx.shadowColor = 'rgba(0,0,0,0.6)';
-  ctx.shadowBlur = 20;
+  // 🎉 3. DIBUJAR CONFETI GEOMÉTRICO
+  const confColors = ['#FF3B30', '#FF9500', '#FFCC00', '#4CD964', '#5AC8FA', '#FF2D55'];
+  for (let i = 0; i < 150; i++) {
+    ctx.fillStyle = confColors[Math.floor(Math.random() * confColors.length)];
+    ctx.beginPath();
+    ctx.arc(Math.random() * width, Math.random() * height, Math.random() * 6 + 3, 0, Math.PI * 2);
+    ctx.fill();
+  }
 
-  ctx.font = '140px Arial';
-  ctx.fillText('🪅', 150, 350); // Piñata arriba izquierda
-  ctx.fillText('🎈', width - 130, 320); // Globo arriba derecha
-  
-  ctx.font = '160px Arial';
-  ctx.fillText('🎂', 200, height - 250); // Pastel gigante abajo izquierda
-  ctx.fillText('🎁', width - 200, height - 230); // Regalo abajo derecha
-  
-  ctx.font = '100px Arial';
-  ctx.fillText('🎊', width / 2 - 250, 480); 
-  ctx.fillText('🎉', width / 2 + 250, 480);
+  // 🎈 4. DIBUJAR GLOBOS LATERALES
+  drawBalloon(ctx, 120, 350, '#FF3B30'); // Rojo izq
+  drawBalloon(ctx, 220, 420, '#5AC8FA'); // Azul izq
+  drawBalloon(ctx, 960, 320, '#FFCC00'); // Amarillo der
+  drawBalloon(ctx, 860, 450, '#FF2D55'); // Rosa der
 
-  // 📸 4. MARCO CENTRAL DIVERTIDO PARA LA FOTO
+  // 📸 5. FOTO DE PERFIL CENTRAL Y CUADRADA CON BORDES REDONDOS
   const centerX = width / 2;
-  const centerY = 550;
-  const radius = 220;
+  const centerY = 380;
+  const pfpSize = 400; // Tamaño de la foto
 
+  ctx.save();
   ctx.shadowColor = 'rgba(0,0,0,0.8)';
   ctx.shadowBlur = 40;
-
-  // Círculo blanco grueso (Estilo Polaroid/Sticker)
+  
+  // Marco blanco exterior
   ctx.beginPath();
-  ctx.arc(centerX, centerY, radius + 25, 0, Math.PI * 2);
+  ctx.roundRect(centerX - (pfpSize/2) - 15, centerY - (pfpSize/2) - 15, pfpSize + 30, pfpSize + 30, 40);
   ctx.fillStyle = '#FFFFFF';
   ctx.fill();
 
-  // Círculo de color vibrante interior
+  // Marco interior dorado
   ctx.beginPath();
-  ctx.arc(centerX, centerY, radius + 10, 0, Math.PI * 2);
-  ctx.fillStyle = '#FF2D55'; // Rosa fiesta
+  ctx.roundRect(centerX - (pfpSize/2) - 5, centerY - (pfpSize/2) - 5, pfpSize + 10, pfpSize + 10, 35);
+  ctx.fillStyle = '#FFD700';
   ctx.fill();
 
-  // Dibujar la foto de perfil nítida en el centro
+  // Foto de perfil recortada
   ctx.shadowColor = 'transparent';
-  ctx.save();
   ctx.beginPath();
-  ctx.arc(centerX, centerY, radius, 0, Math.PI * 2);
+  ctx.roundRect(centerX - pfpSize/2, centerY - pfpSize/2, pfpSize, pfpSize, 30);
   ctx.closePath();
   ctx.clip();
-  ctx.drawImage(avatarImage, centerX - radius, centerY - radius, radius * 2, radius * 2);
+  ctx.drawImage(avatarImage, centerX - pfpSize/2, centerY - pfpSize/2, pfpSize, pfpSize);
   ctx.restore();
 
-  // 📝 5. TEXTO PRINCIPAL SÚPER ALEGRE
-  ctx.shadowColor = 'rgba(0,0,0,0.8)';
+  // 📝 6. TEXTO ESPECTACULAR
+  ctx.shadowColor = 'rgba(0,0,0,0.9)';
   ctx.shadowBlur = 15;
-  ctx.shadowOffsetY = 10;
+  ctx.shadowOffsetY = 8;
   ctx.textAlign = 'center';
   
   // Título: FELIZ CUMPLEAÑOS
-  ctx.font = '900 100px "Arial Black", sans-serif';
-  ctx.lineWidth = 15;
-  ctx.strokeStyle = '#000000'; // Borde negro grueso
-  ctx.strokeText('¡FELIZ CUMPLEAÑOS!', centerX, 880);
+  ctx.font = '900 85px "Arial Black", Impact, sans-serif';
+  ctx.lineWidth = 12;
+  ctx.strokeStyle = '#000000';
+  ctx.strokeText('¡FELIZ CUMPLEAÑOS!', centerX, 730);
   
-  // Degradado arcoíris para el título
-  const rainbowGrad = ctx.createLinearGradient(centerX - 400, 0, centerX + 400, 0);
-  rainbowGrad.addColorStop(0, '#FF3B30'); // Rojo
-  rainbowGrad.addColorStop(0.3, '#FFCC00'); // Amarillo
-  rainbowGrad.addColorStop(0.6, '#4CD964'); // Verde
-  rainbowGrad.addColorStop(1, '#007AFF'); // Azul
-  ctx.fillStyle = rainbowGrad;
-  ctx.fillText('¡FELIZ CUMPLEAÑOS!', centerX, 880);
+  const textGrad = ctx.createLinearGradient(0, 650, 0, 750);
+  textGrad.addColorStop(0, '#FFDF00');
+  textGrad.addColorStop(1, '#FF8C00');
+  ctx.fillStyle = textGrad;
+  ctx.fillText('¡FELIZ CUMPLEAÑOS!', centerX, 730);
 
-  // Nombre del cumpleañero (Fondo estilo cinta de regalo)
-  const displayName = pushName.length > 14 ? pushName.substring(0, 14) + '...' : pushName;
-  ctx.font = 'bold 80px sans-serif';
-  
-  // Dibujar caja detrás del nombre
+  // Cinta con el nombre
+  const displayName = pushName.length > 15 ? pushName.substring(0, 15) + '...' : pushName;
+  ctx.font = 'bold 65px sans-serif';
   const textWidth = ctx.measureText(displayName).width;
-  ctx.fillStyle = '#FF2D55'; // Cinta roja/rosa
+  
+  ctx.fillStyle = '#E30039'; // Rojo carmesí
   ctx.beginPath();
-  ctx.roundRect(centerX - textWidth/2 - 40, 950, textWidth + 80, 120, 60); // Caja con bordes redondos
+  ctx.roundRect(centerX - textWidth/2 - 50, 780, textWidth + 100, 100, 50);
   ctx.fill();
-  ctx.lineWidth = 6;
+  ctx.lineWidth = 5;
   ctx.strokeStyle = '#FFFFFF';
   ctx.stroke();
 
-  // Escribir el nombre
   ctx.fillStyle = '#FFFFFF';
-  ctx.shadowColor = 'transparent'; // Quitar sombra para que se lea nítido
-  ctx.fillText(displayName, centerX, 1035);
+  ctx.shadowColor = 'transparent'; 
+  ctx.fillText(displayName, centerX, 850);
 
-  // Mensaje final
-  ctx.shadowColor = 'rgba(0,0,0,0.8)';
-  ctx.shadowBlur = 10;
-  ctx.fillStyle = '#FFF8DC';
-  ctx.font = 'bold 45px sans-serif';
-  ctx.fillText('✨ Que se arme la verdadera fiesta ✨', centerX, 1180);
-  ctx.fillStyle = '#E0E0E0';
-  ctx.font = '35px sans-serif';
-  ctx.fillText('Te deseamos lo mejor hoy y siempre', centerX, 1250);
+  // 🎂 7. DIBUJAR PASTEL EN LA PARTE INFERIOR
+  drawCake(ctx, centerX, 1060); // Se dibuja pegado abajo en el centro
 
   return canvas.toBuffer('image/jpeg', { quality: 0.95 });
 }
 
-// --- MÓDULO EXPORTADO ---
 module.exports = {
   name: 'felizcumple',
   aliases: ['cumpleaños', 'hb', 'hbd'],
   category: 'diversión',
-  desc: 'Genera una tarjeta festiva llena de color, globos y pasteles',
+  desc: 'Genera una tarjeta cuadrada festiva con globos, pasteles y foto integrada',
 
   execute: async ({ sock, remoteJid, msg, args, reply }) => {
     try {
@@ -244,7 +279,6 @@ module.exports = {
 
       const targetNum = cleanNumber(target);
 
-      // Obtener nombre real de WhatsApp
       let targetName = targetNum;
       try {
         const contact = await sock.onWhatsApp(target);
@@ -278,11 +312,10 @@ module.exports = {
         pfpUrl = 'https://i.imgur.com/JP3QZ7B.jpeg';
       }
 
-      // ⏳ Mensaje de espera
-      const loadMsg = await sock.sendMessage(remoteJid, { text: '⏳ _Preparando los globos, el pastel y la piñata..._' }, { quoted: msg });
+      const loadMsg = await sock.sendMessage(remoteJid, { text: '⏳ _Horneando el pastel y encendiendo los fuegos artificiales..._' }, { quoted: msg });
 
-      // 🎨 Generar la TARJETA FESTIVA
-      const imageBuffer = await createFestiveCard(pfpUrl, targetName);
+      // 🎨 Generar la NUEVA TARJETA CUADRADA
+      const imageBuffer = await createSquareFestiveCard(pfpUrl, targetName);
 
       let messageOptions = {
         image: imageBuffer,
@@ -290,7 +323,7 @@ module.exports = {
         mentions: [target]
       };
 
-      await sock.sendMessage(remoteJid, { delete: loadMsg.key }); // Borrar espera
+      await sock.sendMessage(remoteJid, { delete: loadMsg.key }); 
       await sock.sendMessage(remoteJid, messageOptions, { quoted: fakeQuoted });
 
     } catch (err) {
