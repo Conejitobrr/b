@@ -67,7 +67,7 @@ async function convertToVoice(input, output) {
 }
 
 module.exports = {
-  name: 'audios_pasivos', // Mantenemos el nombre original para no romper tu estructura
+  name: 'audios_pasivos',
   aliases: ['addaudio', 'añadiraudio', 'delaudio', 'borraraudio'],
   category: 'multimedia',
   desc: 'Añade o elimina audios automáticos para el chat',
@@ -91,7 +91,7 @@ module.exports = {
         return reply(`❌ No encontré ningún audio guardado con la palabra "${triggerWord}".`);
       }
 
-      // Borrar el archivo físico de la carpeta media
+      // Borrar el archivo físico de la carpeta media/
       const fileToDelete = path.join(MEDIA_DIR, customAudios[index].file);
       try { if (fs.existsSync(fileToDelete)) fs.unlinkSync(fileToDelete); } catch {}
 
@@ -136,7 +136,7 @@ module.exports = {
       for await (const chunk of stream) buffer = Buffer.concat([buffer, chunk]);
       fs.writeFileSync(inputMedia, buffer);
 
-      // 🔥 EXTRACCIÓN BLINDADA: Obligamos a que use libmp3lame para que no se corrompa
+      // Extracción blindada
       await execFileAsync('ffmpeg', [
         '-y', '-i', inputMedia,
         '-vn', '-c:a', 'libmp3lame', '-b:a', '128k', 
@@ -146,9 +146,8 @@ module.exports = {
       let customAudios = [];
       try { customAudios = JSON.parse(fs.readFileSync(CUSTOM_DB, 'utf-8')); } catch {}
       
-      // Si la palabra ya existía, evitamos duplicados
       if (customAudios.some(a => a.triggers.includes(triggerWord))) {
-         return reply(`⚠️ La palabra "${triggerWord}" ya tiene un audio asignado. Si quieres cambiarlo, primero usa *.delaudio ${triggerWord}*`);
+         return reply(`⚠️ La palabra "${triggerWord}" ya tiene un audio asignado. Si quieres cambiarlo, usa *.delaudio ${triggerWord}* primero.`);
       }
 
       customAudios.push({
@@ -171,7 +170,8 @@ module.exports = {
 
   // 2️⃣ SISTEMA AUTOMÁTICO DE ESCUCHA
   onMessage: async ({ sock, remoteJid, body, fromGroup, msg, groupData, userData }) => {
-    if (!body || msg.key.fromMe) return;
+    // 🔥 AQUÍ ESTABA EL ERROR: Ya le quité el msg.key.fromMe para que te haga caso a ti mismo
+    if (!body) return;
 
     if (fromGroup && groupData && groupData.audios === false) return;
     if (!fromGroup && userData && userData.audios === false) return;
@@ -179,7 +179,7 @@ module.exports = {
     ensureSetup();
     const text = normalize(body);
 
-    // Tus audios originales...
+    // Audios base clásicos
     const baseAudios = [
       { triggers: ['hola'], file: 'hola' },
       { triggers: ['autoestima'], file: 'Autoestima' },
@@ -246,11 +246,7 @@ module.exports = {
       
       await convertToVoice(input, output);
       
-      // 🔥 Validación por si FFmpeg falla y deja el archivo vacío
-      if (!fs.existsSync(output) || fs.statSync(output).size <= 0) {
-        console.log('❌ Error: FFmpeg creó un archivo vacío.');
-        return;
-      }
+      if (!fs.existsSync(output) || fs.statSync(output).size <= 0) return;
 
       await sock.sendMessage(
         remoteJid,
