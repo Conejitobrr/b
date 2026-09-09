@@ -24,257 +24,207 @@ function generateFakeId() {
   return 'BAE5' + Math.floor(Math.random() * 1000000000000000).toString(16).toUpperCase();
 }
 
-// 🌟 EFECTOS GRÁFICOS PROCEDURALES AVANZADOS 🌟
-
-// 1. Rayos de luz volumétrica
-function drawSunburst(ctx, centerX, centerY, radius, width, height) {
-  ctx.save();
-  ctx.translate(centerX, centerY);
-  const numRays = 40;
-  for (let i = 0; i < numRays; i++) {
-    const angle = (Math.PI * 2 / numRays) * i;
-    ctx.rotate(angle);
-    ctx.beginPath();
-    ctx.moveTo(0, radius);
-    ctx.lineTo(30, width + height);
-    ctx.lineTo(-30, width + height);
-    
-    // Degradado radial para que la luz se desvanezca
-    const gradient = ctx.createLinearGradient(0, radius, 0, width);
-    gradient.addColorStop(0, 'rgba(255, 215, 0, 0.15)');
-    gradient.addColorStop(1, 'rgba(255, 215, 0, 0)');
-    ctx.fillStyle = gradient;
-    ctx.fill();
-    ctx.closePath();
-  }
-  ctx.restore();
-}
-
-// 2. Destellos ópticos (Flares horizontales)
-function drawLightFlare(ctx, x, y, width) {
-  ctx.save();
-  ctx.globalCompositeOperation = 'screen';
-  const gradient = ctx.createRadialGradient(x, y, 0, x, y, width / 2);
-  gradient.addColorStop(0, 'rgba(255, 255, 255, 1)');
-  gradient.addColorStop(0.1, 'rgba(255, 215, 0, 0.8)');
-  gradient.addColorStop(0.5, 'rgba(255, 0, 127, 0.2)');
-  gradient.addColorStop(1, 'rgba(0, 0, 0, 0)');
+// 🎈 FUNCIÓN: DIBUJAR BANDERINES DE FIESTA
+function drawBunting(ctx, width) {
+  const colors = ['#FF3B30', '#FF9500', '#FFCC00', '#4CD964', '#5AC8FA', '#007AFF', '#5856D6', '#FF2D55'];
+  const numFlags = 9;
+  const flagWidth = width / numFlags;
   
-  ctx.fillStyle = gradient;
-  // Estirar el círculo para que parezca un destello de lente anamórfico
-  ctx.transform(1, 0, 0, 0.05, 0, y * 0.95);
+  // Cuerda de los banderines
   ctx.beginPath();
-  ctx.arc(x, y, width / 2, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.restore();
-}
-
-// 3. Texto en 3D Metálico
-function draw3DText(ctx, text, x, y, fontSize) {
-  ctx.textAlign = 'center';
-  ctx.font = `900 ${fontSize}px "Arial Black", Impact, sans-serif`;
-
-  const depth = 25; // Profundidad del 3D
-
-  // Dibujar las capas traseras (La sombra / extrusión 3D)
-  for (let i = depth; i > 0; i--) {
-    // Intercalar colores para dar textura al borde 3D
-    ctx.fillStyle = (i % 2 === 0) ? '#5c4000' : '#8a6300';
-    
-    // Sombra en la última capa para que resalte contra el fondo
-    if (i === depth) {
-      ctx.shadowColor = 'rgba(0,0,0,0.9)';
-      ctx.shadowBlur = 30;
-      ctx.shadowOffsetY = 20;
-    } else {
-      ctx.shadowColor = 'transparent';
-    }
-    // Desplazamiento diagonal
-    ctx.fillText(text, x - (i * 1.5), y + (i * 1.5));
-  }
-
-  // Dibujar la cara frontal (Oro brillante)
-  ctx.shadowColor = 'rgba(255, 255, 255, 0.4)';
-  ctx.shadowBlur = 10;
-  ctx.shadowOffsetY = 0;
-  
-  const frontGrad = ctx.createLinearGradient(0, y - fontSize, 0, y);
-  frontGrad.addColorStop(0, '#FFF8DC'); // Blanco crema brillante
-  frontGrad.addColorStop(0.3, '#FFDF00'); // Oro vivo
-  frontGrad.addColorStop(0.7, '#DAA520'); // Oro medio
-  frontGrad.addColorStop(1, '#B8860B');  // Oro oscuro
-  
-  ctx.fillStyle = frontGrad;
-  // Borde blanco sutil en la letra frontal
-  ctx.lineWidth = 2;
+  ctx.moveTo(0, 50);
+  ctx.quadraticCurveTo(width / 2, 120, width, 50);
+  ctx.lineWidth = 3;
   ctx.strokeStyle = '#FFFFFF';
-  ctx.fillText(text, x, y);
-  ctx.strokeText(text, x, y);
+  ctx.stroke();
+
+  // Dibujar cada triángulo
+  for (let i = 0; i < numFlags; i++) {
+    const startX = i * flagWidth;
+    const endX = (i + 1) * flagWidth;
+    const midX = (startX + endX) / 2;
+    
+    // Altura del triángulo simulando la curva de la cuerda
+    const curveOffset = Math.sin((i / numFlags) * Math.PI) * 50; 
+    const yTop = 50 + curveOffset;
+    
+    ctx.beginPath();
+    ctx.moveTo(startX + 10, yTop);
+    ctx.lineTo(endX - 10, yTop);
+    ctx.lineTo(midX, yTop + 130 + (Math.random() * 40)); // Punta hacia abajo
+    ctx.fillStyle = colors[i % colors.length];
+    ctx.fill();
+    
+    // Sombra interior del banderín
+    ctx.lineWidth = 4;
+    ctx.strokeStyle = 'rgba(0,0,0,0.1)';
+    ctx.stroke();
+  }
 }
 
-// 4. Dibujar un Listón/Banda de honor (Ribbon)
-function drawRibbon(ctx, x, y, width, height, text) {
-  const fold = 40; // Profundidad del doblez
-
-  ctx.save();
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'middle';
-  ctx.font = 'bold 50px sans-serif';
-
-  // Sombra global del listón
-  ctx.shadowColor = 'rgba(0,0,0,0.8)';
-  ctx.shadowBlur = 20;
-  ctx.shadowOffsetY = 15;
-
-  // Cola izquierda
-  ctx.beginPath();
-  ctx.moveTo(x - width/2 - fold, y - height/2 + 20);
-  ctx.lineTo(x - width/2 - fold - 60, y);
-  ctx.lineTo(x - width/2 - fold, y + height/2 - 20);
-  ctx.lineTo(x - width/2 + 20, y + height/2 - 20);
-  ctx.lineTo(x - width/2 + 20, y - height/2 + 20);
-  ctx.fillStyle = '#800000'; // Rojo oscuro
-  ctx.fill();
-
-  // Cola derecha
-  ctx.beginPath();
-  ctx.moveTo(x + width/2 + fold, y - height/2 + 20);
-  ctx.lineTo(x + width/2 + fold + 60, y);
-  ctx.lineTo(x + width/2 + fold, y + height/2 - 20);
-  ctx.lineTo(x + width/2 - 20, y + height/2 - 20);
-  ctx.lineTo(x + width/2 - 20, y - height/2 + 20);
-  ctx.fillStyle = '#800000';
-  ctx.fill();
-
-  // Pieza central principal (Rojo vivo)
-  ctx.beginPath();
-  ctx.rect(x - width/2, y - height/2, width, height);
-  const centerGrad = ctx.createLinearGradient(0, y - height/2, 0, y + height/2);
-  centerGrad.addColorStop(0, '#ff3333');
-  centerGrad.addColorStop(0.5, '#cc0000');
-  centerGrad.addColorStop(1, '#990000');
-  ctx.fillStyle = centerGrad;
-  ctx.fill();
+// 🎉 FUNCIÓN: DIBUJAR SERPENTINAS Y CONFETI
+function drawPartyDecorations(ctx, width, height) {
+  const colors = ['#FF3B30', '#4CD964', '#FFCC00', '#5AC8FA', '#FF2D55'];
   
-  // Bordes dorados del listón
-  ctx.lineWidth = 6;
-  ctx.strokeStyle = '#FFD700';
-  ctx.strokeRect(x - width/2 + 5, y - height/2 + 5, width - 10, height - 10);
+  // Serpentinas (Líneas curvas)
+  for (let i = 0; i < 15; i++) {
+    ctx.beginPath();
+    ctx.moveTo(Math.random() * width, -50);
+    ctx.bezierCurveTo(
+      Math.random() * width, Math.random() * height / 2,
+      Math.random() * width, Math.random() * height / 2,
+      Math.random() * width, height + 50
+    );
+    ctx.lineWidth = Math.random() * 8 + 4;
+    ctx.strokeStyle = colors[Math.floor(Math.random() * colors.length)];
+    ctx.stroke();
+  }
 
-  // Texto dentro del listón
-  ctx.shadowColor = 'transparent';
-  ctx.fillStyle = '#FFFFFF';
-  ctx.fillText(text, x, y);
-  ctx.restore();
+  // Confeti de colores
+  for (let i = 0; i < 200; i++) {
+    ctx.fillStyle = colors[Math.floor(Math.random() * colors.length)];
+    ctx.beginPath();
+    ctx.arc(Math.random() * width, Math.random() * height, Math.random() * 8 + 4, 0, Math.PI * 2);
+    ctx.fill();
+  }
 }
 
-// 🎨 CREADOR MAESTRO DE LA TARJETA
-async function createBirthdayCard(pfpUrl, pushName = 'Amigo') {
-  const width = 1200;
-  const height = 1600; // Resolución Gigante
+// 🎨 CREADOR DE TARJETA FESTIVA DEFINITIVA
+async function createFestiveCard(pfpUrl, pushName = 'Amigo') {
+  const width = 1080;
+  const height = 1350;
   const canvas = createCanvas(width, height);
   const ctx = canvas.getContext('2d');
 
-  // --- 1. FONDO CINEMÁTICO ---
-  const bgGradient = ctx.createRadialGradient(width/2, 600, 100, width/2, 600, 1200);
-  bgGradient.addColorStop(0, '#2b0033'); // Magenta oscuro profundo
-  bgGradient.addColorStop(0.5, '#0d001a'); // Morado medianoche
-  bgGradient.addColorStop(1, '#020005'); // Negro puro
-  ctx.fillStyle = bgGradient;
-  ctx.fillRect(0, 0, width, height);
-
-  // --- 2. RAYOS Y POLVO ESTELAR ---
-  drawSunburst(ctx, width/2, 600, 250, width, height);
-  
-  for(let i=0; i<300; i++) {
-    const pX = Math.random() * width;
-    const pY = Math.random() * height;
-    const pSize = Math.random() * 4;
-    ctx.beginPath();
-    ctx.arc(pX, pY, pSize, 0, Math.PI*2);
-    ctx.fillStyle = Math.random() > 0.5 ? 'rgba(255, 215, 0, 0.6)' : 'rgba(255, 255, 255, 0.4)';
-    ctx.fill();
+  let avatarImage;
+  try {
+    avatarImage = await loadImage(pfpUrl);
+  } catch {
+    // Imagen por defecto colorida si falla la descarga
+    const fallbackCanvas = createCanvas(500, 500);
+    const fallbackCtx = fallbackCanvas.getContext('2d');
+    fallbackCtx.fillStyle = '#FF9500';
+    fallbackCtx.fillRect(0,0,500,500);
+    avatarImage = fallbackCanvas;
   }
 
-  // --- 3. MARCO DE LA FOTO (MANDALA DE ORO) ---
-  const centerX = width / 2;
-  const centerY = 550;
-  const radius = 280;
-
-  // Engranaje / Corona exterior
+  // 🌌 1. FONDO: LA FOTO DE PERFIL DIFUMINADA
   ctx.save();
-  ctx.translate(centerX, centerY);
-  ctx.beginPath();
-  for(let i = 0; i < 60; i++) {
-    const angle = (Math.PI * 2 / 60) * i;
-    const r = i % 2 === 0 ? radius + 50 : radius + 30;
-    ctx.lineTo(Math.cos(angle) * r, Math.sin(angle) * r);
-  }
-  ctx.closePath();
-  ctx.fillStyle = '#FFD700';
-  ctx.shadowColor = 'rgba(255, 215, 0, 0.8)';
-  ctx.shadowBlur = 50;
-  ctx.fill();
+  // Aplicamos un filtro de desenfoque nativo (Si la versión de canvas lo soporta)
+  if (ctx.filter) ctx.filter = 'blur(15px)';
+  // Dibujamos la imagen gigante para cubrir el fondo
+  ctx.drawImage(avatarImage, -50, -50, width + 100, height + 100);
   ctx.restore();
 
-  // Círculo oscuro de contraste
+  // Capa oscura translúcida para que los colores de la fiesta resalten
+  ctx.fillStyle = 'rgba(20, 0, 40, 0.65)'; 
+  ctx.fillRect(0, 0, width, height);
+
+  // 🎉 2. DIBUJAR DECORACIÓN FESTIVA (Banderines y Serpentinas)
+  drawPartyDecorations(ctx, width, height);
+  drawBunting(ctx, width);
+
+  // 🎁 3. DIBUJAR OBJETOS DE FIESTA (Usando emojis renderizados como gráficos HD)
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  
+  // Sombra para que los objetos destaquen
+  ctx.shadowColor = 'rgba(0,0,0,0.6)';
+  ctx.shadowBlur = 20;
+
+  ctx.font = '140px Arial';
+  ctx.fillText('🪅', 150, 350); // Piñata arriba izquierda
+  ctx.fillText('🎈', width - 130, 320); // Globo arriba derecha
+  
+  ctx.font = '160px Arial';
+  ctx.fillText('🎂', 200, height - 250); // Pastel gigante abajo izquierda
+  ctx.fillText('🎁', width - 200, height - 230); // Regalo abajo derecha
+  
+  ctx.font = '100px Arial';
+  ctx.fillText('🎊', width / 2 - 250, 480); 
+  ctx.fillText('🎉', width / 2 + 250, 480);
+
+  // 📸 4. MARCO CENTRAL DIVERTIDO PARA LA FOTO
+  const centerX = width / 2;
+  const centerY = 550;
+  const radius = 220;
+
+  ctx.shadowColor = 'rgba(0,0,0,0.8)';
+  ctx.shadowBlur = 40;
+
+  // Círculo blanco grueso (Estilo Polaroid/Sticker)
   ctx.beginPath();
-  ctx.arc(centerX, centerY, radius + 15, 0, Math.PI * 2);
-  ctx.fillStyle = '#000000';
+  ctx.arc(centerX, centerY, radius + 25, 0, Math.PI * 2);
+  ctx.fillStyle = '#FFFFFF';
   ctx.fill();
 
-  // --- 4. DIBUJAR FOTO DE PERFIL ---
+  // Círculo de color vibrante interior
+  ctx.beginPath();
+  ctx.arc(centerX, centerY, radius + 10, 0, Math.PI * 2);
+  ctx.fillStyle = '#FF2D55'; // Rosa fiesta
+  ctx.fill();
+
+  // Dibujar la foto de perfil nítida en el centro
+  ctx.shadowColor = 'transparent';
   ctx.save();
   ctx.beginPath();
   ctx.arc(centerX, centerY, radius, 0, Math.PI * 2);
   ctx.closePath();
   ctx.clip();
-  try {
-    const avatar = await loadImage(pfpUrl);
-    ctx.drawImage(avatar, centerX - radius, centerY - radius, radius * 2, radius * 2);
-  } catch {
-    ctx.fillStyle = '#333';
-    ctx.fillRect(centerX - radius, centerY - radius, radius * 2, radius * 2);
-  }
+  ctx.drawImage(avatarImage, centerX - radius, centerY - radius, radius * 2, radius * 2);
   ctx.restore();
 
-  // Brillo interno en la foto
-  const innerGlow = ctx.createRadialGradient(centerX, centerY, radius - 40, centerX, centerY, radius);
-  innerGlow.addColorStop(0, 'rgba(0,0,0,0)');
-  innerGlow.addColorStop(1, 'rgba(255,215,0,0.6)');
-  ctx.beginPath();
-  ctx.arc(centerX, centerY, radius, 0, Math.PI * 2);
-  ctx.fillStyle = innerGlow;
-  ctx.fill();
-
-  // --- 5. TEXTO ÉPICO 3D ---
-  draw3DText(ctx, "FELIZ", centerX, 1020, 120);
-  draw3DText(ctx, "CUMPLEAÑOS", centerX, 1150, 130);
-
-  // --- 6. BANDA CON EL NOMBRE (RIBBON) ---
-  const displayName = pushName.length > 15 ? pushName.substring(0, 15) + '...' : pushName;
-  drawRibbon(ctx, centerX, 1320, 700, 110, displayName);
-
-  // --- 7. DETALLES FINALES ---
-  ctx.shadowColor = 'transparent';
+  // 📝 5. TEXTO PRINCIPAL SÚPER ALEGRE
+  ctx.shadowColor = 'rgba(0,0,0,0.8)';
+  ctx.shadowBlur = 15;
+  ctx.shadowOffsetY = 10;
   ctx.textAlign = 'center';
-  ctx.fillStyle = '#E0E0E0';
-  ctx.font = 'italic 35px serif';
-  ctx.fillText('✨ Que hoy sea el mejor día de tu vida ✨', centerX, 1480);
   
-  // Agregar destellos ópticos (Flares)
-  drawLightFlare(ctx, centerX, 400, 1200);
-  drawLightFlare(ctx, centerX, 1080, 900);
-
-  // Marco de tarjeta global elegante
+  // Título: FELIZ CUMPLEAÑOS
+  ctx.font = '900 100px "Arial Black", sans-serif';
   ctx.lineWidth = 15;
-  ctx.strokeStyle = 'rgba(255, 215, 0, 0.2)';
-  ctx.strokeRect(30, 30, width - 60, height - 60);
-  ctx.lineWidth = 4;
-  ctx.strokeStyle = 'rgba(255, 255, 255, 0.4)';
-  ctx.strokeRect(45, 45, width - 90, height - 90);
+  ctx.strokeStyle = '#000000'; // Borde negro grueso
+  ctx.strokeText('¡FELIZ CUMPLEAÑOS!', centerX, 880);
+  
+  // Degradado arcoíris para el título
+  const rainbowGrad = ctx.createLinearGradient(centerX - 400, 0, centerX + 400, 0);
+  rainbowGrad.addColorStop(0, '#FF3B30'); // Rojo
+  rainbowGrad.addColorStop(0.3, '#FFCC00'); // Amarillo
+  rainbowGrad.addColorStop(0.6, '#4CD964'); // Verde
+  rainbowGrad.addColorStop(1, '#007AFF'); // Azul
+  ctx.fillStyle = rainbowGrad;
+  ctx.fillText('¡FELIZ CUMPLEAÑOS!', centerX, 880);
 
-  return canvas.toBuffer('image/jpeg', { quality: 1.0 });
+  // Nombre del cumpleañero (Fondo estilo cinta de regalo)
+  const displayName = pushName.length > 14 ? pushName.substring(0, 14) + '...' : pushName;
+  ctx.font = 'bold 80px sans-serif';
+  
+  // Dibujar caja detrás del nombre
+  const textWidth = ctx.measureText(displayName).width;
+  ctx.fillStyle = '#FF2D55'; // Cinta roja/rosa
+  ctx.beginPath();
+  ctx.roundRect(centerX - textWidth/2 - 40, 950, textWidth + 80, 120, 60); // Caja con bordes redondos
+  ctx.fill();
+  ctx.lineWidth = 6;
+  ctx.strokeStyle = '#FFFFFF';
+  ctx.stroke();
+
+  // Escribir el nombre
+  ctx.fillStyle = '#FFFFFF';
+  ctx.shadowColor = 'transparent'; // Quitar sombra para que se lea nítido
+  ctx.fillText(displayName, centerX, 1035);
+
+  // Mensaje final
+  ctx.shadowColor = 'rgba(0,0,0,0.8)';
+  ctx.shadowBlur = 10;
+  ctx.fillStyle = '#FFF8DC';
+  ctx.font = 'bold 45px sans-serif';
+  ctx.fillText('✨ Que se arme la verdadera fiesta ✨', centerX, 1180);
+  ctx.fillStyle = '#E0E0E0';
+  ctx.font = '35px sans-serif';
+  ctx.fillText('Te deseamos lo mejor hoy y siempre', centerX, 1250);
+
+  return canvas.toBuffer('image/jpeg', { quality: 0.95 });
 }
 
 // --- MÓDULO EXPORTADO ---
@@ -282,7 +232,7 @@ module.exports = {
   name: 'felizcumple',
   aliases: ['cumpleaños', 'hb', 'hbd'],
   category: 'diversión',
-  desc: 'Genera el póster de cumpleaños más épico de todo WhatsApp',
+  desc: 'Genera una tarjeta festiva llena de color, globos y pasteles',
 
   execute: async ({ sock, remoteJid, msg, args, reply }) => {
     try {
@@ -307,7 +257,7 @@ module.exports = {
         targetName = 'Amigo/a';
       }
 
-      const texto = `🎂✨ *LA LEYENDA ESTÁ DE CUMPLEAÑOS* ✨🎂\n\n🎉 Todo el grupo se pone de pie para felicitar a @${targetNum} 🥳💖\n\n💌 ¡Feliz cumpleaños!\n\nTe hemos preparado este póster especial porque te mereces un día increíble, lleno de amor, regalos y muchísima felicidad ✨\n\n💖 Que nunca te falten motivos para sonreír\n🌟 Que todos tus sueños se hagan realidad\n🎁 Y que este nuevo año de vida sea el mejor de todos.\n\n¡A celebrar se ha dicho! 🎉🎂✨`;
+      const texto = `🎂✨ *¡ESTAMOS DE FIESTA!* ✨🎂\n\n🎉 Todo el grupo se reúne hoy para celebrar a @${targetNum} 🥳💖\n\n💌 ¡Feliz cumpleaños!\n\nTe hemos preparado esta tarjeta festiva porque te mereces un día increíble, lleno de pasteles, regalos y muchísima felicidad ✨\n\n💖 Que nunca te falten motivos para sonreír\n🌟 Que todos tus sueños se hagan realidad\n🎁 Y que este nuevo año de vida esté lleno de éxitos.\n\n¡A celebrar se ha dicho! 🎉🎂✨`;
 
       const fakeQuoted = {
         key: {
@@ -317,7 +267,7 @@ module.exports = {
           id: generateFakeId()
         },
         message: {
-          conversation: '🥳 ¡Hoy es mi cumpleaños, hagamos fiesta! 🎂✨'
+          conversation: '🥳 ¡Hoy es mi cumpleaños, quiero pastel! 🎂✨'
         }
       };
 
@@ -329,10 +279,10 @@ module.exports = {
       }
 
       // ⏳ Mensaje de espera
-      const loadMsg = await sock.sendMessage(remoteJid, { text: '⏳ _Renderizando póster 3D de alta resolución. Esto tardará unos segundos..._' }, { quoted: msg });
+      const loadMsg = await sock.sendMessage(remoteJid, { text: '⏳ _Preparando los globos, el pastel y la piñata..._' }, { quoted: msg });
 
-      // 🎨 Generar la OBRA DE ARTE
-      const imageBuffer = await createBirthdayCard(pfpUrl, targetName);
+      // 🎨 Generar la TARJETA FESTIVA
+      const imageBuffer = await createFestiveCard(pfpUrl, targetName);
 
       let messageOptions = {
         image: imageBuffer,
@@ -345,7 +295,7 @@ module.exports = {
 
     } catch (err) {
       console.log('❌ Error en plugin felizcumple:', err);
-      return reply('❌ Ocurrió un error al intentar generar la tarjeta maestra.');
+      return reply('❌ Ocurrió un error al intentar generar la tarjeta de fiesta.');
     }
   }
 };
