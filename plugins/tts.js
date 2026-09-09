@@ -32,9 +32,10 @@ module.exports = {
          return reply('❌ El texto es muy largo. Por favor, usa un máximo de 500 caracteres.');
       }
 
-      await sock.sendMessage(remoteJid, { text: '🗣️ Grabando nota de voz...' }, { quoted: msg });
+      // 🔥 Mostrar estado de "Grabando audio..." en la barra de WhatsApp (en vez de enviar un mensaje)
+      await sock.sendPresenceUpdate('recording', remoteJid);
 
-      // 🔥 Generar IDs únicos para evitar que los audios se crucen si 2 personas lo usan a la vez
+      // Generar IDs únicos para evitar que los audios se crucen si 2 personas lo usan a la vez
       const id = `${Date.now()}_${Math.floor(Math.random() * 9999)}`;
       inputMp3 = path.join(TEMP_DIR, `tts_in_${id}.mp3`);
       outputOgg = path.join(TEMP_DIR, `tts_out_${id}.ogg`);
@@ -58,7 +59,7 @@ module.exports = {
         outputOgg
       ]);
 
-      // 3️⃣ Enviar como nota de voz REAL
+      // 3️⃣ Enviar como nota de voz REAL directo al chat
       await sock.sendMessage(remoteJid, {
         audio: fs.readFileSync(outputOgg),
         mimetype: 'audio/ogg; codecs=opus',
