@@ -2,7 +2,7 @@
 
 module.exports = {
   name: 'pregunta',
-  aliases: ['preguntas', 'apakah', '8ball', 'bot'],
+  aliases: ['preguntas', 'apakah', '8ball'],
   category: 'diversión',
   desc: 'Responde a cualquier pregunta con respuestas aleatorias',
 
