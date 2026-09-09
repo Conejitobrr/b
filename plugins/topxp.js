@@ -14,7 +14,7 @@ function calculateLevel(xp) {
 }
 
 module.exports = {
-  name: 'top',
+  name: 'topxp',
   aliases: ['topxp', 'topglobal', 'leaderboard'],
   category: 'rpg',
   desc: 'Muestra el ranking de XP del grupo o a nivel global',
