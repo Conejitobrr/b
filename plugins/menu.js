@@ -33,7 +33,6 @@ module.exports = {
             
             categories[category].push({
               name: plugin.name,
-              // 🔥 AHORA CAPTURA LOS ALIASES
               aliases: (plugin.aliases && Array.isArray(plugin.aliases)) ? plugin.aliases.filter(a => a !== plugin.name) : [],
               desc: plugin.desc || 'Sin descripción'
             });
@@ -42,13 +41,12 @@ module.exports = {
         } catch (e) {}
       }
 
-      let menuText = `╔══════════════════════╗
-        🌌 *SIRIUS BOT PRO* 🌌
-╚══════════════════════╝
-
-👤 Hola *${pushName || 'Usuario'}* ✨
-⚙️ Prefijo: *${config.prefix}*
-📦 Plugins Activos: *${totalCommands}*\n\n`;
+      let menuText = `╔══════════════════════╗\n`;
+      menuText += `        🌌 *SIRIUS BOT PRO* 🌌\n`;
+      menuText += `╚══════════════════════╝\n\n`;
+      menuText += `👤 Hola *${pushName || 'Usuario'}* ✨\n`;
+      menuText += `⚙️ Prefijo: *${config.prefix}*\n`;
+      menuText += `📦 Plugins Activos: *${totalCommands}*\n\n`;
 
       const sortedCategories = Object.keys(categories).sort();
 
@@ -73,12 +71,16 @@ module.exports = {
         
         categories[category].sort((a, b) => a.name.localeCompare(b.name));
 
+        // 🔥 NUEVA ESTRUCTURA VISUAL EN ÁRBOL
         for (const cmd of categories[category]) {
-          // 🔥 AHORA IMPRIME LOS ALIASES AL LADO DEL NOMBRE
-          const aliasStr = cmd.aliases.length > 0 ? ` _[${cmd.aliases.join(', ')}]_` : '';
-          menuText += `➤ *${config.prefix}${cmd.name}*${aliasStr} → ${cmd.desc}\n`;
+          menuText += `✦ *${config.prefix}${cmd.name}*\n`;
+          if (cmd.aliases && cmd.aliases.length > 0) {
+            menuText += `  ├ ◦ _${cmd.desc}_\n`;
+            menuText += `  ╰ ◦ 🔹 _${cmd.aliases.join(', ')}_\n\n`;
+          } else {
+            menuText += `  ╰ ◦ _${cmd.desc}_\n\n`;
+          }
         }
-        menuText += `\n`;
       }
 
       menuText += `🚀 _Usa los comandos y sube de nivel_`;
