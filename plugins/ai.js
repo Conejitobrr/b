@@ -70,19 +70,22 @@ module.exports = {
   name: 'ai',
   aliases: ['bot', 'ia', 'sirius', 'chatgpt'],
   category: 'inteligencia artificial',
-  desc: 'Habla con la IA de SiriusBot (Con memoria de contexto)',
+  desc: 'Habla con la IA de SiriusBot (Conversación fluida)',
 
   // 1️⃣ EJECUCIÓN POR COMANDO DIRECTO (.ai)
   execute: async ({ sock, msg, remoteJid, args, pushName, sender, reply }) => {
     try {
       let text = args.join(' ').trim();
 
-      const quotedInfo = msg.message?.extendedTextMessage?.contextInfo;
-      const quotedMsg = quotedInfo?.quotedMessage;
+      const contextInfo = msg.message?.extendedTextMessage?.contextInfo;
+      const quotedMsg = contextInfo?.quotedMessage;
       let quotedText = '';
 
       if (quotedMsg) {
-        quotedText = quotedMsg.conversation || quotedMsg.extendedTextMessage?.text || '';
+        quotedText = quotedMsg.conversation || 
+                     quotedMsg.extendedTextMessage?.text || 
+                     quotedMsg.imageMessage?.caption || 
+                     quotedMsg.videoMessage?.caption || '';
       }
 
       if (!text && !quotedText) {
@@ -114,41 +117,61 @@ module.exports = {
     }
   },
 
-  // 2️⃣ SISTEMA AUTOMÁTICO DE ESCUCHA (Conversación Fluida)
-  // Utilizamos la misma estructura de tu plugin "audios_pasivos"
+  // 2️⃣ SISTEMA AUTOMÁTICO DE ESCUCHA (Conversación Fluida sin Puntos)
   onMessage: async ({ sock, remoteJid, body, msg, groupData, userData }) => {
+    // Si no hay texto, si lo mandó el bot, o si es un comando (.), ignoramos.
     if (!body || msg.key.fromMe) return;
-
-    // Si el mensaje empieza con un punto (.), dejamos que la función execute lo maneje
     if (body.startsWith('.')) return;
 
-    // Obtener el ID del bot (ej. 51958959882) quitándole basura de WhatsApp
-    const botId = sock.user.id.split(':')[0]; 
+    // Extraer qué mensaje citó el usuario (si es que citó alguno)
+    const contextInfo = msg.message?.extendedTextMessage?.contextInfo;
+    const quotedMsg = contextInfo?.quotedMessage;
+    let quotedText = '';
 
-    // ¿El usuario mencionó al bot con @ ?
-    const mentioned = msg.message?.extendedTextMessage?.contextInfo?.mentionedJid || [];
-    const isMentioned = mentioned.some(jid => jid.includes(botId));
+    if (quotedMsg) {
+      quotedText = quotedMsg.conversation || 
+                   quotedMsg.extendedTextMessage?.text || 
+                   quotedMsg.imageMessage?.caption || 
+                   quotedMsg.videoMessage?.caption || '';
+    }
 
-    // ¿El usuario respondió citando un mensaje del bot?
-    const quotedParticipant = msg.message?.extendedTextMessage?.contextInfo?.participant || '';
-    const isReplyToBot = quotedParticipant.includes(botId);
+    const history = getMemory(remoteJid);
+    
+    // 🔥 MÉTODO INFALIBLE 1: ¿El texto que estás respondiendo coincide con lo que dijo la IA?
+    let isReplyToBotHistory = false;
+    if (quotedText) {
+      const cleanQuoted = quotedText.trim().toLowerCase();
+      // Buscamos en la memoria si la IA dijo exactamente eso
+      isReplyToBotHistory = history.some(h => 
+        h.role === 'assistant' && h.content.toLowerCase().trim() === cleanQuoted
+      );
+    }
 
-    // ¿Tienen el modo chatbot prendido en todo el grupo?
+    // 🛡️ MÉTODO DE RESPALDO 2: Intentar verificar por número de teléfono
+    let botId = '';
+    try { botId = String(sock.user?.id || sock.user?.jid || sock.botNumber || '').split(':')[0].split('@')[0]; } catch(e) {}
+    const quotedParticipant = contextInfo?.participant || '';
+    const isReplyToBotId = botId ? quotedParticipant.includes(botId) : false;
+
+    // 🎯 OTRAS FORMAS DE ACTIVARLO
+    const mentioned = contextInfo?.mentionedJid || [];
+    const isMentioned = botId ? mentioned.some(jid => jid.includes(botId)) : false;
     const isChatbotEnabled = (groupData && groupData.chatbot) || (userData && userData.chatbot);
 
-    // Si ocurre CUALQUIERA de esas tres, la IA responde
-    if (isMentioned || isReplyToBot || isChatbotEnabled) {
-      // Limpiamos el texto por si tiene un "@Sirius" metido ahí
-      let cleanText = body.replace(new RegExp(`@${botId}`, 'g'), '').trim();
+    // ✅ SI CUALQUIERA DE ESTAS SE CUMPLE, EL BOT RESPONDE AL INSTANTE
+    if (isReplyToBotHistory || isReplyToBotId || isMentioned || isChatbotEnabled) {
+      
+      let cleanText = body;
+      if (botId) cleanText = cleanText.replace(new RegExp(`@${botId}`, 'g'), '');
+      cleanText = cleanText.trim();
       if (!cleanText) cleanText = 'Hola';
 
       await sock.sendPresenceUpdate('composing', remoteJid);
 
       const senderName = msg.pushName || 'Usuario';
-      const history = getMemory(remoteJid);
-      
       const aiReply = await askGroq(cleanText, senderName, history);
 
+      // Guardamos la nueva respuesta en la memoria para que siga el bucle
       saveToMemory(remoteJid, 'user', `${senderName} dice: ${cleanText}`);
       saveToMemory(remoteJid, 'assistant', aiReply);
 
