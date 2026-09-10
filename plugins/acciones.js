@@ -1,5 +1,7 @@
 'use strict';
 
+const axios = require('axios'); // 🔥 Inyectamos Axios para máxima estabilidad de red
+
 // 📚 DICCIONARIO DE ACCIONES ANIME (15 Acciones Diferentes)
 const acciones = {
   'abrazar':   { endpoint: 'hug',      emoji: '🫂', msg: 'le dio un fuerte abrazo a' },
@@ -56,7 +58,6 @@ module.exports = {
       return reply(`❌ Tienes que mencionar o responder a alguien.\n📌 *Ejemplo:* .${cmd} @amigo`);
     }
 
-    // Prevenir auto-acciones (a menos que el creador esté deprimido xD)
     if (targetId === sender) {
       return reply(`😅 No puedes usar *.${cmd}* contigo mismo, consíguete amigos pe.`);
     }
@@ -64,27 +65,28 @@ module.exports = {
     const loadMsg = await sock.sendMessage(remoteJid, { text: `${accion.emoji} _Generando escena..._` }, { quoted: msg });
 
     try {
-      // 2️⃣ CONECTAR A LA API EXTERNA (Cero lag para tu celular)
-      const res = await fetch(`https://api.waifu.pics/sfw/${accion.endpoint}`);
-      if (!res.ok) throw new Error('API caída');
-      const data = await res.json();
-      const imageUrl = data.url;
+      // 2️⃣ CONECTAR A LA API USANDO AXIOS (Sin lags, sin cortes de red)
+      const res = await axios.get(`https://api.waifu.pics/sfw/${accion.endpoint}`);
+      const imageUrl = res.data.url;
 
-      // 3️⃣ ARMAR EL MENSAJE FINAL
+      // 3️⃣ DESCARGAR LA IMAGEN A LA MEMORIA RAM
+      const imageDownload = await axios.get(imageUrl, { responseType: 'arraybuffer' });
+      const bufferImagen = Buffer.from(imageDownload.data);
+
       const textoFinal = `${accion.emoji} | *@${cleanJid(sender)}* ${accion.msg} *${targetName}*`;
 
       await sock.sendMessage(remoteJid, { delete: loadMsg.key });
 
-      // Enviamos el resultado directamente como imagen (o GIF estático) desde la URL
+      // 4️⃣ ENVIAR DESDE EL BUFFER
       await sock.sendMessage(remoteJid, {
-        image: { url: imageUrl },
+        image: bufferImagen, // Enviamos como imagen fotográfica directa
         caption: textoFinal,
         mentions: mencionesParaEnviar
       }, { quoted: msg });
 
     } catch (err) {
-      console.log(`❌ Error en Roleplay (${cmd}):`, err);
-      return reply('❌ Los servidores de anime están saturados. Intenta de nuevo en un ratito.');
+      console.log(`❌ Error en Roleplay (${cmd}):`, err.message);
+      return reply('❌ Ocurrió un error al descargar la imagen de anime. Intenta de nuevo.');
     }
   }
 };
