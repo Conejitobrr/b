@@ -71,7 +71,7 @@ module.exports = {
 
     const loadMsg = await sock.sendMessage(remoteJid, { text: `${accion.emoji} _Generando sticker animado..._` }, { quoted: msg });
 
-    // Nombres de archivos únicos para evitar colisiones si varios lo usan a la vez
+    // Nombres de archivos únicos para evitar colisiones
     const id = Date.now();
     const inputGif = path.join(TEMP_DIR, `in_${id}.gif`);
     const outputWebp = path.join(TEMP_DIR, `out_${id}.webp`);
@@ -104,16 +104,16 @@ module.exports = {
 
       await sock.sendMessage(remoteJid, { delete: loadMsg.key });
 
-      // 5️⃣ ENVIAR EL TEXTO PRIMERO (Con las menciones resaltadas)
-      const textMsg = await sock.sendMessage(remoteJid, {
-        text: textoFinal,
-        mentions: mencionesParaEnviar
+      // 5️⃣ ENVIAR EL STICKER PRIMERO (Respondiendo al comando original)
+      const stickerMsg = await sock.sendMessage(remoteJid, {
+        sticker: fs.readFileSync(outputWebp)
       }, { quoted: msg });
 
-      // 6️⃣ ENVIAR EL STICKER RESPONDIENDO AL TEXTO
+      // 6️⃣ ENVIAR EL TEXTO (Respondiendo al sticker que acabamos de mandar)
       await sock.sendMessage(remoteJid, {
-        sticker: fs.readFileSync(outputWebp)
-      }, { quoted: textMsg });
+        text: textoFinal,
+        mentions: mencionesParaEnviar
+      }, { quoted: stickerMsg });
 
     } catch (err) {
       console.log(`❌ Error en Roleplay Sticker (${cmd}):`, err.message);
