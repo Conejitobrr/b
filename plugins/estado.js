@@ -25,7 +25,7 @@ function formatBytes(bytes) {
 
 module.exports = {
   name: 'estado',
-  aliases: ['status', 'info', 'uptime', 'bot'],
+  aliases: ['status', 'uptime'],
   category: 'sistema',
   desc: 'Muestra el estado actual, velocidad y tiempo activo de SiriusBot',
 
