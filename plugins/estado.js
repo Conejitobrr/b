@@ -37,7 +37,7 @@ function createProgressBar(used, total, length = 10) {
 
 module.exports = {
   name: 'estado',
-  aliases: ['ping', 'status', 'info', 'uptime', 'bot'],
+  aliases: ['status', 'uptime'],
   category: 'sistema',
   desc: 'Muestra el estado actual y rendimiento de SiriusBot',
 
