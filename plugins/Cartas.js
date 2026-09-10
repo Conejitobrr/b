@@ -19,7 +19,7 @@ global.tradeRequests = global.tradeRequests || {};
 function cleanJid(jid = '') { return String(jid).split(':')[0]; }
 function cleanNumber(jid = '') { return cleanJid(jid).split('@')[0].replace(/\D/g, ''); }
 
-function getTarget(msg, args) {
+function getTarget(msg, args, sender) {
   const quoted = msg.message?.extendedTextMessage?.contextInfo?.participant;
   if (quoted) return cleanJid(quoted) + '@s.whatsapp.net';
   const mentioned = msg.message?.extendedTextMessage?.contextInfo?.mentionedJid?.[0];
@@ -56,31 +56,43 @@ function generarCarta() {
   return { rareza, tipo, atk, hp, valor, isFullArt };
 }
 
-// ✨ BRILLO METÁLICO Y ESTRELLAS (Reemplaza al arcoíris)
+// ✨ BRILLO HOLOGRÁFICO POKÉMON (Arcoíris Metálico)
 function drawSilverFoil(ctx, x, y, w, h) {
   ctx.save();
-  ctx.globalCompositeOperation = 'screen';
+  ctx.globalCompositeOperation = 'color-dodge';
   
-  // Reflejo metálico diagonal
+  // Gradiente arcoíris suave y brillante
   const holo = ctx.createLinearGradient(x, y, x + w, y + h);
-  holo.addColorStop(0, 'rgba(255, 255, 255, 0)');
-  holo.addColorStop(0.3, 'rgba(255, 255, 255, 0.2)');
-  holo.addColorStop(0.5, 'rgba(255, 255, 255, 0.7)');
-  holo.addColorStop(0.7, 'rgba(200, 220, 255, 0.3)');
+  holo.addColorStop(0, 'rgba(255, 150, 150, 0.4)');
+  holo.addColorStop(0.3, 'rgba(255, 255, 150, 0.6)'); // Dorado
+  holo.addColorStop(0.5, 'rgba(150, 255, 255, 0.7)'); // Cyan
+  holo.addColorStop(0.7, 'rgba(200, 150, 255, 0.5)'); // Morado
   holo.addColorStop(1, 'rgba(255, 255, 255, 0)');
   ctx.fillStyle = holo;
   ctx.fillRect(x, y, w, h);
   
-  // Dibujar estrellas brillantes holográficas
-  ctx.fillStyle = '#FFFFFF';
+  // Textura diagonal holográfica
+  ctx.globalAlpha = 0.4;
+  for(let i = 0; i < w + h; i += 30) {
+    ctx.beginPath();
+    ctx.moveTo(x + i, y);
+    ctx.lineTo(x, y + i);
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.6)';
+    ctx.lineWidth = 3;
+    ctx.stroke();
+  }
+
+  // Estrellas brillantes
+  ctx.globalAlpha = 0.9;
   ctx.shadowColor = '#FFFFFF';
-  ctx.shadowBlur = 10;
-  for(let i = 0; i < 20; i++) {
+  ctx.shadowBlur = 12;
+  for(let i = 0; i < 25; i++) {
     const sx = x + Math.random() * w;
     const sy = y + Math.random() * h;
     const size = Math.random() * 3 + 1;
     ctx.beginPath();
     ctx.arc(sx, sy, size, 0, Math.PI * 2);
+    ctx.fillStyle = '#FFFFFF';
     ctx.fill();
   }
   ctx.restore();
@@ -95,7 +107,7 @@ async function dibujarCartaPokemon(pfpUrl, renderName, stats) {
 
   if (renderName.length > 15) renderName = renderName.substring(0, 15) + '...';
 
-  // CARGAR IMAGEN (Fallo interno seguro, cero enlaces externos)
+  // CARGAR IMAGEN (Con Fallback sin enlaces externos)
   let avatar;
   try {
     if (pfpUrl) {
@@ -116,12 +128,12 @@ async function dibujarCartaPokemon(pfpUrl, renderName, stats) {
   }
 
   if (stats.isFullArt) {
-    // 🌟 ESTILO FULL ART HOLO (Legendarias)
+    // 🌟 ESTILO FULL ART HOLO (Legendarias y Míticas)
     ctx.fillStyle = '#111';
     ctx.fillRect(0, 0, width, height);
     
     ctx.drawImage(avatar, 20, 20, width - 40, height - 40);
-    drawSilverFoil(ctx, 20, 20, width - 40, height - 40); // Efecto Premium
+    drawSilverFoil(ctx, 20, 20, width - 40, height - 40); // ✨ Magia Holo aquí
 
     const topShadow = ctx.createLinearGradient(0, 0, 0, 250);
     topShadow.addColorStop(0, 'rgba(0,0,0,0.85)');
@@ -172,10 +184,10 @@ async function dibujarCartaPokemon(pfpUrl, renderName, stats) {
     ctx.fillText(`Rareza: ${stats.rareza} | Valor: ${stats.valor} XP`, 60, height - 170);
 
   } else {
-    // 💛 ESTILO CLÁSICO CON BORDES VARIABLES
+    // 💛 ESTILO CLÁSICO (Bordes Variables)
     let borderColor = '#F5D63D'; // Rara (Amarillo)
     if (stats.rareza === 'COMÚN') borderColor = '#B0BEC5'; // Plateado/Gris
-    if (stats.rareza === 'ÉPICA') borderColor = '#9C27B0'; // Morado
+    if (stats.rareza === 'ÉPICA') borderColor = '#9C27B0'; // Morado Épico
 
     ctx.fillStyle = borderColor; 
     ctx.fillRect(0, 0, width, height);
@@ -202,7 +214,7 @@ async function dibujarCartaPokemon(pfpUrl, renderName, stats) {
     ctx.fillRect(55, 135, 630, 420);
     ctx.drawImage(avatar, 60, 140, 620, 410);
 
-    // ✨ Las cartas ÉPICAS tienen efecto foil metálico sobre su imagen
+    // ✨ ¡Efecto Holográfico Exclusivo para cartas Épicas!
     if (stats.rareza === 'ÉPICA') {
       drawSilverFoil(ctx, 60, 140, 620, 410);
     }
@@ -260,7 +272,8 @@ module.exports = {
   category: 'juegos',
   desc: 'Colección de cartas TCG, peleas y mercado',
 
-  execute: async ({ sock, msg, remoteJid, sender, args, commandName, db, reply }) => {
+  // 🔴 ¡Ojo aquí! Añadimos pushName directamente a los parámetros ejecutables
+  execute: async ({ sock, msg, remoteJid, sender, pushName, args, commandName, db, reply }) => {
     const cmd = commandName.toLowerCase();
     const dbCartas = getCartas();
     if (!dbCartas[sender]) dbCartas[sender] = [];
@@ -284,37 +297,58 @@ module.exports = {
         const randomParticipant = participants[Math.floor(Math.random() * participants.length)];
         const jidElegido = randomParticipant.id;
 
-        // Intentar sacar un nombre para el Canvas (La imagen generada)
-        let canvasName = cleanNumber(jidElegido);
-        try {
-          if (sock.store && sock.store.contacts && sock.store.contacts[jidElegido]) {
-            canvasName = sock.store.contacts[jidElegido].pushName || sock.store.contacts[jidElegido].name || sock.store.contacts[jidElegido].notify || canvasName;
-          }
-          if (/^\d+$/.test(canvasName) && db) {
-            const uData = await db.getUser(jidElegido);
-            if (uData && uData.name) canvasName = uData.name;
-          }
-        } catch (e) {}
+        // 🧠 EXTRACCIÓN DE NICKNAME EXACTO TIPO RANK.JS
+        let nombreElegido = cleanNumber(jidElegido);
+        
+        // Si el bot te eligió a ti mismo, usamos pushName directo
+        if (jidElegido === sender && pushName) {
+            nombreElegido = pushName;
+        } else {
+            // Si eligió a otro, lo buscamos en el caché o en tu BD
+            try {
+                if (sock.store && sock.store.contacts && sock.store.contacts[jidElegido]) {
+                    const c = sock.store.contacts[jidElegido];
+                    nombreElegido = c.pushName || c.name || c.notify || nombreElegido;
+                }
+                if (/^\d+$/.test(nombreElegido) && db) {
+                    const uData = await db.getUser(jidElegido);
+                    if (uData && uData.name) nombreElegido = uData.name;
+                }
+            } catch (e) {}
+        }
 
-        if (/^\d+$/.test(canvasName)) canvasName = `Entrenador ${canvasName.slice(-4)}`;
+        // Si después de todo sigue siendo un número crudo, usamos "User XXXX"
+        if (/^\d+$/.test(nombreElegido)) {
+            nombreElegido = `User ${nombreElegido.slice(-4)}`;
+        }
 
         let pfpUrl = null;
         try { pfpUrl = await sock.profilePictureUrl(jidElegido, 'image'); } catch {}
 
         const stats = generarCarta();
 
-        const nuevaCarta = { jid: jidElegido, rareza: stats.rareza, tipo: stats.tipo.nombre, atk: stats.atk, hp: stats.hp, valor: stats.valor };
+        // 💾 GUARDAMOS EL NOMBRE EN TEXTO (Ej: "Sirius")
+        const nuevaCarta = { 
+            nombreReal: nombreElegido, 
+            jid: jidElegido, 
+            rareza: stats.rareza, 
+            tipo: stats.tipo.nombre, 
+            atk: stats.atk, 
+            hp: stats.hp, 
+            valor: stats.valor 
+        };
         misCartas.push(nuevaCarta);
         saveCartas(dbCartas);
 
-        const buffer = await dibujarCartaPokemon(pfpUrl, canvasName, stats);
+        // Dibuja el Canvas usando el nombre real de texto
+        const buffer = await dibujarCartaPokemon(pfpUrl, nombreElegido, stats);
+        
         await sock.sendMessage(remoteJid, { delete: loadMsg.key });
         
-        // MENCIÓN REAL EN EL TEXTO: WhatsApp convertirá el @numero al Nickname de color Azul
+        // El bot imprimirá el texto puro (Ej: 👤 Sirius), igual que rank.js
         await sock.sendMessage(remoteJid, { 
           image: buffer, 
-          caption: `🎉 ¡Felicidades! Has obtenido la carta de *@${cleanNumber(jidElegido)}*\n🌟 Rareza: *${stats.rareza}*\n\n🎒 Usa *.miscartas* para ver tu álbum.`,
-          mentions: [jidElegido]
+          caption: `🎉 ¡Felicidades! Has obtenido la carta de 👤 *${nombreElegido}*\n🌟 Rareza: *${stats.rareza}*\n\n🎒 Usa *.miscartas* para ver tu álbum.`
         }, { quoted: msg });
 
       } catch (err) {
@@ -323,22 +357,20 @@ module.exports = {
       }
     }
 
-    // 🎒 VER INVENTARIO (Listado con Menciones Reales Azules)
+    // 🎒 VER INVENTARIO (Texto puro como rank.js)
     if (cmd === 'miscartas') {
       if (misCartas.length === 0) return reply('🎒 Tu álbum está vacío. Compra sobres con *.tienda sobre 1*');
       
       let txt = `🎒 *TU ÁLBUM POKÉMON* 🎒\n\n`;
-      let arrayDeMenciones = [];
 
       misCartas.forEach((carta, index) => {
-        txt += `*[ ${index + 1} ]* ✦ ${carta.rareza} | *@${cleanNumber(carta.jid)}*\n⚔️ ATK: ${carta.atk} | 💖 HP: ${carta.hp} | 💎 ${carta.valor} XP\n\n`;
-        arrayDeMenciones.push(carta.jid);
+        // Se imprimirá exactamente el texto, ej: "👤 EVE J" o "👤 Sirius"
+        txt += `*[ ${index + 1} ]* ✦ ${carta.rareza} | 👤 ${carta.nombreReal || 'Usuario'}\n⚔️ ATK: ${carta.atk} | 💖 HP: ${carta.hp} | 💎 ${carta.valor} XP\n\n`;
       });
       
       txt += `💸 *Vender:* .vendercarta [número] | .vendertodas\n⚔️ *Pelear:* .duelocarta [tu_numero] @usuario\n🤝 *Intercambio:* .intercambiar @usuario [tu_num] [su_num]`;
       
-      // WhatsApp pintará todos los nombres de color azul
-      return sock.sendMessage(remoteJid, { text: txt, mentions: arrayDeMenciones }, { quoted: msg });
+      return sock.sendMessage(remoteJid, { text: txt }, { quoted: msg });
     }
 
     // 💸 VENDER UNA SOLA CARTA
@@ -376,7 +408,7 @@ module.exports = {
 
     // 🤝 SISTEMA DE INTERCAMBIO (TRADING)
     if (cmd === 'intercambiar') {
-      const target = getTarget(msg, args);
+      const target = getTarget(msg, args, sender);
       const miNum = parseInt(args[1]) - 1;
       const suNum = parseInt(args[2]) - 1;
 
@@ -392,8 +424,8 @@ module.exports = {
       global.tradeRequests[target] = { from: sender, miNum, suNum };
 
       return sock.sendMessage(remoteJid, { 
-        text: `⚖️ *SOLICITUD DE INTERCAMBIO* ⚖️\n\n@${cleanNumber(sender)} ofrece la carta de *@${cleanNumber(miCarta.jid)}* [${miCarta.rareza}]\nA cambio de la carta de *@${cleanNumber(suCarta.jid)}* [${suCarta.rareza}].\n\n@${cleanNumber(target)}, escribe *.aceptar* para confirmar.`, 
-        mentions: [sender, target, miCarta.jid, suCarta.jid] 
+        text: `⚖️ *SOLICITUD DE INTERCAMBIO* ⚖️\n\n👤 *${pushName}* ofrece la carta de 👤 ${miCarta.nombreReal} [${miCarta.rareza}]\nA cambio de la carta de 👤 ${suCarta.nombreReal} [${suCarta.rareza}].\n\n@${cleanNumber(target)}, escribe *.aceptar* para confirmar.`, 
+        mentions: [target] 
       });
     }
 
@@ -417,7 +449,7 @@ module.exports = {
     // ⚔️ DUELO DE CARTAS POKÉMON
     if (cmd === 'duelocarta') {
       const index = parseInt(args[0]) - 1;
-      const target = getTarget(msg, args.slice(1));
+      const target = getTarget(msg, args.slice(1), sender);
 
       if (isNaN(index) || !target) return reply('❌ Uso:\n*.duelocarta [tu_numero] @usuario*');
       if (!dbCartas[target] || dbCartas[target].length === 0) return reply('❌ Tu rival no tiene cartas para defenderse.');
@@ -428,7 +460,7 @@ module.exports = {
       const miPoder = miCarta.atk + Math.floor(Math.random() * 50);
       const poderEnemigo = cartaRival.hp + Math.floor(Math.random() * 50);
 
-      let txt = `⚔️ *BATALLA POKÉMON* ⚔️\n\n🔥 *@${cleanNumber(sender)}* usa la carta de *@${cleanNumber(miCarta.jid)}* (Daño: ${miPoder})\n🛡️ *@${cleanNumber(target)}* defiende con *@${cleanNumber(cartaRival.jid)}* (Defensa: ${poderEnemigo})\n\n`;
+      let txt = `⚔️ *BATALLA POKÉMON* ⚔️\n\n🔥 👤 *${pushName}* usa la carta de 👤 *${miCarta.nombreReal}* (Daño: ${miPoder})\n🛡️ *@${cleanNumber(target)}* defiende con la carta de 👤 *${cartaRival.nombreReal}* (Defensa: ${poderEnemigo})\n\n`;
 
       if (miPoder > poderEnemigo) {
         const botin = Math.floor(Math.random() * 800) + 200;
@@ -443,7 +475,7 @@ module.exports = {
       } else {
         txt += `🧱 *¡No es muy efectivo!* La defensa del rival resistió tu ataque.`;
       }
-      return sock.sendMessage(remoteJid, { text: txt, mentions: [sender, target, miCarta.jid, cartaRival.jid] }, { quoted: msg });
+      return sock.sendMessage(remoteJid, { text: txt, mentions: [target] }, { quoted: msg });
     }
   }
 };
