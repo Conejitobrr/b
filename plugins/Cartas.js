@@ -31,12 +31,12 @@ function getTarget(msg, args) {
 
 // 🎲 MOTOR DE RAREZAS, TIPOS Y ESTADÍSTICAS
 const TIPOS = [
-  { nombre: 'Fuego', color: '#E53935', emoji: '🔥' },
-  { nombre: 'Agua', color: '#1E88E5', emoji: '💧' },
-  { nombre: 'Planta', color: '#43A047', emoji: '🌿' },
-  { nombre: 'Rayo', color: '#FDD835', emoji: '⚡' },
-  { nombre: 'Oscuro', color: '#424242', emoji: '🌑' },
-  { nombre: 'Psíquico', color: '#8E24AA', emoji: '👁️' }
+  { nombre: 'Fuego', bg: '#E53935', emoji: '🔥' },
+  { nombre: 'Agua', bg: '#1E88E5', emoji: '💧' },
+  { nombre: 'Planta', bg: '#43A047', emoji: '🌿' },
+  { nombre: 'Rayo', bg: '#FDD835', emoji: '⚡' },
+  { nombre: 'Oscuro', bg: '#757575', emoji: '🌑' },
+  { nombre: 'Psíquico', bg: '#8E24AA', emoji: '👁️' }
 ];
 
 function generarCarta() {
@@ -44,28 +44,39 @@ function generarCarta() {
   const tipo = TIPOS[Math.floor(Math.random() * TIPOS.length)];
   let rareza, atk, hp, valor, isFullArt = false;
 
-  if (rand < 0.5) { // 0.5%
-    rareza = 'MÍTICA ex'; hp = Math.floor(Math.random() * 50) + 250; atk = Math.floor(Math.random() * 100) + 200; valor = 50000; isFullArt = true;
-  } else if (rand < 4) { // 3.5%
-    rareza = 'LEGENDARIA V'; hp = Math.floor(Math.random() * 50) + 180; atk = Math.floor(Math.random() * 50) + 120; valor = 15000; isFullArt = true;
-  } else if (rand < 15) { // 11%
+  if (rand < 0.5) { 
+    rareza = 'MÍTICA'; hp = Math.floor(Math.random() * 50) + 250; atk = Math.floor(Math.random() * 100) + 200; valor = 50000; isFullArt = true;
+  } else if (rand < 4) { 
+    rareza = 'LEGENDARIA'; hp = Math.floor(Math.random() * 50) + 180; atk = Math.floor(Math.random() * 50) + 120; valor = 15000; isFullArt = true;
+  } else if (rand < 15) { 
     rareza = 'ÉPICA'; hp = Math.floor(Math.random() * 40) + 120; atk = Math.floor(Math.random() * 40) + 80; valor = 3500;
-  } else if (rand < 40) { // 25%
+  } else if (rand < 40) { 
     rareza = 'RARA'; hp = Math.floor(Math.random() * 30) + 80; atk = Math.floor(Math.random() * 30) + 50; valor = 800;
-  } else { // 60%
+  } else { 
     rareza = 'COMÚN'; hp = Math.floor(Math.random() * 20) + 40; atk = Math.floor(Math.random() * 20) + 20; valor = 300;
   }
 
   return { rareza, tipo, atk, hp, valor, isFullArt };
 }
 
-// 🎨 CREADOR VISUAL DE LA CARTA (ESTILO POKÉMON ABSOLUTO)
-async function dibujarCartaPokemon(pfpUrl, nombre, stats) {
+// 🎨 CREADOR VISUAL DE LA CARTA (RÉPLICA POKÉMON)
+async function dibujarCartaPokemon(pfpUrl, nombreRaw, stats) {
   const width = 740;
   const height = 1040;
   const canvas = createCanvas(width, height);
   const ctx = canvas.getContext('2d');
 
+  // FILTRO ANTI-NÚMEROS LARGOS:
+  // Si el nombre es puro número o es muy largo, lo convertimos en "Entrenador XXXX"
+  let renderName = nombreRaw;
+  if (/^\d+$/.test(renderName) || renderName.length > 15) {
+    const last4 = renderName.slice(-4);
+    renderName = `Entrenador ${last4}`;
+  }
+  // Acortamos por si acaso hay un nickname extraño y gigante
+  if (renderName.length > 14) renderName = renderName.substring(0, 14) + '...';
+
+  // CARGAR IMAGEN DE PERFIL
   let avatar;
   try {
     avatar = await loadImage(pfpUrl);
@@ -77,146 +88,149 @@ async function dibujarCartaPokemon(pfpUrl, nombre, stats) {
     avatar = fallback;
   }
 
-  const shortName = nombre.length > 14 ? nombre.substring(0, 14) + '...' : nombre;
-
   if (stats.isFullArt) {
-    // 🌟 ESTILO FULL ART (Mew EX / Legendarias)
-    // Borde holográfico plateado/oscuro
-    ctx.fillStyle = '#b5b8c2';
+    // 🌟 ESTILO FULL ART (Mew EX / Cartas Legendarias)
+    
+    // Borde exterior negro holográfico
+    ctx.fillStyle = '#111111';
     ctx.fillRect(0, 0, width, height);
     
-    // Imagen cubriendo toda la carta por dentro del borde
-    ctx.drawImage(avatar, 25, 25, width - 50, height - 50);
+    // Imagen cubriendo toda la carta
+    ctx.drawImage(avatar, 20, 20, width - 40, height - 40);
 
-    // Efecto holográfico arcoíris translúcido sobre la imagen
-    ctx.save();
-    ctx.globalCompositeOperation = 'overlay';
-    const holo = ctx.createLinearGradient(0, 0, width, height);
-    holo.addColorStop(0, 'rgba(255, 0, 0, 0.4)');
-    holo.addColorStop(0.3, 'rgba(255, 255, 0, 0.4)');
-    holo.addColorStop(0.6, 'rgba(0, 255, 255, 0.4)');
-    holo.addColorStop(1, 'rgba(255, 0, 255, 0.4)');
-    ctx.fillStyle = holo;
-    ctx.fillRect(25, 25, width - 50, height - 50);
-    ctx.restore();
-
-    // Sombra oscura arriba y abajo para que el texto resalte
+    // Sombra oscura arriba para leer el nombre
     const topShadow = ctx.createLinearGradient(0, 0, 0, 250);
     topShadow.addColorStop(0, 'rgba(0,0,0,0.8)');
     topShadow.addColorStop(1, 'rgba(0,0,0,0)');
     ctx.fillStyle = topShadow;
-    ctx.fillRect(25, 25, width - 50, 250);
+    ctx.fillRect(20, 20, width - 40, 250);
 
-    const bottomShadow = ctx.createLinearGradient(0, height - 400, 0, height);
+    // Sombra oscura abajo para los ataques
+    const bottomShadow = ctx.createLinearGradient(0, height - 450, 0, height);
     bottomShadow.addColorStop(0, 'rgba(0,0,0,0)');
     bottomShadow.addColorStop(1, 'rgba(0,0,0,0.9)');
     ctx.fillStyle = bottomShadow;
-    ctx.fillRect(25, height - 400, width - 50, 400);
+    ctx.fillRect(20, height - 450, width - 40, 450);
 
-    // Textos Full Art
-    ctx.fillStyle = '#FFD700';
-    ctx.font = 'bold 26px sans-serif';
-    ctx.fillText(`✦ ${stats.rareza} ✦`, 40, 70);
-
-    ctx.fillStyle = '#FFFFFF';
-    ctx.shadowColor = 'black';
+    // Textos de Cabecera Full Art
+    ctx.shadowColor = '#000';
     ctx.shadowBlur = 10;
-    ctx.font = '900 65px sans-serif';
-    ctx.fillText(shortName, 40, 130);
+    
+    ctx.textAlign = 'left';
+    ctx.fillStyle = '#FFFFFF';
+    ctx.font = 'italic 900 60px sans-serif';
+    ctx.fillText(renderName, 40, 100);
+    
+    // Letras "EX" en dorado
+    const nameWidth = ctx.measureText(renderName).width;
+    ctx.fillStyle = '#FFD700';
+    ctx.font = 'italic 900 50px sans-serif';
+    ctx.fillText('ex', 40 + nameWidth + 15, 100);
 
     ctx.textAlign = 'right';
     ctx.fillStyle = '#FF2D55';
-    ctx.fillText(`HP ${stats.hp} ${stats.tipo.emoji}`, width - 40, 130);
+    ctx.font = 'bold 45px sans-serif';
+    ctx.fillText(`HP ${stats.hp}`, width - 90, 100);
+    ctx.fillText(stats.tipo.emoji, width - 40, 100);
 
     // Caja de ataques translúcida
     ctx.textAlign = 'left';
     ctx.shadowColor = 'transparent';
-    ctx.fillStyle = 'rgba(255, 255, 255, 0.2)';
-    ctx.fillRect(40, height - 320, width - 80, 200);
-    ctx.lineWidth = 3;
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.15)';
+    ctx.fillRect(40, height - 350, width - 80, 200);
+    ctx.lineWidth = 2;
     ctx.strokeStyle = 'rgba(255, 255, 255, 0.5)';
-    ctx.strokeRect(40, height - 320, width - 80, 200);
+    ctx.strokeRect(40, height - 350, width - 80, 200);
 
+    // Ataques
+    ctx.shadowColor = '#000';
+    ctx.shadowBlur = 8;
     ctx.fillStyle = '#FFFFFF';
-    ctx.font = 'bold 40px sans-serif';
-    ctx.fillText(`⚔️ Destrucción Masiva`, 60, height - 250);
+    ctx.font = 'bold 45px sans-serif';
+    ctx.fillText(`${stats.tipo.emoji} Destrucción Astral`, 60, height - 280);
+    
     ctx.textAlign = 'right';
-    ctx.font = 'bold 50px sans-serif';
-    ctx.fillText(`${stats.atk}`, width - 60, height - 250);
+    ctx.font = 'bold 55px sans-serif';
+    ctx.fillText(`${stats.atk}`, width - 60, height - 280);
     
     ctx.textAlign = 'left';
-    ctx.font = '25px sans-serif';
-    ctx.fillText(`Valor en el mercado: ${stats.valor} XP`, 60, height - 150);
+    ctx.font = '22px sans-serif';
+    ctx.fillText(`Causa ${stats.atk} de daño masivo.`, 60, height - 230);
+    ctx.fillText(`Rareza: ${stats.rareza} | Valor: ${stats.valor} XP`, 60, height - 180);
 
   } else {
-    // 💛 ESTILO CLÁSICO (Cartas Comunes, Raras y Épicas)
-    // Borde amarillo Pokémon clásico
-    ctx.fillStyle = '#F5D13B'; 
+    // 💛 ESTILO CLÁSICO (Charmander / Cartas Comunes, Raras y Épicas)
+    
+    // Borde amarillo grueso
+    ctx.fillStyle = '#F5D63D'; 
     ctx.fillRect(0, 0, width, height);
 
-    // Fondo según el tipo
-    ctx.fillStyle = stats.tipo.color;
-    ctx.fillRect(30, 30, width - 60, height - 60);
+    // Fondo del elemento interior
+    ctx.fillStyle = stats.tipo.bg;
+    ctx.fillRect(25, 25, width - 50, height - 50);
 
-    // Header Textos
-    ctx.fillStyle = '#FFFFFF';
-    ctx.font = 'bold 24px sans-serif';
-    ctx.fillText(`BÁSICO   |   Rareza: ${stats.rareza}`, 40, 70);
-
-    ctx.font = 'bold 55px sans-serif';
-    ctx.shadowColor = 'rgba(0,0,0,0.5)';
-    ctx.shadowBlur = 5;
-    ctx.fillText(shortName, 40, 130);
+    // Textos Header Clásico
+    ctx.shadowColor = 'transparent';
+    ctx.fillStyle = '#000000';
+    ctx.textAlign = 'left';
+    ctx.font = 'bold 45px sans-serif';
+    ctx.fillText(renderName, 50, 90);
 
     ctx.textAlign = 'right';
-    ctx.fillStyle = '#FFFFFF';
-    ctx.fillText(`HP ${stats.hp} ${stats.tipo.emoji}`, width - 40, 130);
+    ctx.fillStyle = '#CC0000';
+    ctx.font = 'bold 35px sans-serif';
+    ctx.fillText(`${stats.hp} HP`, width - 90, 90);
+    ctx.fillText(stats.tipo.emoji, width - 40, 90);
 
-    // Marco de la imagen
-    ctx.shadowColor = 'transparent';
-    ctx.fillStyle = '#E0E0E0';
-    ctx.fillRect(50, 150, width - 100, 460); // Fondo gris
-    ctx.drawImage(avatar, 60, 160, width - 120, 440); // Imagen
-    ctx.lineWidth = 10;
-    ctx.strokeStyle = '#B8A038'; // Borde dorado opaco interno
-    ctx.strokeRect(60, 160, width - 120, 440);
+    // Marco del Arte
+    ctx.fillStyle = '#A6A6A6';
+    ctx.fillRect(55, 125, 630, 420); // Sombra exterior
+    ctx.drawImage(avatar, 60, 130, 620, 410);
 
-    // Franja de info bajo la imagen
-    ctx.fillStyle = '#FFD700';
-    ctx.fillRect(60, 610, width - 120, 30);
+    // Barra de Información dorada pequeña
+    ctx.fillStyle = '#D4AF37';
+    ctx.fillRect(60, 545, 620, 25);
     ctx.fillStyle = '#000000';
     ctx.textAlign = 'center';
-    ctx.font = 'italic 18px sans-serif';
-    ctx.fillText(`Tipo ${stats.tipo.nombre} • SiriusBot TCG`, width / 2, 632);
+    ctx.font = 'italic 16px sans-serif';
+    ctx.fillText(`Tipo ${stats.tipo.nombre} • SiriusBot TCG`, width / 2, 563);
 
-    // Caja de ataques
-    ctx.textAlign = 'left';
-    ctx.fillStyle = '#FFFFFF';
-    ctx.globalAlpha = 0.9;
-    ctx.fillRect(40, 680, width - 80, 200);
-    ctx.globalAlpha = 1.0;
-
-    // Ataque Principal
+    // Caja Blanca de Ataques (Ocupa la parte inferior)
+    ctx.fillStyle = '#F2F2F2';
+    ctx.fillRect(45, 590, 650, 310);
+    
+    // Ataque 1
     ctx.fillStyle = '#000000';
-    ctx.font = 'bold 45px sans-serif';
-    ctx.fillText(`${stats.tipo.emoji} Golpe Base`, 60, 760);
-    ctx.textAlign = 'right';
-    ctx.font = 'bold 55px sans-serif';
-    ctx.fillText(`${stats.atk}`, width - 60, 760);
-
-    // Descripcion del ataque
     ctx.textAlign = 'left';
-    ctx.font = '28px sans-serif';
+    ctx.font = 'bold 40px sans-serif';
+    ctx.fillText(`${stats.tipo.emoji} Golpe Base`, 65, 660);
+    
+    ctx.textAlign = 'right';
+    ctx.font = 'bold 50px sans-serif';
+    ctx.fillText(`${stats.atk}`, width - 65, 660);
+
+    // Descripción del ataque
+    ctx.textAlign = 'left';
+    ctx.font = '24px sans-serif';
     ctx.fillStyle = '#333333';
-    ctx.fillText(`Este ataque hace ${stats.atk} de daño al rival.`, 60, 815);
-    ctx.fillText(`Valor en XP: ${stats.valor} 🪙`, 60, 855);
+    ctx.fillText(`Este ataque causa ${stats.atk} puntos de daño al rival.`, 65, 710);
+    ctx.fillText(`Rareza: ${stats.rareza} | Valor: ${stats.valor} XP`, 65, 760);
 
     // Footer (Debilidades)
-    ctx.fillStyle = '#FFFFFF';
-    ctx.font = '22px sans-serif';
-    ctx.fillText('Debilidad: x2', 60, 950);
+    ctx.fillStyle = '#000000';
+    ctx.font = 'bold 20px sans-serif';
+    ctx.fillText('DEBILIDAD', 90, 950);
+    ctx.textAlign = 'center';
+    ctx.fillText('RESISTENCIA', width / 2, 950);
     ctx.textAlign = 'right';
-    ctx.fillText('Retirada: 🪙🪙', width - 60, 950);
+    ctx.fillText('RETIRADA', width - 90, 950);
+    
+    // Emojis de debilidad
+    ctx.font = '24px sans-serif';
+    ctx.textAlign = 'left';
+    ctx.fillText('💧 x2', 90, 985);
+    ctx.textAlign = 'right';
+    ctx.fillText('⚪ ⚪', width - 90, 985);
   }
 
   return canvas.toBuffer('image/jpeg', { quality: 0.95 });
@@ -252,12 +266,12 @@ module.exports = {
         const randomParticipant = participants[Math.floor(Math.random() * participants.length)];
         const jidElegido = randomParticipant.id;
 
-        // Intentar obtener el Nickname real
+        // Intentar obtener el Nickname de WhatsApp
         let nombreElegido = cleanNumber(jidElegido);
         try {
+          // Buscamos si WhatsApp nos comparte el 'notify' (Pushname) del usuario
           const contact = await sock.onWhatsApp(jidElegido);
           if (contact && contact[0] && contact[0].notify) nombreElegido = contact[0].notify;
-          else if (randomParticipant.notify) nombreElegido = randomParticipant.notify;
         } catch {}
 
         let pfpUrl = 'https://i.imgur.com/JP3QZ7B.jpeg';
@@ -280,7 +294,7 @@ module.exports = {
         const buffer = await dibujarCartaPokemon(pfpUrl, nombreElegido, stats);
         await sock.sendMessage(remoteJid, { delete: loadMsg.key });
         
-        // Mención azul real en el texto
+        // El Caption del chat MANTENDRÁ la etiqueta original para que lo notifique en azul
         const jidLimpio = cleanNumber(jidElegido);
         await sock.sendMessage(remoteJid, { 
           image: buffer, 
@@ -300,7 +314,11 @@ module.exports = {
       
       let txt = `🎒 *TU ÁLBUM POKÉMON* 🎒\n\n`;
       misCartas.forEach((carta, index) => {
-        txt += `*[ ${index + 1} ]* ✦ ${carta.rareza} | ${carta.nombre}\n⚔️ ATK: ${carta.atk} | 💖 HP: ${carta.hp} | 💎 ${carta.valor} XP\n\n`;
+        // Filtrar visualmente los números largos en la lista también
+        let nomRender = carta.nombre;
+        if (/^\d+$/.test(nomRender) || nomRender.length > 15) nomRender = `Entrenador ${nomRender.slice(-4)}`;
+        
+        txt += `*[ ${index + 1} ]* ✦ ${carta.rareza} | ${nomRender}\n⚔️ ATK: ${carta.atk} | 💖 HP: ${carta.hp} | 💎 ${carta.valor} XP\n\n`;
       });
       txt += `💸 *Vender:* .vendercarta [número]\n⚔️ *Pelear:* .duelocarta [tu_numero] @usuario\n🤝 *Intercambio:* .intercambiar @usuario [tu_num] [su_num]`;
       return reply(txt);
@@ -339,11 +357,10 @@ module.exports = {
       const miCarta = dbCartas[sender][miNum];
       const suCarta = dbCartas[target][suNum];
 
-      // Guardar solicitud en RAM
       global.tradeRequests[target] = { from: sender, miNum, suNum, miCartaInfo: miCarta.nombre, suCartaInfo: suCarta.nombre };
 
       return sock.sendMessage(remoteJid, { 
-        text: `⚖️ *SOLICITUD DE INTERCAMBIO* ⚖️\n\n@${cleanNumber(sender)} ofrece su carta *${miCarta.rareza} de ${miCarta.nombre}* a cambio de tu carta *${suCarta.rareza} de ${suCarta.nombre}*.\n\n@${cleanNumber(target)}, escribe *.aceptar* para realizar el cambio.`, 
+        text: `⚖️ *SOLICITUD DE INTERCAMBIO* ⚖️\n\n@${cleanNumber(sender)} ofrece su carta *${miCarta.rareza}* a cambio de tu carta *${suCarta.rareza}*.\n\n@${cleanNumber(target)}, escribe *.aceptar* para realizar el cambio.`, 
         mentions: [sender, target] 
       });
     }
@@ -355,11 +372,9 @@ module.exports = {
 
       const { from, miNum, suNum } = trade;
 
-      // Extraer las cartas (suNum es del sender de aceptar, miNum es del que propuso)
       const cartaDelIniciador = dbCartas[from].splice(miNum, 1)[0];
       const cartaMia = dbCartas[sender].splice(suNum, 1)[0];
 
-      // Inyectar en inventarios opuestos
       dbCartas[from].push(cartaMia);
       dbCartas[sender].push(cartaDelIniciador);
       saveCartas(dbCartas);
@@ -387,8 +402,8 @@ module.exports = {
       const poderEnemigo = cartaRival.hp + Math.floor(Math.random() * 50);
 
       let txt = `⚔️ *BATALLA POKÉMON* ⚔️\n\n`;
-      txt += `🔥 *@${cleanNumber(sender)}* usa a *${miCarta.nombre}* (Daño: ${miPoder})\n`;
-      txt += `🛡️ *@${cleanNumber(target)}* defiende con *${cartaRival.nombre}* (Defensa: ${poderEnemigo})\n\n`;
+      txt += `🔥 *@${cleanNumber(sender)}* usa a *${miCarta.rareza}* (Daño: ${miPoder})\n`;
+      txt += `🛡️ *@${cleanNumber(target)}* defiende con *${cartaRival.rareza}* (Defensa: ${poderEnemigo})\n\n`;
 
       if (miPoder > poderEnemigo) {
         const botin = Math.floor(Math.random() * 800) + 200;
