@@ -1,8 +1,17 @@
 'use strict';
 
 const axios = require('axios');
+const fs = require('fs');
+const path = require('path');
+const { execFile } = require('child_process');
+const { promisify } = require('util');
+const execFileAsync = promisify(execFile);
 
-// 📚 NUEVO DICCIONARIO (Adaptado a Nekos.best - Súper Estable)
+// 🗄️ CARPETA TEMPORAL PARA CONVERSIÓN
+const TEMP_DIR = path.join(process.cwd(), 'temp');
+if (!fs.existsSync(TEMP_DIR)) fs.mkdirSync(TEMP_DIR, { recursive: true });
+
+// 📚 DICCIONARIO (Nekos.best - Súper Estable)
 const acciones = {
   'abrazar':   { endpoint: 'hug',      emoji: '🫂', msg: 'le dio un fuerte abrazo a' },
   'besar':     { endpoint: 'kiss',     emoji: '💋', msg: 'le dio un tierno beso a' },
@@ -29,7 +38,7 @@ module.exports = {
   name: 'roleplay',
   aliases: Object.keys(acciones),
   category: 'diversión',
-  desc: 'Interactúa con los miembros del grupo con GIFs de anime',
+  desc: 'Interactúa con los miembros del grupo con stickers animados',
 
   execute: async ({ sock, msg, remoteJid, sender, pushName, args, commandName, reply }) => {
     const cmd = commandName.toLowerCase();
@@ -60,28 +69,59 @@ module.exports = {
       return reply(`😅 No puedes usar *.${cmd}* contigo mismo. Toca salir a socializar pe.`);
     }
 
-    const loadMsg = await sock.sendMessage(remoteJid, { text: `${accion.emoji} _Buscando la escena perfecta..._` }, { quoted: msg });
+    const loadMsg = await sock.sendMessage(remoteJid, { text: `${accion.emoji} _Generando sticker animado..._` }, { quoted: msg });
+
+    // Nombres de archivos únicos para evitar colisiones si varios lo usan a la vez
+    const id = Date.now();
+    const inputGif = path.join(TEMP_DIR, `in_${id}.gif`);
+    const outputWebp = path.join(TEMP_DIR, `out_${id}.webp`);
 
     try {
-      // 2️⃣ CONECTAR A LA NUEVA API (Nekos.best)
+      // 2️⃣ OBTENER GIF DE LA API
       const res = await axios.get(`https://nekos.best/api/v2/${accion.endpoint}`);
       const imageUrl = res.data.results[0].url;
+
+      // 3️⃣ DESCARGAR Y GUARDAR TEMPORALMENTE
+      const imageDownload = await axios.get(imageUrl, { responseType: 'arraybuffer' });
+      fs.writeFileSync(inputGif, Buffer.from(imageDownload.data));
+
+      // 4️⃣ CONVERTIR GIF A STICKER ANIMADO (WebP) CON FFMPEG
+      await execFileAsync('ffmpeg', [
+        '-y',
+        '-i', inputGif,
+        '-vf', 'scale=512:512:flags=lanczos:force_original_aspect_ratio=decrease,format=rgba,pad=512:512:(ow-iw)/2:(oh-ih)/2:color=#00000000',
+        '-vcodec', 'libwebp',
+        '-lossless', '0',
+        '-qscale', '40', // Calidad de compresión
+        '-preset', 'default',
+        '-loop', '0',
+        '-an',
+        '-vsync', '0',
+        outputWebp
+      ]);
 
       const textoFinal = `${accion.emoji} | *@${cleanJid(sender)}* ${accion.msg} *${targetName}*`;
 
       await sock.sendMessage(remoteJid, { delete: loadMsg.key });
 
-      // 3️⃣ ENVIAR COMO GIF ANIMADO
-      await sock.sendMessage(remoteJid, {
-        video: { url: imageUrl }, // Lo mandamos como video
-        caption: textoFinal,
-        gifPlayback: true,        // Esto hace que WhatsApp lo reproduzca en bucle como un GIF
+      // 5️⃣ ENVIAR EL TEXTO PRIMERO (Con las menciones resaltadas)
+      const textMsg = await sock.sendMessage(remoteJid, {
+        text: textoFinal,
         mentions: mencionesParaEnviar
       }, { quoted: msg });
 
+      // 6️⃣ ENVIAR EL STICKER RESPONDIENDO AL TEXTO
+      await sock.sendMessage(remoteJid, {
+        sticker: fs.readFileSync(outputWebp)
+      }, { quoted: textMsg });
+
     } catch (err) {
-      console.log(`❌ Error en Roleplay (${cmd}):`, err.message);
-      return reply('❌ Ocurrió un error al contactar con la base de datos de anime. Intenta de nuevo.');
+      console.log(`❌ Error en Roleplay Sticker (${cmd}):`, err.message);
+      return reply('❌ Ocurrió un error al generar el sticker. Intenta de nuevo.');
+    } finally {
+      // 7️⃣ LIMPIEZA DE MEMORIA (Vital para Termux)
+      try { if (fs.existsSync(inputGif)) fs.unlinkSync(inputGif); } catch {}
+      try { if (fs.existsSync(outputWebp)) fs.unlinkSync(outputWebp); } catch {}
     }
   }
 };
