@@ -81,7 +81,6 @@ module.exports = {
 │
 ├───────── 🌐 *𝗥𝗘𝗗 𝗬 𝗖𝗛𝗔𝗧𝗦* ─────────
 │
-│ 👥 *Grupos Activos:* ${groupCount}
 │ 👤 *Estado del Bot:* Online 🟢
 │
 ╰─────────────────────────────
