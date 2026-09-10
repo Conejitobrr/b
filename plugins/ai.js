@@ -52,7 +52,7 @@ REGLAS ESTRICTAS:
         Authorization: `Bearer ${apiKey}`
       },
       body: JSON.stringify({
-        model: 'openai/gpt-oss-120b', // El modelo más inteligente y rápido
+        model: 'openai/gpt-oss-120b', // El modelo más inteligente y rápido de Groq
         temperature: 0.8,
         max_tokens: 500,
         messages: messages
@@ -78,20 +78,39 @@ module.exports = {
   // 1️⃣ EJECUCIÓN POR COMANDO DIRECTO (.bot hola)
   execute: async ({ sock, msg, remoteJid, args, pushName, sender, reply }) => {
     try {
-      const text = args.join(' ').trim();
-      if (!text) {
-        return reply('🤖 Habla causa 😹\n\n📌 *Ejemplos:*\n.bot hola\n.bot quién eres?\n.bot explícame qué es un agujero negro');
+      let text = args.join(' ').trim();
+
+      // 🟢 NOVEDAD: Extraer mensaje citado si existe
+      const quotedInfo = msg.message?.extendedTextMessage?.contextInfo;
+      const quotedMsg = quotedInfo?.quotedMessage;
+      let quotedText = '';
+
+      if (quotedMsg) {
+        // Puede ser un mensaje de texto normal o uno extendido
+        quotedText = quotedMsg.conversation || quotedMsg.extendedTextMessage?.text || '';
       }
 
-      await sock.sendPresenceUpdate('composing', remoteJid); // Muestra "Escribiendo..."
+      if (!text && !quotedText) {
+        return reply('🤖 Habla causa 😹\n\n📌 *Ejemplos:*\n.bot hola\n.bot (respondiendo a un mensaje) resúmeme esto');
+      }
+
+      // 🟢 NOVEDAD: Si hay un mensaje citado, se lo inyectamos al cerebro de la IA
+      let promptFinal = text;
+      if (quotedText) {
+        promptFinal = text 
+          ? `[El usuario citó este mensaje: "${quotedText}"]\n\nResponde a esto: ${text}` 
+          : `[El usuario citó este mensaje: "${quotedText}"]\n\n¿Qué opinas o qué me dices de esto?`;
+      }
+
+      await sock.sendPresenceUpdate('composing', remoteJid); 
 
       const senderName = pushName || 'Usuario';
       const history = getMemory(remoteJid);
       
-      const aiReply = await askGroq(text, senderName, history);
+      const aiReply = await askGroq(promptFinal, senderName, history);
 
-      // Guardar en la memoria la interacción
-      saveToMemory(remoteJid, 'user', `${senderName} dice: ${text}`);
+      // Guardar en la memoria
+      saveToMemory(remoteJid, 'user', `${senderName} dice: ${promptFinal}`);
       saveToMemory(remoteJid, 'assistant', aiReply);
 
       await sock.sendMessage(remoteJid, { text: aiReply }, { quoted: msg });
@@ -102,22 +121,26 @@ module.exports = {
     }
   },
 
-  // 2️⃣ EJECUCIÓN AUTOMÁTICA (Si el modo chatbot está activado en el grupo)
+  // 2️⃣ EJECUCIÓN AUTOMÁTICA (Detector de respuestas y menciones)
   onMessage: async ({ sock, msg, remoteJid, body, pushName, groupData, userData, isCommand }) => {
-    // Si es un comando con prefijo (.bot) o fue enviado por el mismo bot, lo ignoramos para evitar duplicados
     if (isCommand || msg.key.fromMe || !body) return;
 
-    // Verificamos si el modo chatbot está encendido en la base de datos para este grupo o usuario
     const isChatbotEnabled = (groupData && groupData.chatbot) || (userData && userData.chatbot);
 
-    // Si también mencionaron al bot de forma natural (ej. "hola @bot")
     const botJid = cleanJid(sock.user.id);
+    const botFullJid = `${botJid}@s.whatsapp.net`;
+    
+    // Detectar menciones directas (@bot)
     const mentioned = msg.message?.extendedTextMessage?.contextInfo?.mentionedJid || [];
-    const isMentioned = mentioned.includes(`${botJid}@s.whatsapp.net`);
+    const isMentioned = mentioned.includes(botFullJid);
 
-    if (isChatbotEnabled || isMentioned) {
-      // Limpiar la etiqueta del texto para que la IA no se confunda
-      let cleanText = body.replace(new RegExp(`@${botJid.split('@')[0]}`, 'g'), '').trim();
+    // 🟢 NOVEDAD: Detectar si están respondiendo directamente a un mensaje que envió el bot
+    const quotedParticipant = msg.message?.extendedTextMessage?.contextInfo?.participant;
+    const isReplyToBot = (cleanJid(quotedParticipant) === botJid);
+
+    // ¡Si el modo chatbot está on, O lo mencionan, O le responden, se activa!
+    if (isChatbotEnabled || isMentioned || isReplyToBot) {
+      let cleanText = body.replace(new RegExp(`@${botJid}`, 'g'), '').trim();
       if (!cleanText) cleanText = 'Hola';
 
       await sock.sendPresenceUpdate('composing', remoteJid);
