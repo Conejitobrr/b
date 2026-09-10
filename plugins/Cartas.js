@@ -35,7 +35,7 @@ const TIPOS = [
   { nombre: 'Agua', bg: '#1E88E5', emoji: '💧' },
   { nombre: 'Planta', bg: '#43A047', emoji: '🌿' },
   { nombre: 'Rayo', bg: '#FDD835', emoji: '⚡' },
-  { nombre: 'Oscuro', bg: '#757575', emoji: '🌑' },
+  { nombre: 'Oscuro', bg: '#424242', emoji: '🌑' },
   { nombre: 'Psíquico', bg: '#8E24AA', emoji: '👁️' }
 ];
 
@@ -45,10 +45,11 @@ function generarCarta() {
   let rareza, atk, hp, valor, isFullArt = false;
 
   if (rand < 0.5) { 
-    rareza = 'MÍTICA'; hp = Math.floor(Math.random() * 50) + 250; atk = Math.floor(Math.random() * 100) + 200; valor = 50000; isFullArt = true;
+    rareza = 'MÍTICA ex'; hp = Math.floor(Math.random() * 50) + 250; atk = Math.floor(Math.random() * 100) + 200; valor = 50000; isFullArt = true;
   } else if (rand < 4) { 
-    rareza = 'LEGENDARIA'; hp = Math.floor(Math.random() * 50) + 180; atk = Math.floor(Math.random() * 50) + 120; valor = 15000; isFullArt = true;
+    rareza = 'LEGENDARIA V'; hp = Math.floor(Math.random() * 50) + 180; atk = Math.floor(Math.random() * 50) + 120; valor = 15000; isFullArt = true;
   } else if (rand < 15) { 
+    // Las Épicas no son Full Art, pero sí tendrán efecto Holográfico en la imagen
     rareza = 'ÉPICA'; hp = Math.floor(Math.random() * 40) + 120; atk = Math.floor(Math.random() * 40) + 80; valor = 3500;
   } else if (rand < 40) { 
     rareza = 'RARA'; hp = Math.floor(Math.random() * 30) + 80; atk = Math.floor(Math.random() * 30) + 50; valor = 800;
@@ -59,22 +60,45 @@ function generarCarta() {
   return { rareza, tipo, atk, hp, valor, isFullArt };
 }
 
-// 🎨 CREADOR VISUAL DE LA CARTA (RÉPLICA POKÉMON)
-async function dibujarCartaPokemon(pfpUrl, nombreRaw, stats) {
+// ✨ DIBUJAR EFECTO HOLOGRÁFICO POKÉMON
+function drawHoloFoil(ctx, x, y, w, h) {
+  ctx.save();
+  ctx.globalCompositeOperation = 'color-dodge'; // Efecto brillante y metálico
+  ctx.globalAlpha = 0.35;
+  
+  // Gradiente arcoíris diagonal
+  const holo = ctx.createLinearGradient(x, y, x + w, y + h);
+  holo.addColorStop(0, '#ff0000');
+  holo.addColorStop(0.2, '#ffff00');
+  holo.addColorStop(0.4, '#00ff00');
+  holo.addColorStop(0.6, '#00ffff');
+  holo.addColorStop(0.8, '#0000ff');
+  holo.addColorStop(1, '#ff00ff');
+  ctx.fillStyle = holo;
+  ctx.fillRect(x, y, w, h);
+  
+  // Destellos diagonales (Textura Foil)
+  ctx.globalAlpha = 0.15;
+  for(let i = 0; i < w + h; i += 30) {
+    ctx.beginPath();
+    ctx.moveTo(x + i, y);
+    ctx.lineTo(x, y + i);
+    ctx.strokeStyle = '#ffffff';
+    ctx.lineWidth = 5;
+    ctx.stroke();
+  }
+  ctx.restore();
+}
+
+// 🎨 CREADOR VISUAL DE LA CARTA (CANVAS)
+async function dibujarCartaPokemon(pfpUrl, renderName, stats) {
   const width = 740;
   const height = 1040;
   const canvas = createCanvas(width, height);
   const ctx = canvas.getContext('2d');
 
-  // FILTRO ANTI-NÚMEROS LARGOS:
-  // Si el nombre es puro número o es muy largo, lo convertimos en "Entrenador XXXX"
-  let renderName = nombreRaw;
-  if (/^\d+$/.test(renderName) || renderName.length > 15) {
-    const last4 = renderName.slice(-4);
-    renderName = `Entrenador ${last4}`;
-  }
-  // Acortamos por si acaso hay un nickname extraño y gigante
-  if (renderName.length > 14) renderName = renderName.substring(0, 14) + '...';
+  // Ajustar tamaño del nombre si es muy largo
+  if (renderName.length > 15) renderName = renderName.substring(0, 15) + '...';
 
   // CARGAR IMAGEN DE PERFIL
   let avatar;
@@ -89,144 +113,145 @@ async function dibujarCartaPokemon(pfpUrl, nombreRaw, stats) {
   }
 
   if (stats.isFullArt) {
-    // 🌟 ESTILO FULL ART (Mew EX / Cartas Legendarias)
-    
-    // Borde exterior negro holográfico
-    ctx.fillStyle = '#111111';
+    // 🌟 ESTILO FULL ART HOLO (Legendarias y Míticas)
+    ctx.fillStyle = '#0a0a0a';
     ctx.fillRect(0, 0, width, height);
     
-    // Imagen cubriendo toda la carta
+    // Foto a pantalla completa
     ctx.drawImage(avatar, 20, 20, width - 40, height - 40);
+    
+    // Filtro Holográfico encima de todo
+    drawHoloFoil(ctx, 20, 20, width - 40, height - 40);
 
-    // Sombra oscura arriba para leer el nombre
+    // Sombras para legibilidad
     const topShadow = ctx.createLinearGradient(0, 0, 0, 250);
-    topShadow.addColorStop(0, 'rgba(0,0,0,0.8)');
+    topShadow.addColorStop(0, 'rgba(0,0,0,0.85)');
     topShadow.addColorStop(1, 'rgba(0,0,0,0)');
     ctx.fillStyle = topShadow;
     ctx.fillRect(20, 20, width - 40, 250);
 
-    // Sombra oscura abajo para los ataques
-    const bottomShadow = ctx.createLinearGradient(0, height - 450, 0, height);
+    const bottomShadow = ctx.createLinearGradient(0, height - 400, 0, height);
     bottomShadow.addColorStop(0, 'rgba(0,0,0,0)');
-    bottomShadow.addColorStop(1, 'rgba(0,0,0,0.9)');
+    bottomShadow.addColorStop(1, 'rgba(0,0,0,0.95)');
     ctx.fillStyle = bottomShadow;
-    ctx.fillRect(20, height - 450, width - 40, 450);
+    ctx.fillRect(20, height - 400, width - 40, 400);
 
-    // Textos de Cabecera Full Art
+    // Textos Full Art
     ctx.shadowColor = '#000';
     ctx.shadowBlur = 10;
     
     ctx.textAlign = 'left';
     ctx.fillStyle = '#FFFFFF';
-    ctx.font = 'italic 900 60px sans-serif';
+    ctx.font = 'italic 900 65px sans-serif';
     ctx.fillText(renderName, 40, 100);
-    
-    // Letras "EX" en dorado
-    const nameWidth = ctx.measureText(renderName).width;
-    ctx.fillStyle = '#FFD700';
-    ctx.font = 'italic 900 50px sans-serif';
-    ctx.fillText('ex', 40 + nameWidth + 15, 100);
 
     ctx.textAlign = 'right';
-    ctx.fillStyle = '#FF2D55';
-    ctx.font = 'bold 45px sans-serif';
-    ctx.fillText(`HP ${stats.hp}`, width - 90, 100);
+    ctx.fillStyle = '#FFD700';
+    ctx.font = 'bold 50px sans-serif';
+    ctx.fillText(`HP ${stats.hp}`, width - 100, 100);
     ctx.fillText(stats.tipo.emoji, width - 40, 100);
 
-    // Caja de ataques translúcida
+    // Caja de ataques
     ctx.textAlign = 'left';
     ctx.shadowColor = 'transparent';
     ctx.fillStyle = 'rgba(255, 255, 255, 0.15)';
-    ctx.fillRect(40, height - 350, width - 80, 200);
-    ctx.lineWidth = 2;
-    ctx.strokeStyle = 'rgba(255, 255, 255, 0.5)';
-    ctx.strokeRect(40, height - 350, width - 80, 200);
+    ctx.fillRect(40, height - 320, width - 80, 200);
+    ctx.lineWidth = 3;
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.7)';
+    ctx.strokeRect(40, height - 320, width - 80, 200);
 
-    // Ataques
     ctx.shadowColor = '#000';
     ctx.shadowBlur = 8;
     ctx.fillStyle = '#FFFFFF';
     ctx.font = 'bold 45px sans-serif';
-    ctx.fillText(`${stats.tipo.emoji} Destrucción Astral`, 60, height - 280);
+    ctx.fillText(`${stats.tipo.emoji} Destrucción Astral`, 60, height - 250);
     
     ctx.textAlign = 'right';
-    ctx.font = 'bold 55px sans-serif';
-    ctx.fillText(`${stats.atk}`, width - 60, height - 280);
+    ctx.font = 'bold 60px sans-serif';
+    ctx.fillText(`${stats.atk}`, width - 60, height - 250);
     
     ctx.textAlign = 'left';
-    ctx.font = '22px sans-serif';
-    ctx.fillText(`Causa ${stats.atk} de daño masivo.`, 60, height - 230);
-    ctx.fillText(`Rareza: ${stats.rareza} | Valor: ${stats.valor} XP`, 60, height - 180);
+    ctx.font = '24px sans-serif';
+    ctx.fillText(`Rareza: ${stats.rareza} | Valor: ${stats.valor} XP`, 60, height - 170);
 
   } else {
-    // 💛 ESTILO CLÁSICO (Charmander / Cartas Comunes, Raras y Épicas)
-    
-    // Borde amarillo grueso
-    ctx.fillStyle = '#F5D63D'; 
+    // 💛 ESTILO CLÁSICO POKÉMON (Común, Rara, Épica)
+    // Fondo Amarillo Grueso
+    ctx.fillStyle = '#E8C82D'; 
     ctx.fillRect(0, 0, width, height);
 
-    // Fondo del elemento interior
-    ctx.fillStyle = stats.tipo.bg;
+    // Fondo interno del Elemento (Gradiente)
+    const bgElement = ctx.createLinearGradient(0, 0, 0, height);
+    bgElement.addColorStop(0, stats.tipo.bg);
+    bgElement.addColorStop(1, '#111');
+    ctx.fillStyle = bgElement;
     ctx.fillRect(25, 25, width - 50, height - 50);
 
-    // Textos Header Clásico
+    // Header (Nombre y HP)
     ctx.shadowColor = 'transparent';
-    ctx.fillStyle = '#000000';
+    ctx.fillStyle = '#FFFFFF';
     ctx.textAlign = 'left';
-    ctx.font = 'bold 45px sans-serif';
-    ctx.fillText(renderName, 50, 90);
+    ctx.font = 'bold 50px sans-serif';
+    ctx.fillText(renderName, 50, 95);
 
     ctx.textAlign = 'right';
-    ctx.fillStyle = '#CC0000';
-    ctx.font = 'bold 35px sans-serif';
-    ctx.fillText(`${stats.hp} HP`, width - 90, 90);
-    ctx.fillText(stats.tipo.emoji, width - 40, 90);
+    ctx.fillStyle = '#FF3B30';
+    ctx.font = 'bold 40px sans-serif';
+    ctx.fillText(`${stats.hp} HP`, width - 90, 95);
+    ctx.fillText(stats.tipo.emoji, width - 40, 95);
 
     // Marco del Arte
-    ctx.fillStyle = '#A6A6A6';
-    ctx.fillRect(55, 125, 630, 420); // Sombra exterior
-    ctx.drawImage(avatar, 60, 130, 620, 410);
+    ctx.fillStyle = '#B0B0B0';
+    ctx.fillRect(55, 135, 630, 420); // Base sombra
+    ctx.drawImage(avatar, 60, 140, 620, 410); // Imagen
 
-    // Barra de Información dorada pequeña
+    // ✨ ¡MAGIA HOLOGRÁFICA PARA LAS CARTAS ÉPICAS!
+    if (stats.rareza === 'ÉPICA') {
+      drawHoloFoil(ctx, 60, 140, 620, 410);
+    }
+
+    ctx.lineWidth = 8;
+    ctx.strokeStyle = '#D4AF37'; // Borde dorado interior
+    ctx.strokeRect(60, 140, 620, 410);
+
+    // Barra central
     ctx.fillStyle = '#D4AF37';
-    ctx.fillRect(60, 545, 620, 25);
-    ctx.fillStyle = '#000000';
+    ctx.fillRect(60, 565, 620, 30);
+    ctx.fillStyle = '#000';
     ctx.textAlign = 'center';
-    ctx.font = 'italic 16px sans-serif';
-    ctx.fillText(`Tipo ${stats.tipo.nombre} • SiriusBot TCG`, width / 2, 563);
+    ctx.font = 'bold italic 18px sans-serif';
+    ctx.fillText(`BÁSICO • Tipo ${stats.tipo.nombre} • SiriusBot TCG`, width / 2, 587);
 
-    // Caja Blanca de Ataques (Ocupa la parte inferior)
-    ctx.fillStyle = '#F2F2F2';
-    ctx.fillRect(45, 590, 650, 310);
+    // Caja de Ataques (Blanca Clásica)
+    ctx.fillStyle = '#F8F8F8';
+    ctx.fillRect(45, 615, 650, 290);
     
     // Ataque 1
     ctx.fillStyle = '#000000';
     ctx.textAlign = 'left';
-    ctx.font = 'bold 40px sans-serif';
-    ctx.fillText(`${stats.tipo.emoji} Golpe Base`, 65, 660);
+    ctx.font = 'bold 45px sans-serif';
+    ctx.fillText(`${stats.tipo.emoji} Golpe Base`, 65, 695);
     
     ctx.textAlign = 'right';
-    ctx.font = 'bold 50px sans-serif';
-    ctx.fillText(`${stats.atk}`, width - 65, 660);
+    ctx.font = 'bold 60px sans-serif';
+    ctx.fillText(`${stats.atk}`, width - 65, 695);
 
-    // Descripción del ataque
     ctx.textAlign = 'left';
-    ctx.font = '24px sans-serif';
-    ctx.fillStyle = '#333333';
-    ctx.fillText(`Este ataque causa ${stats.atk} puntos de daño al rival.`, 65, 710);
-    ctx.fillText(`Rareza: ${stats.rareza} | Valor: ${stats.valor} XP`, 65, 760);
+    ctx.font = '26px sans-serif';
+    ctx.fillStyle = '#444';
+    ctx.fillText(`Este ataque causa ${stats.atk} puntos de daño al rival.`, 65, 755);
+    ctx.fillText(`Rareza: ${stats.rareza} | Valor: ${stats.valor} XP`, 65, 810);
 
-    // Footer (Debilidades)
-    ctx.fillStyle = '#000000';
-    ctx.font = 'bold 20px sans-serif';
+    // Footer
+    ctx.fillStyle = '#FFF';
+    ctx.font = 'bold 22px sans-serif';
     ctx.fillText('DEBILIDAD', 90, 950);
     ctx.textAlign = 'center';
     ctx.fillText('RESISTENCIA', width / 2, 950);
     ctx.textAlign = 'right';
     ctx.fillText('RETIRADA', width - 90, 950);
     
-    // Emojis de debilidad
-    ctx.font = '24px sans-serif';
+    ctx.font = '26px sans-serif';
     ctx.textAlign = 'left';
     ctx.fillText('💧 x2', 90, 985);
     ctx.textAlign = 'right';
@@ -258,7 +283,7 @@ module.exports = {
       dbInv[sender].sobre -= 1;
       saveInv(dbInv);
 
-      const loadMsg = await sock.sendMessage(remoteJid, { text: '✨ _Rasgando el sobre..._' }, { quoted: msg });
+      const loadMsg = await sock.sendMessage(remoteJid, { text: '✨ _Desempaquetando sobre mágico..._' }, { quoted: msg });
 
       try {
         const groupMetadata = await sock.groupMetadata(remoteJid);
@@ -266,13 +291,25 @@ module.exports = {
         const randomParticipant = participants[Math.floor(Math.random() * participants.length)];
         const jidElegido = randomParticipant.id;
 
-        // Intentar obtener el Nickname de WhatsApp
+        // 🧠 INTELIGENCIA DE BÚSQUEDA DE NOMBRE:
         let nombreElegido = cleanNumber(jidElegido);
+        
         try {
-          // Buscamos si WhatsApp nos comparte el 'notify' (Pushname) del usuario
-          const contact = await sock.onWhatsApp(jidElegido);
-          if (contact && contact[0] && contact[0].notify) nombreElegido = contact[0].notify;
-        } catch {}
+          // 1. Buscamos en la memoria caché global de WhatsApp del bot
+          if (sock.store && sock.store.contacts && sock.store.contacts[jidElegido]) {
+            nombreElegido = sock.store.contacts[jidElegido].pushName || sock.store.contacts[jidElegido].name || sock.store.contacts[jidElegido].notify || nombreElegido;
+          }
+          // 2. Si falló y sigue siendo un número, buscamos en tu base de datos RPG
+          if (/^\d+$/.test(nombreElegido) && db) {
+            const uData = await db.getUser(jidElegido);
+            if (uData && uData.name) nombreElegido = uData.name;
+          }
+        } catch (e) {}
+
+        // 3. Fallback absoluto (por si el bot recién inició y no conoce a nadie)
+        if (/^\d+$/.test(nombreElegido)) {
+          nombreElegido = `User ${nombreElegido.slice(-4)}`;
+        }
 
         let pfpUrl = 'https://i.imgur.com/JP3QZ7B.jpeg';
         try { pfpUrl = await sock.profilePictureUrl(jidElegido, 'image'); } catch {}
@@ -280,7 +317,7 @@ module.exports = {
         const stats = generarCarta();
 
         const nuevaCarta = {
-          nombre: nombreElegido,
+          nombreReal: nombreElegido, // Guardamos el nombre extraído
           jid: jidElegido,
           rareza: stats.rareza,
           tipo: stats.tipo.nombre,
@@ -291,14 +328,14 @@ module.exports = {
         misCartas.push(nuevaCarta);
         saveCartas(dbCartas);
 
+        // Dibujamos la carta con el nombre encontrado
         const buffer = await dibujarCartaPokemon(pfpUrl, nombreElegido, stats);
         await sock.sendMessage(remoteJid, { delete: loadMsg.key });
         
-        // El Caption del chat MANTENDRÁ la etiqueta original para que lo notifique en azul
-        const jidLimpio = cleanNumber(jidElegido);
+        // Aquí la mención siempre funcionará porque en texto azul WhatsApp lo convierte automático
         await sock.sendMessage(remoteJid, { 
           image: buffer, 
-          caption: `🎉 ¡Felicidades! Has obtenido la carta de *@${jidLimpio}*\n🌟 Rareza: *${stats.rareza}*\n\n🎒 Usa *.miscartas* para ver tu álbum.`,
+          caption: `🎉 ¡Felicidades! Has obtenido la carta de *@${cleanNumber(jidElegido)}*\n🌟 Rareza: *${stats.rareza}*\n\n🎒 Usa *.miscartas* para ver tu álbum.`,
           mentions: [jidElegido]
         }, { quoted: msg });
 
@@ -314,16 +351,13 @@ module.exports = {
       
       let txt = `🎒 *TU ÁLBUM POKÉMON* 🎒\n\n`;
       misCartas.forEach((carta, index) => {
-        // Filtrar visualmente los números largos en la lista también
-        let nomRender = carta.nombre;
-        if (/^\d+$/.test(nomRender) || nomRender.length > 15) nomRender = `Entrenador ${nomRender.slice(-4)}`;
-        
-        txt += `*[ ${index + 1} ]* ✦ ${carta.rareza} | ${nomRender}\n⚔️ ATK: ${carta.atk} | 💖 HP: ${carta.hp} | 💎 ${carta.valor} XP\n\n`;
+        txt += `*[ ${index + 1} ]* ✦ ${carta.rareza} | ${carta.nombreReal || 'Usuario'}\n⚔️ ATK: ${carta.atk} | 💖 HP: ${carta.hp} | 💎 ${carta.valor} XP\n\n`;
       });
       txt += `💸 *Vender:* .vendercarta [número]\n⚔️ *Pelear:* .duelocarta [tu_numero] @usuario\n🤝 *Intercambio:* .intercambiar @usuario [tu_num] [su_num]`;
       return reply(txt);
     }
 
+    // ... (El resto de los comandos de vendercarta, aceptar, duelocarta y intercambiar se mantienen igual de funcionales como antes)
     // 💸 VENDER UNA CARTA AL SISTEMA
     if (cmd === 'vendercarta') {
       const index = parseInt(args[0]) - 1;
@@ -346,21 +380,19 @@ module.exports = {
       const miNum = parseInt(args[1]) - 1;
       const suNum = parseInt(args[2]) - 1;
 
-      if (!target || isNaN(miNum) || isNaN(suNum)) {
-        return reply('❌ Uso correcto:\n*.intercambiar @usuario [Tu_Carta] [Su_Carta]*\nEjemplo: .intercambiar @Juan 2 5');
-      }
+      if (!target || isNaN(miNum) || isNaN(suNum)) return reply('❌ Uso correcto:\n*.intercambiar @usuario [Tu_Carta] [Su_Carta]*');
       if (target === sender) return reply('❌ No puedes intercambiar contigo mismo.');
 
       if (!dbCartas[sender] || !dbCartas[sender][miNum]) return reply('❌ No posees la carta que estás ofreciendo.');
-      if (!dbCartas[target] || !dbCartas[target][suNum]) return reply('❌ El otro usuario no posee esa carta.');
+      if (!dbCartas[target] || !dbCartas[target][suNum]) return reply('❌ El rival no posee esa carta.');
 
       const miCarta = dbCartas[sender][miNum];
       const suCarta = dbCartas[target][suNum];
 
-      global.tradeRequests[target] = { from: sender, miNum, suNum, miCartaInfo: miCarta.nombre, suCartaInfo: suCarta.nombre };
+      global.tradeRequests[target] = { from: sender, miNum, suNum };
 
       return sock.sendMessage(remoteJid, { 
-        text: `⚖️ *SOLICITUD DE INTERCAMBIO* ⚖️\n\n@${cleanNumber(sender)} ofrece su carta *${miCarta.rareza}* a cambio de tu carta *${suCarta.rareza}*.\n\n@${cleanNumber(target)}, escribe *.aceptar* para realizar el cambio.`, 
+        text: `⚖️ *SOLICITUD DE INTERCAMBIO* ⚖️\n\n@${cleanNumber(sender)} ofrece su carta *${miCarta.rareza}* a cambio de tu carta *${suCarta.rareza}*.\n\n@${cleanNumber(target)}, escribe *.aceptar* para confirmar.`, 
         mentions: [sender, target] 
       });
     }
@@ -368,23 +400,18 @@ module.exports = {
     // ✅ ACEPTAR INTERCAMBIO
     if (cmd === 'aceptar') {
       const trade = global.tradeRequests[sender];
-      if (!trade) return reply('❌ No tienes ninguna solicitud de intercambio pendiente.');
+      if (!trade) return reply('❌ No tienes ninguna solicitud pendiente.');
 
       const { from, miNum, suNum } = trade;
-
       const cartaDelIniciador = dbCartas[from].splice(miNum, 1)[0];
       const cartaMia = dbCartas[sender].splice(suNum, 1)[0];
 
       dbCartas[from].push(cartaMia);
       dbCartas[sender].push(cartaDelIniciador);
       saveCartas(dbCartas);
-
       delete global.tradeRequests[sender];
 
-      return sock.sendMessage(remoteJid, { 
-        text: `🤝 *¡INTERCAMBIO EXITOSO!*\nLas cartas han sido transferidas a sus nuevos álbumes.`, 
-        mentions: [sender, from] 
-      });
+      return sock.sendMessage(remoteJid, { text: `🤝 *¡INTERCAMBIO EXITOSO!* Las cartas han sido transferidas.`, mentions: [sender, from] });
     }
 
     // ⚔️ DUELO DE CARTAS POKÉMON
@@ -392,7 +419,7 @@ module.exports = {
       const index = parseInt(args[0]) - 1;
       const target = getTarget(msg, args.slice(1));
 
-      if (isNaN(index) || !target) return reply('❌ Uso correcto:\n*.duelocarta [tu_numero] @usuario*');
+      if (isNaN(index) || !target) return reply('❌ Uso:\n*.duelocarta [tu_numero] @usuario*');
       if (!dbCartas[target] || dbCartas[target].length === 0) return reply('❌ Tu rival no tiene cartas para defenderse.');
 
       const miCarta = misCartas[index];
@@ -401,9 +428,7 @@ module.exports = {
       const miPoder = miCarta.atk + Math.floor(Math.random() * 50);
       const poderEnemigo = cartaRival.hp + Math.floor(Math.random() * 50);
 
-      let txt = `⚔️ *BATALLA POKÉMON* ⚔️\n\n`;
-      txt += `🔥 *@${cleanNumber(sender)}* usa a *${miCarta.rareza}* (Daño: ${miPoder})\n`;
-      txt += `🛡️ *@${cleanNumber(target)}* defiende con *${cartaRival.rareza}* (Defensa: ${poderEnemigo})\n\n`;
+      let txt = `⚔️ *BATALLA POKÉMON* ⚔️\n\n🔥 *@${cleanNumber(sender)}* usa a *${miCarta.nombreReal}* (Daño: ${miPoder})\n🛡️ *@${cleanNumber(target)}* defiende con *${cartaRival.nombreReal}* (Defensa: ${poderEnemigo})\n\n`;
 
       if (miPoder > poderEnemigo) {
         const botin = Math.floor(Math.random() * 800) + 200;
@@ -414,12 +439,10 @@ module.exports = {
         myData.xp = (myData.xp || 0) + botin;
         if (myData.save) await myData.save();
         if (targetData.save) await targetData.save();
-
-        txt += `💥 *¡Un golpe crítico!* Tu carta debilitó al rival.\nLe robaste *${botin} XP*.`;
+        txt += `💥 *¡Un golpe crítico!* Le robaste *${botin} XP*.`;
       } else {
         txt += `🧱 *¡No es muy efectivo!* La defensa del rival resistió tu ataque.`;
       }
-
       return sock.sendMessage(remoteJid, { text: txt, mentions: [sender, target] }, { quoted: msg });
     }
   }
