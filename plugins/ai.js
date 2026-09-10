@@ -1,10 +1,13 @@
 'use strict';
 
-// 🧠 Memoria RAM (Ultra rápida, no satura el disco de Termux)
+// 🧠 Memoria RAM (Ultra rápida, no satura el disco)
 const memoryCache = new Map();
 const MAX_HISTORY = 10;
 
-function cleanJid(jid = '') { return String(jid).split(':')[0]; }
+// 🟢 EL FIX: Extraer el número real sin importar si tiene ":" o "@s.whatsapp.net"
+function getNumber(jid = '') { 
+  return String(jid).split('@')[0].split(':')[0]; 
+}
 
 function getMemory(chatId) {
   if (!memoryCache.has(chatId)) {
@@ -17,7 +20,7 @@ function saveToMemory(chatId, role, content) {
   const history = getMemory(chatId);
   history.push({ role, content });
   if (history.length > MAX_HISTORY * 2) {
-    history.splice(0, 2); // Borra los más antiguos para no exceder el límite
+    history.splice(0, 2); 
   }
 }
 
@@ -37,7 +40,6 @@ REGLAS ESTRICTAS:
 - Si te preguntan algo serio o te piden información/resúmenes, responde de forma útil y clara, pero mantén tu toque relajado.
 - Haz respuestas cortas y directas, a menos que te pidan explicaciones largas.`;
 
-  // Construir el historial de mensajes
   const messages = [
     { role: 'system', content: systemPrompt },
     ...chatHistory,
@@ -52,7 +54,7 @@ REGLAS ESTRICTAS:
         Authorization: `Bearer ${apiKey}`
       },
       body: JSON.stringify({
-        model: 'openai/gpt-oss-120b', // El modelo más inteligente y rápido de Groq
+        model: 'openai/gpt-oss-120b', 
         temperature: 0.8,
         max_tokens: 500,
         messages: messages
@@ -75,26 +77,23 @@ module.exports = {
   category: 'inteligencia artificial',
   desc: 'Habla con la IA de SiriusBot (Con memoria de contexto)',
 
-  // 1️⃣ EJECUCIÓN POR COMANDO DIRECTO (.bot hola)
+  // 1️⃣ EJECUCIÓN POR COMANDO DIRECTO (.ai hola)
   execute: async ({ sock, msg, remoteJid, args, pushName, sender, reply }) => {
     try {
       let text = args.join(' ').trim();
 
-      // 🟢 NOVEDAD: Extraer mensaje citado si existe
       const quotedInfo = msg.message?.extendedTextMessage?.contextInfo;
       const quotedMsg = quotedInfo?.quotedMessage;
       let quotedText = '';
 
       if (quotedMsg) {
-        // Puede ser un mensaje de texto normal o uno extendido
         quotedText = quotedMsg.conversation || quotedMsg.extendedTextMessage?.text || '';
       }
 
       if (!text && !quotedText) {
-        return reply('🤖 Habla causa 😹\n\n📌 *Ejemplos:*\n.bot hola\n.bot (respondiendo a un mensaje) resúmeme esto');
+        return reply('🤖 Habla causa 😹\n\n📌 *Ejemplos:*\n.ai hola\n.ai (respondiendo a un mensaje) resúmeme esto');
       }
 
-      // 🟢 NOVEDAD: Si hay un mensaje citado, se lo inyectamos al cerebro de la IA
       let promptFinal = text;
       if (quotedText) {
         promptFinal = text 
@@ -109,7 +108,6 @@ module.exports = {
       
       const aiReply = await askGroq(promptFinal, senderName, history);
 
-      // Guardar en la memoria
       saveToMemory(remoteJid, 'user', `${senderName} dice: ${promptFinal}`);
       saveToMemory(remoteJid, 'assistant', aiReply);
 
@@ -121,36 +119,28 @@ module.exports = {
     }
   },
 
-  // 2️⃣ EJECUCIÓN AUTOMÁTICA (Detector de respuestas y menciones)
-  onMessage: async ({ sock, msg, remoteJid, body, pushName, groupData, userData, isCommand }) => {
+  // 2️⃣ EJECUCIÓN AUTOMÁTICA (Responde si citas uno de sus mensajes)
+  onMessage: async ({ sock, msg, remoteJid, body, pushName, isCommand }) => {
+    // Si es un comando (ya lo maneja execute), o lo envió el bot, lo ignoramos
     if (isCommand || msg.key.fromMe || !body) return;
 
-    const isChatbotEnabled = (groupData && groupData.chatbot) || (userData && userData.chatbot);
-
-    const botJid = cleanJid(sock.user.id);
-    const botFullJid = `${botJid}@s.whatsapp.net`;
-    
-    // Detectar menciones directas (@bot)
-    const mentioned = msg.message?.extendedTextMessage?.contextInfo?.mentionedJid || [];
-    const isMentioned = mentioned.includes(botFullJid);
-
-    // 🟢 NOVEDAD: Detectar si están respondiendo directamente a un mensaje que envió el bot
+    // 🟢 MAGIA: Comparación exacta de números de teléfono
+    const botNumber = getNumber(sock.user.id);
     const quotedParticipant = msg.message?.extendedTextMessage?.contextInfo?.participant;
-    const isReplyToBot = (cleanJid(quotedParticipant) === botJid);
+    
+    // ¿El mensaje que el usuario está respondiendo es del bot?
+    const isReplyToBot = quotedParticipant ? (getNumber(quotedParticipant) === botNumber) : false;
 
-    // ¡Si el modo chatbot está on, O lo mencionan, O le responden, se activa!
-    if (isChatbotEnabled || isMentioned || isReplyToBot) {
-      let cleanText = body.replace(new RegExp(`@${botJid}`, 'g'), '').trim();
-      if (!cleanText) cleanText = 'Hola';
-
+    // Si efectivamente citaste al bot, responde sin necesidad del .ai
+    if (isReplyToBot) {
       await sock.sendPresenceUpdate('composing', remoteJid);
 
       const senderName = pushName || 'Usuario';
       const history = getMemory(remoteJid);
       
-      const aiReply = await askGroq(cleanText, senderName, history);
+      const aiReply = await askGroq(body, senderName, history);
 
-      saveToMemory(remoteJid, 'user', `${senderName} dice: ${cleanText}`);
+      saveToMemory(remoteJid, 'user', `${senderName} dice: ${body}`);
       saveToMemory(remoteJid, 'assistant', aiReply);
 
       await sock.sendMessage(remoteJid, { text: aiReply }, { quoted: msg });
