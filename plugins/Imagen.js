@@ -1,51 +1,14 @@
 'use strict';
 
 const axios = require('axios');
-const cheerio = require('cheerio');
 
 const busquedasActivas = new Map();
-
-async function buscarImagenes(query) {
-  try {
-    // Usamos la URL exacta de Bing con los parámetros de búsqueda
-    const url = `https://www.bing.com/images/search?q=${encodeURIComponent(query)}&setmkt=es-US&setlang=es`;
-    
-    // Petición con User-Agent de PC para evitar restricciones móviles
-    const { data } = await axios.get(url, {
-      headers: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
-        'Accept-Language': 'es-ES,es;q=0.9'
-      },
-      timeout: 10000
-    });
-
-    const $ = cheerio.load(data);
-    const resultados = [];
-
-    $('.iusc').each((i, el) => {
-      const m = $(el).attr('m');
-      if (m) {
-        try {
-          const jsonData = JSON.parse(m);
-          if (jsonData.murl) {
-            resultados.push(jsonData.murl);
-          }
-        } catch (e) {}
-      }
-    });
-
-    return [...new Set(resultados)];
-  } catch (error) {
-    console.error("Error en scraping de Bing:", error.message);
-    return [];
-  }
-}
 
 module.exports = {
   name: 'imagen',
   aliases: ['img', 'siguiente'],
   category: 'multimedia',
-  desc: 'Buscador clásico de imágenes con navegación .siguiente',
+  desc: 'Buscador de imágenes con diagnóstico de errores en consola',
 
   execute: async ({ sock, msg, remoteJid, args, command, reply }) => {
     
@@ -61,7 +24,7 @@ module.exports = {
       if (sesion.currentIndex >= sesion.images.length) {
         clearTimeout(sesion.timer);
         busquedasActivas.delete(remoteJid);
-        return reply('⚠️ Ya vimos todas las imágenes disponibles de esta búsqueda.');
+        return reply('⚠️ Ya vimos todas las imágenes disponibles.');
       }
 
       clearTimeout(sesion.timer);
@@ -70,56 +33,52 @@ module.exports = {
       const imageUrl = sesion.images[sesion.currentIndex];
 
       try {
-        const imgDownload = await axios.get(imageUrl, { 
-          responseType: 'arraybuffer', 
-          timeout: 8000, 
-          headers: { 'User-Agent': 'Mozilla/5.0' } 
-        });
-
+        const imgDownload = await axios.get(imageUrl, { responseType: 'arraybuffer', timeout: 8000 });
         return await sock.sendMessage(remoteJid, {
           image: Buffer.from(imgDownload.data),
-          caption: `📸 *Resultado ${sesion.currentIndex + 1} de ${sesion.images.length}*\n🔍 *Búsqueda:* ${sesion.query}\n\n💡 _Escribe *.siguiente* para ver otra._`
+          caption: `📸 *Resultado ${sesion.currentIndex + 1} de ${sesion.images.length}*\n🔍 *Búsqueda:* ${sesion.query}`
         }, { quoted: msg });
       } catch (err) {
-        return reply(`⚠️ La imagen #${sesion.currentIndex + 1} falló al cargar.\n\nEscribe *.siguiente* de nuevo para saltarla.`);
+        return reply('⚠️ La imagen falló al cargar. Escribe *.siguiente* de nuevo para saltarla.');
       }
     }
 
     // 🔍 COMANDO PRINCIPAL: .imagen / .img
     if (command === 'imagen' || command === 'img') {
       if (!args.length) {
-        return reply('❌ Escribe qué imagen deseas buscar.\n📌 *Ejemplo:* .imagen bon o bon');
+        return reply('❌ Escribe qué imagen deseas buscar.\n📌 *Ejemplo:* .img dragones');
       }
 
       const query = args.join(' ');
       const loadMsg = await sock.sendMessage(remoteJid, { text: `🔍 _Buscando imágenes de "${query}"..._` }, { quoted: msg });
 
-      const results = await buscarImagenes(query);
-
-      if (!results || results.length === 0) {
-        await sock.sendMessage(remoteJid, { delete: loadMsg.key });
-        return reply('❌ No se encontró ninguna imagen para esa búsqueda.');
-      }
-
-      if (busquedasActivas.has(remoteJid)) {
-        clearTimeout(busquedasActivas.get(remoteJid).timer);
-      }
-
-      const timerDestruccion = setTimeout(() => busquedasActivas.delete(remoteJid), 5 * 60 * 1000);
-
-      busquedasActivas.set(remoteJid, {
-        query: query,
-        images: results,
-        currentIndex: 0,
-        timer: timerDestruccion
-      });
-
       try {
-        const imgDownload = await axios.get(results[0], { 
-          responseType: 'arraybuffer', 
-          timeout: 8000, 
-          headers: { 'User-Agent': 'Mozilla/5.0' } 
+        // Conexión directa a una API pública que extrae resultados limpios en formato JSON
+        const res = await axios.get(`https://deliriueapi.web.id/api/pinterest?query=${encodeURIComponent(query)}`, { timeout: 10000 });
+        
+        console.log("LOG API IMAGEN:", res.data); // <-- Esto te mostrará qué responde exactamente el servidor en tu Termux
+
+        const results = res.data?.data || res.data?.resultado;
+
+        if (!results || results.length === 0) {
+          await sock.sendMessage(remoteJid, { delete: loadMsg.key });
+          return reply('❌ El servidor no arrojó resultados para esta búsqueda.');
+        }
+
+        if (busquedasActivas.has(remoteJid)) {
+          clearTimeout(busquedasActivas.get(remoteJid).timer);
+        }
+
+        const timerDestruccion = setTimeout(() => busquedasActivas.delete(remoteJid), 5 * 60 * 1000);
+
+        busquedasActivas.set(remoteJid, {
+          query: query,
+          images: results,
+          currentIndex: 0,
+          timer: timerDestruccion
         });
+
+        const imgDownload = await axios.get(results[0], { responseType: 'arraybuffer', timeout: 8000 });
         
         await sock.sendMessage(remoteJid, { delete: loadMsg.key });
         await sock.sendMessage(remoteJid, {
@@ -129,7 +88,9 @@ module.exports = {
 
       } catch (err) {
         await sock.sendMessage(remoteJid, { delete: loadMsg.key });
-        return reply('❌ Ocurrió un error al descargar la primera imagen. Escribe *.siguiente* para intentar con otra.');
+        // 🚨 AQUÍ VEREMOS EL ERROR REAL EN TU CONSOLA DE TERMUX
+        console.error("❌ ERROR DETALLADO EN COMANDO IMAGEN:", err.message);
+        return reply(`❌ Error de conexión: ${err.message}`);
       }
     }
   }
