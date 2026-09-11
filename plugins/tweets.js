@@ -6,17 +6,15 @@ module.exports = {
   name: 'tweet',
   aliases: ['tw', 'twitter'],
   category: 'diversión',
-  desc: 'Crea un tweet falso realista con métricas aleatorias',
+  desc: 'Crea un tweet falso con el nombre real de WhatsApp',
 
   execute: async ({ sock, msg, remoteJid, args, reply }) => {
     const isReply = msg.message?.extendedTextMessage?.contextInfo?.participant;
     const isMention = msg.message?.extendedTextMessage?.contextInfo?.mentionedJid?.[0];
     const sender = msg.key.participant || msg.key.remoteJid;
     
-    // Identificar a la víctima
     const targetJid = isMention || isReply || sender;
     
-    // Limpiar menciones (@numero) del texto bruto
     let rawText = args.join(' ').replace(/@\d+/g, '').trim();
     if (!rawText && isReply) {
       const quotedMsg = msg.message.extendedTextMessage.contextInfo.quotedMessage;
@@ -24,34 +22,47 @@ module.exports = {
     }
 
     if (!rawText) {
-      return reply('❌ Faltan datos.\n📌 *Uso normal:* .tweet @usuario Texto\n📌 *Con nombre falso:* .tweet @usuario ElNick | Texto');
+      return reply('❌ Faltan datos.\n📌 *Uso:* .tweet @usuario [Texto]\n📌 *Con nick forzado:* .tweet @usuario [Nombre] | [Texto]');
     }
 
-    const loadMsg = await sock.sendMessage(remoteJid, { text: '🐦 _Falsificando interacciones..._' }, { quoted: msg });
+    const loadMsg = await sock.sendMessage(remoteJid, { text: '🐦 _Falsificando tweet con identidad real..._' }, { quoted: msg });
 
     try {
-      // 1️⃣ GESTIÓN DE NOMBRES
+      // 1️⃣ OBTENER EL NOMBRE REAL DE WHATSAPP (PUSHNAME)
       let displayName = 'Usuario';
-      if (targetJid === sender) displayName = msg.pushName || 'Usuario';
+      
+      // Intentamos extraer el nombre si es el mismo remitente
+      if (targetJid === sender && msg.pushName) {
+        displayName = msg.pushName;
+      } else {
+        // Si es a otra persona o mención, intentamos leer su contacto del chat
+        try {
+          const contact = await sock.onWhatsApp(targetJid);
+          if (contact && contact[0]?.notify) {
+            displayName = contact[0].notify;
+          }
+        } catch (e) {}
+      }
+
       let tweetText = rawText;
       
-      // Permitir forzar un nombre personalizado dividiendo con el símbolo "|"
+      // Permitir sobrescribir el nombre con el símbolo "|"
       if (rawText.includes('|')) {
         const partes = rawText.split('|');
         displayName = partes[0].trim();
         tweetText = partes[1].trim();
       }
 
-      // Crear un @username estético (Ej: jose965 en vez del número completo)
+      // Generar un username limpio sin espacios (Ej: Sirius -> sirius935)
       const shortName = displayName.split(' ')[0].replace(/[^a-zA-Z]/g, '') || 'user';
       const shortNum = targetJid.split('@')[0].slice(-3);
       const username = `${shortName.toLowerCase()}${shortNum}`;
 
-      // 2️⃣ OBTENER FOTO Y MÉTRICAS
+      // 2️⃣ OBTENER FOTO DE PERFIL
       let avatarUrl = 'https://i.imgur.com/39aMpwD.png';
       try { avatarUrl = await sock.profilePictureUrl(targetJid, 'image'); } catch (e) {}
 
-      // Generar números aleatorios para darle realismo viral
+      // Métricas falsas aleatorias
       const likes = Math.floor(Math.random() * 80000) + 500;
       const retweets = Math.floor(Math.random() * 15000) + 100;
       const replies = Math.floor(Math.random() * 5000) + 50;
@@ -69,7 +80,7 @@ module.exports = {
 
     } catch (err) {
       await sock.sendMessage(remoteJid, { delete: loadMsg.key });
-      return reply('❌ Ocurrió un error. Intenta con un texto más corto.');
+      return reply('❌ Ocurrió un error al generar el tweet.');
     }
   }
 };
