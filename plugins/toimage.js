@@ -12,7 +12,7 @@ if (!fs.existsSync(TEMP_DIR)) fs.mkdirSync(TEMP_DIR, { recursive: true });
 
 module.exports = {
   name: 'toimage',
-  aliases: ['toimg', 'aimg', 'imagen'],
+  aliases: ['toimg', 'aimg'],
   category: 'multimedia',
   desc: 'Convierte un sticker estático en una imagen',
 
