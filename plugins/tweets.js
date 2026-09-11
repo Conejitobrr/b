@@ -6,7 +6,7 @@ module.exports = {
   name: 'tweet',
   aliases: ['tw', 'twitter'],
   category: 'diversión',
-  desc: 'Crea un tweet falso con el nombre real de WhatsApp',
+  desc: 'Crea un tweet falso con el nombre real de WhatsApp sin citar el comando',
 
   execute: async ({ sock, msg, remoteJid, args, reply }) => {
     const isReply = msg.message?.extendedTextMessage?.contextInfo?.participant;
@@ -25,21 +25,24 @@ module.exports = {
       return reply('❌ Faltan datos.\n📌 *Uso:* .tweet @usuario [Texto]\n📌 *Con nick forzado:* .tweet @usuario [Nombre] | [Texto]');
     }
 
-    const loadMsg = await sock.sendMessage(remoteJid, { text: '🐦 _Falsificando tweet con identidad real..._' }, { quoted: msg });
-
     try {
-      // 1️⃣ OBTENER EL NOMBRE REAL DE WHATSAPP (PUSHNAME)
+      // 1️⃣ EXTRACCIÓN DEL NOMBRE REAL DE WHATSAPP (Metadata de Grupo / Contacto)
       let displayName = 'Usuario';
-      
-      // Intentamos extraer el nombre si es el mismo remitente
+
       if (targetJid === sender && msg.pushName) {
         displayName = msg.pushName;
       } else {
-        // Si es a otra persona o mención, intentamos leer su contacto del chat
         try {
-          const contact = await sock.onWhatsApp(targetJid);
-          if (contact && contact[0]?.notify) {
-            displayName = contact[0].notify;
+          // Intentamos obtener el nombre si es un grupo
+          const groupMetadata = await sock.groupMetadata(remoteJid).catch(() => null);
+          if (groupMetadata) {
+            const participant = groupMetadata.participants.find(p => p.id === targetJid);
+            if (participant && participant.notify) displayName = participant.notify;
+          }
+          // Si no está en el grupo, buscamos en la agenda del bot
+          if (displayName === 'Usuario') {
+            const contact = await sock.onWhatsApp(targetJid);
+            if (contact && contact[0]?.notify) displayName = contact[0].notify;
           }
         } catch (e) {}
       }
@@ -53,21 +56,18 @@ module.exports = {
         tweetText = partes[1].trim();
       }
 
-      // Generar un username limpio sin espacios (Ej: Sirius -> sirius935)
       const shortName = displayName.split(' ')[0].replace(/[^a-zA-Z]/g, '') || 'user';
       const shortNum = targetJid.split('@')[0].slice(-3);
       const username = `${shortName.toLowerCase()}${shortNum}`;
 
-      // 2️⃣ OBTENER FOTO DE PERFIL
+      // 2️⃣ FOTO DE PERFIL Y MÉTRICAS
       let avatarUrl = 'https://i.imgur.com/39aMpwD.png';
       try { avatarUrl = await sock.profilePictureUrl(targetJid, 'image'); } catch (e) {}
 
-      // Métricas falsas aleatorias
       const likes = Math.floor(Math.random() * 80000) + 500;
       const retweets = Math.floor(Math.random() * 15000) + 100;
       const replies = Math.floor(Math.random() * 5000) + 50;
 
-      // 3️⃣ GENERAR IMAGEN
       const apiUrl = `https://some-random-api.com/canvas/misc/tweet?avatar=${encodeURIComponent(avatarUrl)}&username=${encodeURIComponent(username)}&displayname=${encodeURIComponent(displayName)}&comment=${encodeURIComponent(tweetText)}&likes=${likes}&retweets=${retweets}&replies=${replies}`;
 
       const imgRes = await axios.get(apiUrl, { 
@@ -75,11 +75,11 @@ module.exports = {
         headers: { 'User-Agent': 'Mozilla/5.0' }
       });
       
-      await sock.sendMessage(remoteJid, { delete: loadMsg.key });
-      await sock.sendMessage(remoteJid, { image: Buffer.from(imgRes.data) }, { quoted: msg });
+      // ENVIAR SIN CITAR (Eliminamos el { quoted: msg } para que la foto vaya limpia)
+      await sock.sendMessage(remoteJid, { image: Buffer.from(imgRes.data) });
 
     } catch (err) {
-      await sock.sendMessage(remoteJid, { delete: loadMsg.key });
+      console.error('Error en tweet:', err);
       return reply('❌ Ocurrió un error al generar el tweet.');
     }
   }
