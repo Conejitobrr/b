@@ -1,51 +1,77 @@
 'use strict';
 
-const axios = require('axios');
+const { Client } = require("genius-lyrics");
+const axios = require("axios");
+
+// Inicializamos el cliente principal de Genius
+const genius = new Client();
 
 module.exports = {
   name: 'letra',
   aliases: ['lyrics', 'cancionletra'],
   category: 'multimedia',
-  desc: 'Busca la letra completa usando un servidor Proxy en EE.UU.',
+  desc: 'Busca la letra completa usando un motor híbrido',
 
   execute: async ({ sock, msg, remoteJid, args, reply }) => {
-    if (args.length === 0) {
-      return reply('❌ Escribe el nombre de la canción.\n📌 *Ejemplo:* .letra nunca me olvides');
+    if (!args.length) {
+      return reply('❌ *Uso correcto:* .letra [nombre de la canción]\n📌 *Ejemplo:* .letra baile inolvidable');
     }
 
     const query = args.join(' ');
-    const loadMsg = await sock.sendMessage(remoteJid, { text: `🔍 _Conectando a servidores externos: *${query}*..._` }, { quoted: msg });
+    const loadMsg = await sock.sendMessage(remoteJid, { text: `🔍 _Buscando en los servidores: *${query}*..._` }, { quoted: msg });
 
     try {
-      // 🌐 EL PUENTE: Esta API de USA hace la búsqueda por nosotros, saltándose el bloqueo de región.
-      const res = await axios.get(`https://some-random-api.com/lyrics?title=${encodeURIComponent(query)}`);
-      const data = res.data;
-
-      if (!data || !data.lyrics) {
+      // 🔥 MOTOR PRINCIPAL (Tu código original de genius-lyrics)
+      const searches = await genius.songs.search(query);
+      
+      if (!searches || searches.length === 0) {
         await sock.sendMessage(remoteJid, { delete: loadMsg.key });
-        return reply('❌ No se encontró la letra.');
+        return reply('❌ No pude encontrar esa canción en los registros de Genius.');
       }
 
-      // Armamos la estructura de la respuesta
-      const textoFinal = `🎤 *${data.title}*\n👤 *Artista:* ${data.author}\n\n${data.lyrics}`;
+      const mejorResultado = searches[0];
+      const lyrics = await mejorResultado.lyrics();
+      
+      if (!lyrics) {
+        await sock.sendMessage(remoteJid, { delete: loadMsg.key });
+        return reply('❌ Encontré la canción, pero la letra aún no ha sido transcrita.');
+      }
 
-      // Extraemos la portada oficial del álbum desde Genius a través del puente
-      const imagenAlbum = data.thumbnail?.genius || 'https://i.imgur.com/39aMpwD.png';
+      const textoFinal = `🎤 *${mejorResultado.title}*\n👤 *Artista:* ${mejorResultado.artist.name}\n\n${lyrics}`;
 
       await sock.sendMessage(remoteJid, { delete: loadMsg.key });
       
-      // Enviamos la imagen junto con la letra
       await sock.sendMessage(remoteJid, { 
-        image: { url: imagenAlbum }, 
+        image: { url: mejorResultado.image }, 
         caption: textoFinal 
       }, { quoted: msg });
 
     } catch (error) {
-      await sock.sendMessage(remoteJid, { delete: loadMsg.key });
-      console.error("❌ Error en comando letra:", error.message);
-      
-      // Si el servidor puente no encuentra nada, avisa al usuario
-      return reply('❌ No pude encontrar esa canción. Intenta escribir el nombre junto al del artista (Ej: .letra nunca me olvides yandel).');
+      console.log("⚠️ Motor 1 (Genius) bloqueado por red local. Activando Motor 2...");
+
+      // 🛡️ MOTOR SECUNDARIO DE RESPALDO (Anti-Bloqueos para Termux)
+      try {
+        const { data } = await axios.get(`https://lyrist.vercel.app/api/${encodeURIComponent(query)}`);
+
+        if (!data || !data.lyrics) {
+           await sock.sendMessage(remoteJid, { delete: loadMsg.key });
+           return reply('❌ Ninguno de los dos motores pudo encontrar la letra.');
+        }
+
+        const textoFallback = `🎤 *${data.title}*\n👤 *Artista:* ${data.artist}\n\n${data.lyrics}`;
+        
+        await sock.sendMessage(remoteJid, { delete: loadMsg.key });
+        
+        await sock.sendMessage(remoteJid, { 
+          image: { url: data.image }, 
+          caption: textoFallback 
+        }, { quoted: msg });
+
+      } catch (fallbackError) {
+        console.error("❌ Error en Motor 2:", fallbackError.message);
+        await sock.sendMessage(remoteJid, { delete: loadMsg.key });
+        return reply('❌ Los servidores de letras rechazaron la conexión. Intenta de nuevo más tarde.');
+      }
     }
   }
 };
