@@ -6,35 +6,37 @@ module.exports = {
   name: 'letra',
   aliases: ['lyrics', 'cancionletra'],
   category: 'multimedia',
-  desc: 'Busca la letra completa de cualquier canción',
+  desc: 'Busca la letra completa usando un servidor Proxy en EE.UU.',
 
   execute: async ({ sock, msg, remoteJid, args, reply }) => {
     if (args.length === 0) {
-      return reply('❌ Escribe el nombre de la canción.\n📌 *Ejemplo:* .letra baile inolvidable');
+      return reply('❌ Escribe el nombre de la canción.\n📌 *Ejemplo:* .letra nunca me olvides');
     }
 
     const query = args.join(' ');
-    const loadMsg = await sock.sendMessage(remoteJid, { text: `🔍 _Buscando en los registros: *${query}*..._` }, { quoted: msg });
+    const loadMsg = await sock.sendMessage(remoteJid, { text: `🔍 _Conectando a servidores externos: *${query}*..._` }, { quoted: msg });
 
     try {
-      // 1. Conectamos a la API de Popcat (Busca en Genius automáticamente)
-      const res = await axios.get(`https://api.popcat.xyz/lyrics?song=${encodeURIComponent(query)}`);
+      // 🌐 EL PUENTE: Esta API de USA hace la búsqueda por nosotros, saltándose el bloqueo de región.
+      const res = await axios.get(`https://some-random-api.com/lyrics?title=${encodeURIComponent(query)}`);
       const data = res.data;
 
-      // Si la API no encuentra la letra, envía un error 404 que cae en el catch
-      if (!data.lyrics) {
+      if (!data || !data.lyrics) {
         await sock.sendMessage(remoteJid, { delete: loadMsg.key });
-        return reply('❌ Encontré la canción, pero la letra aún no está disponible.');
+        return reply('❌ No se encontró la letra.');
       }
 
-      // 2. Armamos el mensaje oficial
-      const textoFinal = `🎤 *${data.title}*\n👤 *Artista:* ${data.artist}\n\n${data.lyrics}`;
+      // Armamos la estructura de la respuesta
+      const textoFinal = `🎤 *${data.title}*\n👤 *Artista:* ${data.author}\n\n${data.lyrics}`;
+
+      // Extraemos la portada oficial del álbum desde Genius a través del puente
+      const imagenAlbum = data.thumbnail?.genius || 'https://i.imgur.com/39aMpwD.png';
 
       await sock.sendMessage(remoteJid, { delete: loadMsg.key });
       
-      // 3. Enviamos la imagen del álbum con la letra en la descripción
+      // Enviamos la imagen junto con la letra
       await sock.sendMessage(remoteJid, { 
-        image: { url: data.image }, 
+        image: { url: imagenAlbum }, 
         caption: textoFinal 
       }, { quoted: msg });
 
@@ -42,12 +44,8 @@ module.exports = {
       await sock.sendMessage(remoteJid, { delete: loadMsg.key });
       console.error("❌ Error en comando letra:", error.message);
       
-      // Si el error es 404, significa que la búsqueda no arrojó nada
-      if (error.response && error.response.status === 404) {
-         return reply('❌ No pude encontrar esa canción. Intenta escribir el nombre junto al del artista (Ej: .letra baile inolvidable bad bunny).');
-      }
-      
-      return reply('❌ Ocurrió un error de conexión al intentar extraer la letra.');
+      // Si el servidor puente no encuentra nada, avisa al usuario
+      return reply('❌ No pude encontrar esa canción. Intenta escribir el nombre junto al del artista (Ej: .letra nunca me olvides yandel).');
     }
   }
 };
