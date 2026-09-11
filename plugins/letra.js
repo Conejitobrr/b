@@ -6,48 +6,64 @@ module.exports = {
   name: 'letra',
   aliases: ['lyrics', 'cancionletra'],
   category: 'multimedia',
-  desc: 'Busca la letra de una canción usando el servidor ultra estable de Popcat',
+  desc: 'Busca la letra de cualquier canción usando un motor anti-bloqueos (OVH)',
 
   execute: async ({ sock, msg, remoteJid, args, reply }) => {
     if (!args.length) {
-      return reply('❌ Escribe el nombre de la canción.\n📌 *Ejemplo:* .letra baile inolvidable');
+      return reply('❌ Escribe el nombre de la canción.\n📌 *Ejemplo:* .letra mujer amante rata blanca');
     }
 
     const query = args.join(' ');
-    const loadMsg = await sock.sendMessage(remoteJid, { text: `🔍 _Buscando letra de: *${query}*..._` }, { quoted: msg });
+    const loadMsg = await sock.sendMessage(remoteJid, { text: `🔍 _Buscando en bases de datos abiertas: *${query}*..._` }, { quoted: msg });
 
     try {
-      // 🚀 CONEXIÓN DIRECTA A POPCAT (Anti-bloqueos y sin límite de peticiones)
-      const res = await axios.get(`https://api.popcat.xyz/lyrics?song=${encodeURIComponent(query)}`);
-      const data = res.data;
+      // 1️⃣ BÚSQUEDA INICIAL (Obtiene el nombre oficial, artista y portada)
+      const searchRes = await axios.get(`https://api.lyrics.ovh/suggest/${encodeURIComponent(query)}`);
+      const results = searchRes.data.data;
 
-      // Si la API responde bien pero no encuentra la letra
-      if (!data || !data.lyrics) {
+      if (!results || results.length === 0) {
+        await sock.sendMessage(remoteJid, { delete: loadMsg.key });
+        return reply('❌ No se encontró ninguna canción con ese nombre en los registros globales.');
+      }
+
+      // Tomamos el resultado más exacto
+      const mejorResultado = results[0];
+      const artist = mejorResultado.artist.name;
+      const title = mejorResultado.title;
+      const cover = mejorResultado.album.cover_xl || mejorResultado.album.cover_medium || 'https://i.imgur.com/39aMpwD.png';
+
+      // 2️⃣ EXTRACCIÓN DE LA LETRA (Ruta directa anti-bloqueos)
+      const lyricsRes = await axios.get(`https://api.lyrics.ovh/v1/${encodeURIComponent(artist)}/${encodeURIComponent(title)}`);
+      let lyrics = lyricsRes.data.lyrics;
+
+      if (!lyrics) {
         await sock.sendMessage(remoteJid, { delete: loadMsg.key });
         return reply('❌ Encontré la canción, pero la letra aún no está transcrita.');
       }
 
-      // Armamos la estructura de la respuesta
-      const textoFinal = `🎤 *${data.title}*\n👤 *Artista:* ${data.artist}\n\n${data.lyrics}`;
+      // Limpieza de texto promocional que a veces incluye la API
+      lyrics = lyrics.replace(/Paroles de la chanson.*?\r?\n/i, '').trim();
+
+      const textoFinal = `🎤 *${title}*\n👤 *Artista:* ${artist}\n\n${lyrics}`;
 
       await sock.sendMessage(remoteJid, { delete: loadMsg.key });
       
-      // Enviamos la imagen junto con la letra
+      // 3️⃣ ENVÍO DEL RESULTADO
       await sock.sendMessage(remoteJid, { 
-        image: { url: data.image }, 
+        image: { url: cover }, 
         caption: textoFinal 
       }, { quoted: msg });
 
     } catch (error) {
       await sock.sendMessage(remoteJid, { delete: loadMsg.key });
-      console.error("❌ Error en comando letra:", error.message);
       
-      // Manejo de errores específicos
+      // Si la API devuelve 404 en el segundo paso, la canción existe pero no hay letra
       if (error.response && error.response.status === 404) {
-        return reply('❌ No pude encontrar esa canción. Intenta escribir el nombre junto al del artista (Ej: .letra baile inolvidable bad bunny).');
+         return reply('❌ Encontré la canción, pero no hay registros de su letra en la base de datos.');
       }
       
-      return reply('❌ Ocurrió un error de conexión al intentar extraer la letra. Intenta de nuevo en unos minutos.');
+      console.error("❌ Error en comando letra:", error.message);
+      return reply('❌ Ocurrió un error de red al intentar descargar la letra. Intenta nuevamente.');
     }
   }
 };
