@@ -1,77 +1,53 @@
 'use strict';
 
-const { Client } = require("genius-lyrics");
-const axios = require("axios");
-
-// Inicializamos el cliente principal de Genius
-const genius = new Client();
+const axios = require('axios');
 
 module.exports = {
   name: 'letra',
   aliases: ['lyrics', 'cancionletra'],
   category: 'multimedia',
-  desc: 'Busca la letra completa usando un motor híbrido',
+  desc: 'Busca la letra de una canción usando el servidor ultra estable de Popcat',
 
   execute: async ({ sock, msg, remoteJid, args, reply }) => {
     if (!args.length) {
-      return reply('❌ *Uso correcto:* .letra [nombre de la canción]\n📌 *Ejemplo:* .letra baile inolvidable');
+      return reply('❌ Escribe el nombre de la canción.\n📌 *Ejemplo:* .letra baile inolvidable');
     }
 
     const query = args.join(' ');
-    const loadMsg = await sock.sendMessage(remoteJid, { text: `🔍 _Buscando en los servidores: *${query}*..._` }, { quoted: msg });
+    const loadMsg = await sock.sendMessage(remoteJid, { text: `🔍 _Buscando letra de: *${query}*..._` }, { quoted: msg });
 
     try {
-      // 🔥 MOTOR PRINCIPAL (Tu código original de genius-lyrics)
-      const searches = await genius.songs.search(query);
-      
-      if (!searches || searches.length === 0) {
+      // 🚀 CONEXIÓN DIRECTA A POPCAT (Anti-bloqueos y sin límite de peticiones)
+      const res = await axios.get(`https://api.popcat.xyz/lyrics?song=${encodeURIComponent(query)}`);
+      const data = res.data;
+
+      // Si la API responde bien pero no encuentra la letra
+      if (!data || !data.lyrics) {
         await sock.sendMessage(remoteJid, { delete: loadMsg.key });
-        return reply('❌ No pude encontrar esa canción en los registros de Genius.');
+        return reply('❌ Encontré la canción, pero la letra aún no está transcrita.');
       }
 
-      const mejorResultado = searches[0];
-      const lyrics = await mejorResultado.lyrics();
-      
-      if (!lyrics) {
-        await sock.sendMessage(remoteJid, { delete: loadMsg.key });
-        return reply('❌ Encontré la canción, pero la letra aún no ha sido transcrita.');
-      }
-
-      const textoFinal = `🎤 *${mejorResultado.title}*\n👤 *Artista:* ${mejorResultado.artist.name}\n\n${lyrics}`;
+      // Armamos la estructura de la respuesta
+      const textoFinal = `🎤 *${data.title}*\n👤 *Artista:* ${data.artist}\n\n${data.lyrics}`;
 
       await sock.sendMessage(remoteJid, { delete: loadMsg.key });
       
+      // Enviamos la imagen junto con la letra
       await sock.sendMessage(remoteJid, { 
-        image: { url: mejorResultado.image }, 
+        image: { url: data.image }, 
         caption: textoFinal 
       }, { quoted: msg });
 
     } catch (error) {
-      console.log("⚠️ Motor 1 (Genius) bloqueado por red local. Activando Motor 2...");
-
-      // 🛡️ MOTOR SECUNDARIO DE RESPALDO (Anti-Bloqueos para Termux)
-      try {
-        const { data } = await axios.get(`https://lyrist.vercel.app/api/${encodeURIComponent(query)}`);
-
-        if (!data || !data.lyrics) {
-           await sock.sendMessage(remoteJid, { delete: loadMsg.key });
-           return reply('❌ Ninguno de los dos motores pudo encontrar la letra.');
-        }
-
-        const textoFallback = `🎤 *${data.title}*\n👤 *Artista:* ${data.artist}\n\n${data.lyrics}`;
-        
-        await sock.sendMessage(remoteJid, { delete: loadMsg.key });
-        
-        await sock.sendMessage(remoteJid, { 
-          image: { url: data.image }, 
-          caption: textoFallback 
-        }, { quoted: msg });
-
-      } catch (fallbackError) {
-        console.error("❌ Error en Motor 2:", fallbackError.message);
-        await sock.sendMessage(remoteJid, { delete: loadMsg.key });
-        return reply('❌ Los servidores de letras rechazaron la conexión. Intenta de nuevo más tarde.');
+      await sock.sendMessage(remoteJid, { delete: loadMsg.key });
+      console.error("❌ Error en comando letra:", error.message);
+      
+      // Manejo de errores específicos
+      if (error.response && error.response.status === 404) {
+        return reply('❌ No pude encontrar esa canción. Intenta escribir el nombre junto al del artista (Ej: .letra baile inolvidable bad bunny).');
       }
+      
+      return reply('❌ Ocurrió un error de conexión al intentar extraer la letra. Intenta de nuevo en unos minutos.');
     }
   }
 };
