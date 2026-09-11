@@ -18,7 +18,7 @@ module.exports = {
   name: 'explotar',
   aliases: ['bomba', 'autodestruccion', 'boom', 'explota'],
   category: 'diversión',
-  desc: 'Inicia una secuencia de autodestrucción en el chat',
+  desc: 'Inicia una secuencia explosiva de broma',
 
   execute: async ({ sock, msg, remoteJid, reply }) => {
     try {
@@ -26,9 +26,10 @@ module.exports = {
       await sock.sendMessage(remoteJid, { text: '⚠️ *ADVERTENCIA:* SECUENCIA DE AUTODESTRUCCIÓN INICIADA.' });
       await sleep(1500);
 
-      // 2️⃣ TEXTO GLITCH / ALIEN (El "idioma raro")
-      const alienText = 'S̶i̵s̷t̷e̵m̷a̶ ̷C̴o̴r̷r̸u̴p̶t̶o̴.̷ ̷ ̸A̸n̸u̴l̷a̵c̵i̸ó̵n̷ ̷d̷e̴n̸e̷g̶a̵d̶a̴.̶ ̴ ̴P̸u̶r̵g̸a̷n̴d̵o̷ ̸a̷r̸c̸h̷i̷v̶o̷s̷.̴.̶.';
-      await sock.sendMessage(remoteJid, { text: alienText });
+      // 2️⃣ TEXTO ÁRABE (Trolleo 100% Pacífico y Seguro)
+      // Traducción real: "Este es un mensaje de paz y amor, los quiero mucho a todos, beban agua y coman verduras. ¡La amistad es mágica!"
+      const arabText = 'هذه رسالة سلام ومحبة ، أحبكم جميعًا كثيرًا ، اشربوا الماء وتناولوا الخضار. الصداقة هي السحر!';
+      await sock.sendMessage(remoteJid, { text: arabText });
       await sleep(2000);
 
       // 3️⃣ CONTEO REGRESIVO DEL TERROR
@@ -44,8 +45,8 @@ module.exports = {
       const inputGif = path.join(TEMP_DIR, `bomb_${id}.gif`);
       const outputWebp = path.join(TEMP_DIR, `boom_${id}.webp`);
 
-      // Enlace directo a un GIF de explosión clásico
-      const gifUrl = 'https://media1.tenor.com/m/Z-2kU7_fH2cAAAAC/explosion-boom.gif';
+      // 🌐 NUEVO ENLACE: Giphy nunca bloquea las descargas en Latinoamérica
+      const gifUrl = 'https://media.giphy.com/media/HhTXt43pk1I1W/giphy.gif';
       
       const gifDownload = await axios.get(gifUrl, { responseType: 'arraybuffer' });
       fs.writeFileSync(inputGif, Buffer.from(gifDownload.data));
@@ -72,11 +73,10 @@ module.exports = {
 
     } catch (err) {
       console.log('❌ Error en comando explotar:', err.message);
-      return reply('💥 _La bomba era china y no explotó. (Hubo un error de red)_');
+      return reply('💥 _La bomba era china y no explotó. (El GIF no cargó a tiempo)_');
     } finally {
       // 7️⃣ LIMPIEZA
       try {
-        const id = Date.now(); // Usar comodín de limpieza si falla el ID local
         const files = fs.readdirSync(TEMP_DIR);
         for (const file of files) {
           if (file.includes('bomb_') || file.includes('boom_')) {
