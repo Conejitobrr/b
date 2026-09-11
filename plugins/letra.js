@@ -6,49 +6,50 @@ module.exports = {
   name: 'letra',
   aliases: ['lyrics', 'cancionletra'],
   category: 'multimedia',
-  desc: 'Busca la letra de cualquier canción usando un motor anti-bloqueos (OVH)',
+  desc: 'Busca la letra oficial de una canción en su idioma original',
 
   execute: async ({ sock, msg, remoteJid, args, reply }) => {
     if (!args.length) {
-      return reply('❌ Escribe el nombre de la canción.\n📌 *Ejemplo:* .letra mujer amante rata blanca');
+      return reply('❌ Escribe el nombre de la canción.\n📌 *Ejemplo:* .letra talisman rata blanca');
     }
 
     const query = args.join(' ');
-    const loadMsg = await sock.sendMessage(remoteJid, { text: `🔍 _Buscando en bases de datos abiertas: *${query}*..._` }, { quoted: msg });
+    const loadMsg = await sock.sendMessage(remoteJid, { text: `🔍 _Extrayendo letras oficiales de: *${query}*..._` }, { quoted: msg });
 
     try {
-      // 1️⃣ BÚSQUEDA INICIAL (Obtiene el nombre oficial, artista y portada)
-      const searchRes = await axios.get(`https://api.lyrics.ovh/suggest/${encodeURIComponent(query)}`);
-      const results = searchRes.data.data;
+      // 1️⃣ OBTENER LETRA (LRCLIB API - Idioma Original, Cero Bloqueos)
+      const lrcRes = await axios.get(`https://lrclib.net/api/search?q=${encodeURIComponent(query)}`);
+      const tracks = lrcRes.data;
 
-      if (!results || results.length === 0) {
+      // Verificamos que exista la canción y que tenga letra en texto plano
+      if (!tracks || tracks.length === 0 || !tracks[0].plainLyrics) {
         await sock.sendMessage(remoteJid, { delete: loadMsg.key });
-        return reply('❌ No se encontró ninguna canción con ese nombre en los registros globales.');
+        return reply('❌ Encontré la canción, pero su letra no está disponible en la base de datos oficial.');
       }
 
-      // Tomamos el resultado más exacto
-      const mejorResultado = results[0];
-      const artist = mejorResultado.artist.name;
-      const title = mejorResultado.title;
-      const cover = mejorResultado.album.cover_xl || mejorResultado.album.cover_medium || 'https://i.imgur.com/39aMpwD.png';
+      // Extraemos los metadatos más exactos (el primer resultado)
+      const mejorLetra = tracks[0];
+      const artist = mejorLetra.artistName;
+      const title = mejorLetra.trackName;
+      const lyrics = mejorLetra.plainLyrics;
 
-      // 2️⃣ EXTRACCIÓN DE LA LETRA (Ruta directa anti-bloqueos)
-      const lyricsRes = await axios.get(`https://api.lyrics.ovh/v1/${encodeURIComponent(artist)}/${encodeURIComponent(title)}`);
-      let lyrics = lyricsRes.data.lyrics;
-
-      if (!lyrics) {
-        await sock.sendMessage(remoteJid, { delete: loadMsg.key });
-        return reply('❌ Encontré la canción, pero la letra aún no está transcrita.');
+      // 2️⃣ OBTENER PORTADA HD (Apple iTunes API - Libre y Segura)
+      let cover = 'https://i.imgur.com/39aMpwD.png'; // Imagen por defecto en caso de emergencia
+      try {
+        const itunesRes = await axios.get(`https://itunes.apple.com/search?term=${encodeURIComponent(artist + ' ' + title)}&entity=song&limit=1`);
+        if (itunesRes.data.results.length > 0) {
+          // Reemplazamos la miniatura de 100px por la versión HD de 600px
+          cover = itunesRes.data.results[0].artworkUrl100.replace('100x100bb', '600x600bb');
+        }
+      } catch (e) {
+        console.log("⚠️ Falló la carga de portada de iTunes, usando imagen por defecto.");
       }
-
-      // Limpieza de texto promocional que a veces incluye la API
-      lyrics = lyrics.replace(/Paroles de la chanson.*?\r?\n/i, '').trim();
 
       const textoFinal = `🎤 *${title}*\n👤 *Artista:* ${artist}\n\n${lyrics}`;
 
       await sock.sendMessage(remoteJid, { delete: loadMsg.key });
-      
-      // 3️⃣ ENVÍO DEL RESULTADO
+
+      // 3️⃣ ENVIAR PORTADA Y LETRA
       await sock.sendMessage(remoteJid, { 
         image: { url: cover }, 
         caption: textoFinal 
@@ -56,14 +57,8 @@ module.exports = {
 
     } catch (error) {
       await sock.sendMessage(remoteJid, { delete: loadMsg.key });
-      
-      // Si la API devuelve 404 en el segundo paso, la canción existe pero no hay letra
-      if (error.response && error.response.status === 404) {
-         return reply('❌ Encontré la canción, pero no hay registros de su letra en la base de datos.');
-      }
-      
       console.error("❌ Error en comando letra:", error.message);
-      return reply('❌ Ocurrió un error de red al intentar descargar la letra. Intenta nuevamente.');
+      return reply('❌ Ocurrió un error al intentar descargar la letra. Verifica tu conexión a internet.');
     }
   }
 };
