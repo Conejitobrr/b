@@ -1,14 +1,51 @@
 'use strict';
 
 const axios = require('axios');
+const cheerio = require('cheerio');
 
 const busquedasActivas = new Map();
+
+async function buscarImagenes(query) {
+  try {
+    // Usamos la URL exacta de Bing con los parámetros de búsqueda
+    const url = `https://www.bing.com/images/search?q=${encodeURIComponent(query)}&setmkt=es-US&setlang=es`;
+    
+    // Petición con User-Agent de PC para evitar restricciones móviles
+    const { data } = await axios.get(url, {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+        'Accept-Language': 'es-ES,es;q=0.9'
+      },
+      timeout: 10000
+    });
+
+    const $ = cheerio.load(data);
+    const resultados = [];
+
+    $('.iusc').each((i, el) => {
+      const m = $(el).attr('m');
+      if (m) {
+        try {
+          const jsonData = JSON.parse(m);
+          if (jsonData.murl) {
+            resultados.push(jsonData.murl);
+          }
+        } catch (e) {}
+      }
+    });
+
+    return [...new Set(resultados)];
+  } catch (error) {
+    console.error("Error en scraping de Bing:", error.message);
+    return [];
+  }
+}
 
 module.exports = {
   name: 'imagen',
   aliases: ['img', 'siguiente'],
   category: 'multimedia',
-  desc: 'Busca imágenes en alta calidad y permite navegar con .siguiente',
+  desc: 'Buscador clásico de imágenes con navegación .siguiente',
 
   execute: async ({ sock, msg, remoteJid, args, command, reply }) => {
     
@@ -57,29 +94,27 @@ module.exports = {
       const query = args.join(' ');
       const loadMsg = await sock.sendMessage(remoteJid, { text: `🔍 _Buscando imágenes de "${query}"..._` }, { quoted: msg });
 
+      const results = await buscarImagenes(query);
+
+      if (!results || results.length === 0) {
+        await sock.sendMessage(remoteJid, { delete: loadMsg.key });
+        return reply('❌ No se encontró ninguna imagen para esa búsqueda.');
+      }
+
+      if (busquedasActivas.has(remoteJid)) {
+        clearTimeout(busquedasActivas.get(remoteJid).timer);
+      }
+
+      const timerDestruccion = setTimeout(() => busquedasActivas.delete(remoteJid), 5 * 60 * 1000);
+
+      busquedasActivas.set(remoteJid, {
+        query: query,
+        images: results,
+        currentIndex: 0,
+        timer: timerDestruccion
+      });
+
       try {
-        // Conexión a motor API ultra estable especializado en bypass de IPs móviles
-        const res = await axios.get(`https://deliriueapi.web.id/api/pinterest?query=${encodeURIComponent(query)}`, { timeout: 10000 });
-        const results = res.data?.data;
-
-        if (!results || results.length === 0) {
-          await sock.sendMessage(remoteJid, { delete: loadMsg.key });
-          return reply('❌ No se encontró ninguna imagen para esa búsqueda.');
-        }
-
-        if (busquedasActivas.has(remoteJid)) {
-          clearTimeout(busquedasActivas.get(remoteJid).timer);
-        }
-
-        const timerDestruccion = setTimeout(() => busquedasActivas.delete(remoteJid), 5 * 60 * 1000);
-
-        busquedasActivas.set(remoteJid, {
-          query: query,
-          images: results,
-          currentIndex: 0,
-          timer: timerDestruccion
-        });
-
         const imgDownload = await axios.get(results[0], { 
           responseType: 'arraybuffer', 
           timeout: 8000, 
@@ -94,7 +129,7 @@ module.exports = {
 
       } catch (err) {
         await sock.sendMessage(remoteJid, { delete: loadMsg.key });
-        return reply('❌ Ocurrió un error al conectar con el servidor de imágenes. Intenta de nuevo.');
+        return reply('❌ Ocurrió un error al descargar la primera imagen. Escribe *.siguiente* para intentar con otra.');
       }
     }
   }
