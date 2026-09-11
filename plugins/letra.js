@@ -1,12 +1,13 @@
 'use strict';
 
-const axios = require('axios');
+const { Client } = require("genius-lyrics");
+const genius = new Client();
 
 module.exports = {
   name: 'letra',
   aliases: ['lyrics', 'cancionletra'],
   category: 'multimedia',
-  desc: 'Busca la letra completa de cualquier canción',
+  desc: 'Busca la letra completa de una canción en Genius',
 
   execute: async ({ sock, msg, remoteJid, args, reply }) => {
     if (args.length === 0) {
@@ -14,28 +15,41 @@ module.exports = {
     }
 
     const query = args.join(' ');
-    const loadMsg = await sock.sendMessage(remoteJid, { text: '🎶 _Buscando en los cancioneros..._' }, { quoted: msg });
+    const loadMsg = await sock.sendMessage(remoteJid, { text: `🔍 _Buscando en Genius: *${query}*..._` }, { quoted: msg });
 
     try {
-      // API estable y gratuita para letras de canciones
-      const res = await axios.get(`https://some-random-api.com/lyrics?title=${encodeURIComponent(query)}`);
-      const data = res.data;
-
-      const textoFinal = `🎤 *${data.title}*\n👤 *Artista:* ${data.author}\n\n${data.lyrics}`;
-
-      await sock.sendMessage(remoteJid, { delete: loadMsg.key });
-      await sock.sendMessage(remoteJid, { text: textoFinal }, { quoted: msg });
-
-    } catch (err) {
-      await sock.sendMessage(remoteJid, { delete: loadMsg.key });
+      // 1. Buscamos en la base de datos masiva
+      const searches = await genius.songs.search(query);
       
-      // Manejo de error si la canción no existe
-      if (err.response && err.response.status === 404) {
-        return reply(`❌ No pude encontrar la letra de "${query}". Intenta agregando el nombre del artista.`);
+      if (!searches || searches.length === 0) {
+        await sock.sendMessage(remoteJid, { delete: loadMsg.key });
+        return reply('❌ No pude encontrar esa canción en los registros de Genius.');
       }
+
+      // 2. Tomamos el resultado más exacto
+      const mejorResultado = searches[0];
+      const lyrics = await mejorResultado.lyrics();
       
-      console.log('❌ Error en comando letra:', err.message);
-      return reply('❌ Ocurrió un error al buscar la canción.');
+      if (!lyrics) {
+        await sock.sendMessage(remoteJid, { delete: loadMsg.key });
+        return reply('❌ Encontré la canción, pero la letra aún no ha sido transcrita.');
+      }
+
+      // 3. Armamos el mensaje oficial
+      const textoFinal = `🎤 *${mejorResultado.title}*\n👤 *Artista:* ${mejorResultado.artist.name}\n\n${lyrics}`;
+
+      await sock.sendMessage(remoteJid, { delete: loadMsg.key });
+      
+      // 4. Enviamos la imagen del álbum con la letra
+      await sock.sendMessage(remoteJid, { 
+        image: { url: mejorResultado.image }, 
+        caption: textoFinal 
+      }, { quoted: msg });
+
+    } catch (error) {
+      console.error("❌ Error en plugin de Genius:", error.message);
+      await sock.sendMessage(remoteJid, { delete: loadMsg.key });
+      return reply('❌ Ocurrió un error al intentar extraer la letra.');
     }
   }
 };
