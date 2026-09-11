@@ -6,7 +6,7 @@ module.exports = {
   name: 'pinterest',
   aliases: ['pin'],
   category: 'multimedia',
-  desc: 'Descarga imágenes de Pinterest mediante scraping directo (Anti-caídas)',
+  desc: 'Buscador de Pinterest con doble motor API',
 
   execute: async ({ sock, msg, remoteJid, args, reply }) => {
     if (!args.length) {
@@ -14,57 +14,47 @@ module.exports = {
     }
 
     const query = args.join(' ');
-    const loadMsg = await sock.sendMessage(remoteJid, { text: `🔍 _Extrayendo imágenes desde Pinterest: "${query}"..._` }, { quoted: msg });
+    const loadMsg = await sock.sendMessage(remoteJid, { text: `🔍 _Extrayendo resultados: "${query}"..._` }, { quoted: msg });
 
     try {
-      // 1️⃣ SCRAPING DIRECTO A LA PÁGINA OFICIAL DE PINTEREST
-      const res = await axios.get(`https://www.pinterest.com/search/pins/?q=${encodeURIComponent(query)}`, {
-        headers: { 
-          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36',
-          'Accept-Language': 'es-ES,es;q=0.9'
-        }
-      });
+      let imagenes = [];
 
-      // 2️⃣ FILTRAR SOLO LAS IMÁGENES EN ALTA CALIDAD (Originals)
-      const regex = /"url":"(https:\/\/i\.pinimg\.com\/originals\/[^"]+)"/g;
-      let matches = [];
-      let match;
-      
-      while ((match = regex.exec(res.data)) !== null) {
-        // Limpiamos los caracteres de escape JSON
-        matches.push(match[1].replace(/\\/g, ''));
+      // 🚀 MOTOR 1: Itzpire (Especializado en bots de WhatsApp)
+      try {
+        const res1 = await axios.get(`https://itzpire.com/search/pinterest?query=${encodeURIComponent(query)}`);
+        if (res1.data?.data?.length > 0) imagenes = res1.data.data;
+      } catch (e) {
+        console.log('⚠️ Motor 1 bloqueado. Activando Motor 2...');
       }
 
-      // Limpiar duplicados de la memoria
-      matches = [...new Set(matches)];
+      // 🚀 MOTOR 2: Siputzx (Respaldo en caso de caída)
+      if (imagenes.length === 0) {
+        const res2 = await axios.get(`https://api.siputzx.my.id/api/s/pinterest?query=${encodeURIComponent(query)}`);
+        if (res2.data?.data?.length > 0) imagenes = res2.data.data;
+      }
 
-      if (matches.length === 0) {
+      if (imagenes.length === 0) {
         await sock.sendMessage(remoteJid, { delete: loadMsg.key });
-        return reply('❌ No se encontraron imágenes o Pinterest bloqueó la lectura.');
+        return reply('❌ No se encontraron resultados o los servidores están saturados.');
       }
 
-      // 3️⃣ ESCOGER UNA IMAGEN ALEATORIA DE LOS RESULTADOS
-      const imagenAleatoria = matches[Math.floor(Math.random() * matches.length)];
-
-      // 4️⃣ DESCARGAR LA IMAGEN DE FORMA SEGURA (Evita Error 429 de Apple/WA)
-      const imgDownload = await axios.get(imagenAleatoria, { 
+      // Escoger imagen aleatoria y descargar a RAM
+      const imagenElegida = imagenes[Math.floor(Math.random() * imagenes.length)];
+      const imgDownload = await axios.get(imagenElegida, { 
         responseType: 'arraybuffer',
-        headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)' }
+        headers: { 'User-Agent': 'Mozilla/5.0' }
       });
-      const bufferImagen = Buffer.from(imgDownload.data);
 
       await sock.sendMessage(remoteJid, { delete: loadMsg.key });
       
-      // 5️⃣ ENVIAR EL RESULTADO FINAL
       await sock.sendMessage(remoteJid, {
-        image: bufferImagen,
+        image: Buffer.from(imgDownload.data),
         caption: `📌 *Pinterest:* ${query}`
       }, { quoted: msg });
 
     } catch (err) {
       await sock.sendMessage(remoteJid, { delete: loadMsg.key });
-      console.error('❌ Error en Pinterest (Scraping):', err.message);
-      return reply('❌ Ocurrió un error al extraer la imagen directamente de la fuente.');
+      return reply('❌ Ocurrió un error al descargar la imagen de Pinterest.');
     }
   }
 };
