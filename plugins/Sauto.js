@@ -6,7 +6,7 @@ const { execFile } = require('child_process');
 const { promisify } = require('util');
 const { downloadContentFromMessage } = require('@whiskeysockets/baileys');
 const axios = require('axios');
-const FormData = require('form-data'); // Necesario para subir la imagen a la IA
+const FormData = require('form-data');
 
 const execFileAsync = promisify(execFile);
 const TEMP_DIR = path.join(process.cwd(), 'temp');
@@ -30,7 +30,6 @@ function getMediaInfo(message) {
 
   const media = message[type];
   const isImage = type === 'imageMessage' || (type === 'documentMessage' && media.mimetype?.startsWith('image/'));
-  // Este plugin solo funcionará con imágenes fijas para la IA
   if (!isImage) return null;
   return { type, media, isImage, downloadType: type === 'documentMessage' ? 'document' : 'image' };
 }
@@ -54,7 +53,7 @@ module.exports = {
   name: 'sauto',
   aliases: ['smagic', 'sbgai', 'recortar'],
   category: 'multimedia',
-  desc: 'Recorta el sujeto principal automáticamente con Inteligencia Artificial (Corte limpio sin bordes blancos)',
+  desc: 'Recorta el sujeto principal automáticamente con Inteligencia Artificial',
 
   execute: async ({ sock, msg, remoteJid, args, reply }) => {
     let input = null, output = null, exif = null, finalOutput = null;
@@ -70,44 +69,50 @@ module.exports = {
 
       const buffer = await downloadMedia(info.media, info.downloadType);
 
-      loadMsg = await sock.sendMessage(remoteJid, { text: '✨ _Subiendo imagen a la Inteligencia Artificial..._' }, { quoted: msg });
+      loadMsg = await sock.sendMessage(remoteJid, { text: '✨ _Subiendo imagen de forma segura..._' }, { quoted: msg });
 
-      // 1️⃣ SUBIR LA IMAGEN A UN HOST TEMPORAL (CATBOX) PARA QUE LA IA LA PUEDA LEER
+      // 1️⃣ SUBIR A TELEGRA.PH (Host de altísima confianza, nunca bloqueado)
       const form = new FormData();
-      form.append('reqtype', 'fileupload');
-      form.append('fileToUpload', buffer, 'imagen.jpg');
+      form.append('file', buffer, 'imagen.jpg');
 
-      const uploadRes = await axios.post('https://catbox.moe/user/api.php', form, {
+      const uploadRes = await axios.post('https://telegra.ph/upload', form, {
         headers: form.getHeaders(),
         timeout: 15000
       });
-      const imageUrl = uploadRes.data.trim();
+      
+      const imageUrl = 'https://telegra.ph' + uploadRes.data[0].src;
 
-      if (!imageUrl.startsWith('http')) {
-        throw new Error('Fallo al generar el enlace temporal.');
+      await sock.sendMessage(remoteJid, { text: '🪄 _La IA está recortando los bordes..._', edit: loadMsg.key });
+
+      // 2️⃣ MÚLTIPLES MOTORES DE IA CON VERIFICACIÓN DE BUFFER
+      let bgBuffer = null;
+      const apis = [
+        `https://api.siputzx.my.id/api/ai/removebg?url=${encodeURIComponent(imageUrl)}`,
+        `https://api.ryzendesu.vip/api/ai/removebg?url=${encodeURIComponent(imageUrl)}`,
+        `https://aemt.me/removebg?url=${encodeURIComponent(imageUrl)}`
+      ];
+
+      for (const api of apis) {
+        try {
+          const aiRes = await axios.get(api, { responseType: 'arraybuffer', timeout: 20000 });
+          const tempBuffer = Buffer.from(aiRes.data);
+          
+          // ESCÁNER ANTI-ERRORES: Verificamos que NO empiece con "<!DOC" o "<html"
+          const head = tempBuffer.toString('utf8', 0, 10).toUpperCase();
+          if (!head.includes('<!DOC') && !head.includes('<HTML')) {
+            bgBuffer = tempBuffer; // Es una imagen válida, nos la quedamos
+            break;
+          }
+        } catch (e) {
+          continue; // Si un motor falla, salta al siguiente
+        }
       }
 
-      await sock.sendMessage(remoteJid, { text: '🪄 _Extrayendo el sujeto mágico sin fondo..._', edit: loadMsg.key });
-
-      // 2️⃣ DOBLE MOTOR DE IA PARA ELIMINAR EL FONDO
-      let bgBuffer;
-      try {
-        // Motor Principal
-        const aiRes = await axios.get(`https://aemt.me/removebg?url=${encodeURIComponent(imageUrl)}`, {
-          responseType: 'arraybuffer',
-          timeout: 20000
-        });
-        bgBuffer = Buffer.from(aiRes.data);
-      } catch (e) {
-        // Motor de Respaldo
-        const aiRes2 = await axios.get(`https://api.ryzendesu.vip/api/ai/removebg?url=${encodeURIComponent(imageUrl)}`, {
-          responseType: 'arraybuffer',
-          timeout: 20000
-        });
-        bgBuffer = Buffer.from(aiRes2.data);
+      if (!bgBuffer) {
+        throw new Error('Todas las IAs fallaron o devolvieron páginas web.');
       }
 
-      // 3️⃣ PROCESAR EL RESULTADO (QUE YA ES UN PNG TRANSPARENTE) PARA HACERLO STICKER
+      // 3️⃣ PROCESAR EL RESULTADO COMO STICKER
       const id = `${Date.now()}_${Math.floor(Math.random() * 9999)}`;
       
       input = path.join(TEMP_DIR, `sauto_in_${id}.png`); 
@@ -117,7 +122,6 @@ module.exports = {
 
       fs.writeFileSync(input, bgBuffer);
 
-      // Usamos un escalado básico sin el filtro Chroma, porque la IA ya hizo todo el trabajo sucio
       const baseScale = 'scale=512:512:force_original_aspect_ratio=decrease:flags=lanczos,pad=512:512:(ow-iw)/2:(oh-ih)/2:color=0x00000000';
 
       await execFileAsync('ffmpeg', [
@@ -130,12 +134,10 @@ module.exports = {
       fs.writeFileSync(exif, createExif());
       await execFileAsync('webpmux', ['-set', 'exif', exif, output, '-o', finalOutput]);
 
-      // Limpiamos el chat borrando el mensaje de carga
       if (loadMsg) {
         try { await sock.sendMessage(remoteJid, { delete: loadMsg.key }); } catch {}
       }
 
-      // Enviamos el sticker mágico final
       await sock.sendMessage(remoteJid, { sticker: fs.readFileSync(finalOutput) }, { quoted: msg });
 
     } catch (err) {
@@ -143,9 +145,8 @@ module.exports = {
         try { await sock.sendMessage(remoteJid, { delete: loadMsg.key }); } catch {}
       }
       console.log('❌ Error en sauto:', err?.message || err);
-      await reply('❌ Ocurrió un error. El servidor de IA podría estar saturado, intenta con otra imagen o más tarde.');
+      await reply('❌ Ocurrió un error. Los servidores de IA podrían estar saturados.');
     } finally {
-      // Limpieza estricta de la memoria
       [input, output, exif, finalOutput].forEach(file => {
         try { if (file && fs.existsSync(file)) fs.unlinkSync(file); } catch {}
       });
