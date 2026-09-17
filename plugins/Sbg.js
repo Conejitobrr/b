@@ -1,7 +1,7 @@
 'use strict';
 
 const fs = require('fs');
-const path = require('path');
+const path = path = require('path');
 const { execFile } = require('child_process');
 const { promisify } = require('util');
 const { downloadContentFromMessage } = require('@whiskeysockets/baileys');
@@ -42,7 +42,7 @@ async function downloadMedia(media, downloadType) {
 }
 
 function createExif(packName = STICKER_PACK_NAME, author = STICKER_AUTHOR) {
-  const json = { 'sticker-pack-id': 'com.siriusbot.sticker', 'sticker-pack-name': packName, 'sticker-pack-publisher': author, emojis: ['🤖'] };
+  const json = { 'sticker-pack-id': 'com.siriusbot.sticker', 'sticker-pack-name': packName, 'sticker-pack-publisher': author, emojis: ['✨', '🎨'] };
   const jsonBuffer = Buffer.from(JSON.stringify(json), 'utf8');
   const exifHeader = Buffer.from([0x49, 0x49, 0x2A, 0x00, 0x08, 0x00, 0x00, 0x00, 0x01, 0x00, 0x41, 0x57, 0x07, 0x00, 0x00, 0x00, 0x00, 0x00, 0x16, 0x00, 0x00, 0x00]);
   exifHeader.writeUIntLE(jsonBuffer.length, 14, 4);
@@ -66,6 +66,7 @@ module.exports = {
 
   execute: async ({ sock, msg, remoteJid, args, reply }) => {
     let input = null, output = null, exif = null, finalOutput = null;
+    let loadMsg = null;
 
     try {
       const colorName = (args[0] || 'verde').toLowerCase();
@@ -94,25 +95,33 @@ module.exports = {
 
       fs.writeFileSync(input, buffer);
 
-      // 🔥 MAGIA FFMPEG: format=rgba + colorkey para transparentar el color seleccionado
-      const chromaFilter = `format=rgba,colorkey=${hexColor}:0.3:0.1`;
+      loadMsg = await sock.sendMessage(remoteJid, { text: `⏳ Procesando croma *${colorName}*, un momento...` }, { quoted: msg });
+
+      // 🔥 MEJORA FFPEG: Tolerancia ajustada (similarity=0.4, blend=0.1) para bordes limpios
+      const chromaFilter = `format=rgba,colorkey=${hexColor}:0.4:0.1`;
       const baseScale = 'scale=512:512:force_original_aspect_ratio=decrease:flags=lanczos,pad=512:512:(ow-iw)/2:(oh-ih)/2:color=0x00000000';
 
       const ffmpegArgs = info.isImage
-        ? ['-y', '-i', input, '-vf', `${chromaFilter},${baseScale}`, '-vcodec', 'libwebp', '-q:v', '60', '-preset', 'picture', '-loop', '0', output]
+        ? ['-y', '-i', input, '-vf', `${chromaFilter},${baseScale}`, '-vcodec', 'libwebp', '-q:v', '70', '-preset', 'picture', '-loop', '0', output]
         : ['-y', '-i', input, '-t', '5', '-vf', `${chromaFilter},fps=10,${baseScale}`, '-vcodec', 'libwebp', '-fs', '700k', '-loop', '0', '-an', output];
-
-      await sock.sendMessage(remoteJid, { text: `⏳ Borrando fondo *${colorName}*, un momento...` }, { quoted: msg });
 
       await execFileAsync('ffmpeg', ffmpegArgs);
       fs.writeFileSync(exif, createExif());
       await execFileAsync('webpmux', ['-set', 'exif', exif, output, '-o', finalOutput]);
 
+      // Borramos el mensaje de espera para que quede limpio
+      if (loadMsg) {
+        try { await sock.sendMessage(remoteJid, { delete: loadMsg.key }); } catch {}
+      }
+
       await sock.sendMessage(remoteJid, { sticker: fs.readFileSync(finalOutput) }, { quoted: msg });
 
     } catch (err) {
+      if (loadMsg) {
+        try { await sock.sendMessage(remoteJid, { delete: loadMsg.key }); } catch {}
+      }
       console.log('❌ Error en sbg:', err?.message || err);
-      await reply('❌ Error al procesar el chroma. Verifica que el archivo tenga un color sólido claro.');
+      await reply('❌ Error al procesar el chroma. Asegúrate de que el fondo sea un color sólido.');
     } finally {
       [input, output, exif, finalOutput].forEach(file => {
         try { if (file && fs.existsSync(file)) fs.unlinkSync(file); } catch {}
