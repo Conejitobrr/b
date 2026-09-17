@@ -1,7 +1,7 @@
 'use strict';
 
 const fs = require('fs');
-const path = path = require('path');
+const path = require('path');
 const { execFile } = require('child_process');
 const { promisify } = require('util');
 const { downloadContentFromMessage } = require('@whiskeysockets/baileys');
@@ -42,27 +42,27 @@ async function downloadMedia(media, downloadType) {
 }
 
 function createExif(packName = STICKER_PACK_NAME, author = STICKER_AUTHOR) {
-  const json = { 'sticker-pack-id': 'com.siriusbot.sticker', 'sticker-pack-name': packName, 'sticker-pack-publisher': author, emojis: ['✨', '🎨'] };
+  const json = { 'sticker-pack-id': 'com.siriusbot.sticker', 'sticker-pack-name': packName, 'sticker-pack-publisher': author, emojis: ['🤖'] };
   const jsonBuffer = Buffer.from(JSON.stringify(json), 'utf8');
   const exifHeader = Buffer.from([0x49, 0x49, 0x2A, 0x00, 0x08, 0x00, 0x00, 0x00, 0x01, 0x00, 0x41, 0x57, 0x07, 0x00, 0x00, 0x00, 0x00, 0x00, 0x16, 0x00, 0x00, 0x00]);
   exifHeader.writeUIntLE(jsonBuffer.length, 14, 4);
   return Buffer.concat([exifHeader, jsonBuffer]);
 }
 
-// 🎨 COLORES SOPORTADOS PARA BORRAR (Formato Hexadecimal)
+// 🎨 COLORES Y TOLERANCIAS DINÁMICAS (Aquí está la magia para arreglar el negro)
 const COLORS = {
-  verde: '0x00FF00',
-  blanco: '0xFFFFFF',
-  negro: '0x000000',
-  azul: '0x0000FF',
-  rojo: '0xFF0000'
+  verde:  { hex: '0x00FF00', sim: '0.30', blend: '0.10' }, // Tolerancia normal
+  azul:   { hex: '0x0000FF', sim: '0.30', blend: '0.10' }, // Tolerancia normal
+  rojo:   { hex: '0xFF0000', sim: '0.30', blend: '0.10' }, // Tolerancia normal
+  negro:  { hex: '0x000000', sim: '0.12', blend: '0.05' }, // Quirúrgico: Solo negro puro, no borra sombras
+  blanco: { hex: '0xFFFFFF', sim: '0.12', blend: '0.05' }  // Quirúrgico: Solo blanco puro, no borra brillos
 };
 
 module.exports = {
   name: 'sbg',
   aliases: ['schroma', 'chroma', 'sinfondo'],
   category: 'multimedia',
-  desc: 'Crea un sticker borrando un color de fondo (Chroma Key)',
+  desc: 'Crea un sticker borrando un color de fondo (Chroma Key optimizado)',
 
   execute: async ({ sock, msg, remoteJid, args, reply }) => {
     let input = null, output = null, exif = null, finalOutput = null;
@@ -70,17 +70,17 @@ module.exports = {
 
     try {
       const colorName = (args[0] || 'verde').toLowerCase();
-      const hexColor = COLORS[colorName];
+      const config = COLORS[colorName];
 
-      if (!hexColor) {
-        return reply(`❌ Color no soportado. Usa uno de estos:\n*${Object.keys(COLORS).join(', ')}*\n\n📌 Ejemplo: *.sbg blanco*`);
+      if (!config) {
+        return reply(`❌ Color no soportado. Usa uno de estos:\n*${Object.keys(COLORS).join(', ')}*\n\n📌 Ejemplo: *.sbg negro*`);
       }
 
       const message = getQuotedMessage(msg) || msg.message;
       const info = getMediaInfo(message);
 
       if (!info || (!info.media.url && !info.media.mediaKey)) {
-        return reply('❌ Envía o responde a una imagen/video con fondo sólido.\n\n📌 Ejemplo: *.sbg verde*');
+        return reply('❌ Envía o responde a una imagen/video con fondo sólido.\n\n📌 Ejemplo: *.sbg negro*');
       }
 
       const buffer = await downloadMedia(info.media, info.downloadType);
@@ -95,10 +95,10 @@ module.exports = {
 
       fs.writeFileSync(input, buffer);
 
-      loadMsg = await sock.sendMessage(remoteJid, { text: `⏳ Procesando croma *${colorName}*, un momento...` }, { quoted: msg });
+      loadMsg = await sock.sendMessage(remoteJid, { text: `⏳ Borrando fondo *${colorName}*, un momento...` }, { quoted: msg });
 
-      // 🔥 MEJORA FFPEG: Tolerancia ajustada (similarity=0.4, blend=0.1) para bordes limpios
-      const chromaFilter = `format=rgba,colorkey=${hexColor}:0.4:0.1`;
+      // 🔥 MAGIA FFMPEG: Usamos los valores dinámicos exactos para cada color
+      const chromaFilter = `format=rgba,colorkey=${config.hex}:${config.sim}:${config.blend}`;
       const baseScale = 'scale=512:512:force_original_aspect_ratio=decrease:flags=lanczos,pad=512:512:(ow-iw)/2:(oh-ih)/2:color=0x00000000';
 
       const ffmpegArgs = info.isImage
@@ -109,7 +109,7 @@ module.exports = {
       fs.writeFileSync(exif, createExif());
       await execFileAsync('webpmux', ['-set', 'exif', exif, output, '-o', finalOutput]);
 
-      // Borramos el mensaje de espera para que quede limpio
+      // Borramos el mensaje de espera
       if (loadMsg) {
         try { await sock.sendMessage(remoteJid, { delete: loadMsg.key }); } catch {}
       }
@@ -121,7 +121,7 @@ module.exports = {
         try { await sock.sendMessage(remoteJid, { delete: loadMsg.key }); } catch {}
       }
       console.log('❌ Error en sbg:', err?.message || err);
-      await reply('❌ Error al procesar el chroma. Asegúrate de que el fondo sea un color sólido.');
+      await reply('❌ Error al procesar el chroma. Verifica que el archivo tenga un color sólido claro.');
     } finally {
       [input, output, exif, finalOutput].forEach(file => {
         try { if (file && fs.existsSync(file)) fs.unlinkSync(file); } catch {}
