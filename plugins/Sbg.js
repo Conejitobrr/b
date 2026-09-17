@@ -49,20 +49,20 @@ function createExif(packName = STICKER_PACK_NAME, author = STICKER_AUTHOR) {
   return Buffer.concat([exifHeader, jsonBuffer]);
 }
 
-// 🎨 CONFIGURACIÓN CON ANTI-ALIASING (Bordes suaves)
+// 🎨 CONFIGURACIÓN BASE (Fuerza ligeramente aumentada para negro)
 const COLORS = {
   verde:  { hex: '0x00FF00', sim: '0.30', blend: '0.05' }, 
   azul:   { hex: '0x0000FF', sim: '0.30', blend: '0.05' }, 
   rojo:   { hex: '0xFF0000', sim: '0.30', blend: '0.05' }, 
-  negro:  { hex: '0x000000', sim: '0.04', blend: '0.03' }, // 4% fuerza, 3% suavizado (Mata los píxeles sierra)
-  blanco: { hex: '0xFFFFFF', sim: '0.05', blend: '0.03' }  
+  negro:  { hex: '0x000000', sim: '0.08', blend: '0.04' }, // 8% fuerza base, 4% suavizado base
+  blanco: { hex: '0xFFFFFF', sim: '0.08', blend: '0.04' }  
 };
 
 module.exports = {
   name: 'sbg',
   aliases: ['schroma', 'chroma', 'sinfondo'],
   category: 'multimedia',
-  desc: 'Crea un sticker borrando el fondo con suavizado de bordes',
+  desc: 'Crea un sticker borrando el fondo con fuerza y suavizado ajustables',
 
   execute: async ({ sock, msg, remoteJid, args, reply }) => {
     let input = null, output = null, exif = null, finalOutput = null;
@@ -73,19 +73,25 @@ module.exports = {
       const config = COLORS[colorName];
 
       if (!config) {
-        return reply(`❌ Color no soportado.\n*Colores:* ${Object.keys(COLORS).join(', ')}\n\n📌 *Ejemplo:* .sbg negro\n⚙️ *Ajuste fino:* .sbg negro 4`);
+        return reply(`❌ Color no soportado.\n*Colores:* ${Object.keys(COLORS).join(', ')}\n\n📌 *Ejemplo:* .sbg negro\n⚙️ *Ajuste Pro:* .sbg negro [fuerza] [suavizado]`);
       }
 
       let sim = config.sim;
       let blend = config.blend;
 
-      // Ajuste manual
+      // 1️⃣ Ajuste manual de FUERZA (args[1])
       if (args[1] && !isNaN(args[1])) {
         const intensidad = parseInt(args[1]);
         if (intensidad >= 1 && intensidad <= 100) {
           sim = (intensidad / 100).toFixed(2);
-          // Reintroducimos un suavizado (blend) fijo y bajo para evitar el efecto "serrucho"
-          blend = (colorName === 'negro' || colorName === 'blanco') ? '0.03' : '0.05'; 
+        }
+      }
+
+      // 2️⃣ Ajuste manual de SUAVIZADO (args[2])
+      if (args[2] && !isNaN(args[2])) {
+        const suavizado = parseInt(args[2]);
+        if (suavizado >= 0 && suavizado <= 100) {
+          blend = (suavizado / 100).toFixed(2);
         }
       }
 
@@ -108,7 +114,7 @@ module.exports = {
 
       fs.writeFileSync(input, buffer);
 
-      loadMsg = await sock.sendMessage(remoteJid, { text: `⏳ Procesando croma *${colorName}* (Fuerza: ${parseInt(sim * 100)}%)...` }, { quoted: msg });
+      loadMsg = await sock.sendMessage(remoteJid, { text: `⏳ Procesando croma *${colorName}* (Fuerza: ${parseInt(sim * 100)}% | Suavizado: ${parseInt(blend * 100)}%)...` }, { quoted: msg });
 
       const chromaFilter = `format=rgba,colorkey=${config.hex}:${sim}:${blend}`;
       const baseScale = 'scale=512:512:force_original_aspect_ratio=decrease:flags=lanczos,pad=512:512:(ow-iw)/2:(oh-ih)/2:color=0x00000000';
