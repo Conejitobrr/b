@@ -49,20 +49,20 @@ function createExif(packName = STICKER_PACK_NAME, author = STICKER_AUTHOR) {
   return Buffer.concat([exifHeader, jsonBuffer]);
 }
 
-// 🎨 CONFIGURACIÓN DE CORTE BISTURÍ PARA COLORES OSCUROS
+// 🎨 CONFIGURACIÓN CON ANTI-ALIASING (Bordes suaves)
 const COLORS = {
   verde:  { hex: '0x00FF00', sim: '0.30', blend: '0.05' }, 
   azul:   { hex: '0x0000FF', sim: '0.30', blend: '0.05' }, 
   rojo:   { hex: '0xFF0000', sim: '0.30', blend: '0.05' }, 
-  negro:  { hex: '0x000000', sim: '0.07', blend: '0.00' }, // 7% de fuerza, 0 difuminado. Salva los ojos y pelaje oscuro.
-  blanco: { hex: '0xFFFFFF', sim: '0.08', blend: '0.00' }  
+  negro:  { hex: '0x000000', sim: '0.04', blend: '0.03' }, // 4% fuerza, 3% suavizado (Mata los píxeles sierra)
+  blanco: { hex: '0xFFFFFF', sim: '0.05', blend: '0.03' }  
 };
 
 module.exports = {
   name: 'sbg',
   aliases: ['schroma', 'chroma', 'sinfondo'],
   category: 'multimedia',
-  desc: 'Crea un sticker borrando el fondo sólido con nivel de bisturí',
+  desc: 'Crea un sticker borrando el fondo con suavizado de bordes',
 
   execute: async ({ sock, msg, remoteJid, args, reply }) => {
     let input = null, output = null, exif = null, finalOutput = null;
@@ -73,18 +73,19 @@ module.exports = {
       const config = COLORS[colorName];
 
       if (!config) {
-        return reply(`❌ Color no soportado.\n*Colores:* ${Object.keys(COLORS).join(', ')}\n\n📌 *Ejemplo:* .sbg negro\n⚙️ *Ajuste fino:* .sbg negro 7`);
+        return reply(`❌ Color no soportado.\n*Colores:* ${Object.keys(COLORS).join(', ')}\n\n📌 *Ejemplo:* .sbg negro\n⚙️ *Ajuste fino:* .sbg negro 4`);
       }
 
       let sim = config.sim;
       let blend = config.blend;
 
-      // Ajuste manual: Si el usuario pone un número, lo aplicamos exacto
+      // Ajuste manual
       if (args[1] && !isNaN(args[1])) {
         const intensidad = parseInt(args[1]);
         if (intensidad >= 1 && intensidad <= 100) {
           sim = (intensidad / 100).toFixed(2);
-          blend = '0.00'; // Obligamos a que no haya transparencia fantasma si lo ajustan manual
+          // Reintroducimos un suavizado (blend) fijo y bajo para evitar el efecto "serrucho"
+          blend = (colorName === 'negro' || colorName === 'blanco') ? '0.03' : '0.05'; 
         }
       }
 
