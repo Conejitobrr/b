@@ -49,20 +49,20 @@ function createExif(packName = STICKER_PACK_NAME, author = STICKER_AUTHOR) {
   return Buffer.concat([exifHeader, jsonBuffer]);
 }
 
-// 🎨 CONFIGURACIÓN DE CORTE DURO (Sin transparencias fantasmales)
+// 🎨 CONFIGURACIÓN DE CORTE BISTURÍ PARA COLORES OSCUROS
 const COLORS = {
   verde:  { hex: '0x00FF00', sim: '0.30', blend: '0.05' }, 
   azul:   { hex: '0x0000FF', sim: '0.30', blend: '0.05' }, 
   rojo:   { hex: '0xFF0000', sim: '0.30', blend: '0.05' }, 
-  negro:  { hex: '0x000000', sim: '0.14', blend: '0.01' }, // 14% fuerza, 1% suavizado (Corte recto sin afectar pelaje/ojos)
-  blanco: { hex: '0xFFFFFF', sim: '0.15', blend: '0.02' }  
+  negro:  { hex: '0x000000', sim: '0.07', blend: '0.00' }, // 7% de fuerza, 0 difuminado. Salva los ojos y pelaje oscuro.
+  blanco: { hex: '0xFFFFFF', sim: '0.08', blend: '0.00' }  
 };
 
 module.exports = {
   name: 'sbg',
   aliases: ['schroma', 'chroma', 'sinfondo'],
   category: 'multimedia',
-  desc: 'Crea un sticker borrando el fondo sólido con precisión',
+  desc: 'Crea un sticker borrando el fondo sólido con nivel de bisturí',
 
   execute: async ({ sock, msg, remoteJid, args, reply }) => {
     let input = null, output = null, exif = null, finalOutput = null;
@@ -73,19 +73,18 @@ module.exports = {
       const config = COLORS[colorName];
 
       if (!config) {
-        return reply(`❌ Color no soportado.\n*Colores:* ${Object.keys(COLORS).join(', ')}\n\n📌 *Ejemplo:* .sbg negro\n⚙️ *Ajuste fino:* .sbg negro 14`);
+        return reply(`❌ Color no soportado.\n*Colores:* ${Object.keys(COLORS).join(', ')}\n\n📌 *Ejemplo:* .sbg negro\n⚙️ *Ajuste fino:* .sbg negro 7`);
       }
 
       let sim = config.sim;
       let blend = config.blend;
 
-      // Si el usuario pone un número, ajustamos la fuerza pero mantenemos el corte duro
+      // Ajuste manual: Si el usuario pone un número, lo aplicamos exacto
       if (args[1] && !isNaN(args[1])) {
         const intensidad = parseInt(args[1]);
         if (intensidad >= 1 && intensidad <= 100) {
           sim = (intensidad / 100).toFixed(2);
-          // Mantenemos el suavizado casi en cero para que no difumine el interior del sticker
-          blend = (colorName === 'negro' || colorName === 'blanco') ? '0.01' : '0.05'; 
+          blend = '0.00'; // Obligamos a que no haya transparencia fantasma si lo ajustan manual
         }
       }
 
@@ -110,7 +109,6 @@ module.exports = {
 
       loadMsg = await sock.sendMessage(remoteJid, { text: `⏳ Procesando croma *${colorName}* (Fuerza: ${parseInt(sim * 100)}%)...` }, { quoted: msg });
 
-      // Aplicamos el filtro con los nuevos parámetros quirúrgicos
       const chromaFilter = `format=rgba,colorkey=${config.hex}:${sim}:${blend}`;
       const baseScale = 'scale=512:512:force_original_aspect_ratio=decrease:flags=lanczos,pad=512:512:(ow-iw)/2:(oh-ih)/2:color=0x00000000';
 
