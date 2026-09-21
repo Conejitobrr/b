@@ -16,17 +16,17 @@ function guardarGranjas(data) {
   fs.writeFileSync(DB_FILE, JSON.stringify(data, null, 2));
 }
 
-// 🐓 CATÁLOGO EXTENDIDO PRO
+// 🐓 CATÁLOGO RPG PRO (Con límite de vida para mecánicas de vejez)
 const CATALOGO = {
-  gallina: { emoji: '🐔', cria: '🐥', costo: 150, prod: '🥚', prodName: 'Huevos', prodTime: 60, growTime: 120, sellAdult: 200, tipo: 'productor' },
-  vaca:    { emoji: '🐄', cria: '🐮', costo: 600, prod: '🥛', prodName: 'Leche', prodTime: 180, growTime: 300, sellAdult: 900, tipo: 'productor' },
-  oveja:   { emoji: '🐑', cria: '🐏', costo: 400, prod: '🧶', prodName: 'Lana', prodTime: 120, growTime: 240, sellAdult: 600, tipo: 'productor' },
-  cerdo:   { emoji: '🐖', cria: '🐷', costo: 350, prod: '🥓', prodName: 'Carne', prodTime: 0, growTime: 400, sellAdult: 1000, tipo: 'engorde' },
-  pato:    { emoji: '🦆', cria: '🐤', costo: 250, prod: '🪶', prodName: 'Plumas', prodTime: 90, growTime: 180, sellAdult: 400, tipo: 'productor' },
-  abeja:   { emoji: '🐝', cria: '🐛', costo: 500, prod: '🍯', prodName: 'Miel', prodTime: 150, growTime: 200, sellAdult: 800, tipo: 'productor' },
-  gallo:   { emoji: '🐓', cria: '🐣', costo: 1000, tipo: 'especial', desc: 'Escanea la granja y avisa de cosechas listas.' },
-  perro:   { emoji: '🐕', cria: '🐶', costo: 1500, tipo: 'especial', desc: 'Evita que los zorros roben tu cosecha.' },
-  gato:    { emoji: '🐈', cria: '🐱', costo: 1200, tipo: 'especial', desc: 'Evita que los ratones se coman tu inventario.' }
+  gallina: { emoji: '🐔', cria: '🐥', costo: 150, prod: '🥚', prodName: 'Huevos', prodTime: 60, growTime: 120, sellAdult: 200, vida: 10, tipo: 'productor' },
+  vaca:    { emoji: '🐄', cria: '🐮', costo: 600, prod: '🥛', prodName: 'Leche', prodTime: 180, growTime: 300, sellAdult: 900, vida: 15, tipo: 'productor' },
+  oveja:   { emoji: '🐑', cria: '🐑', costo: 400, prod: '🧶', prodName: 'Lana', prodTime: 120, growTime: 240, sellAdult: 600, vida: 12, tipo: 'productor' }, // Cría corregida
+  cerdo:   { emoji: '🐖', cria: '🐷', costo: 350, prod: '🥓', prodName: 'Carne', prodTime: 0, growTime: 400, sellAdult: 1000, vida: 1, tipo: 'engorde' },
+  pato:    { emoji: '🦆', cria: '🐤', costo: 250, prod: '🪶', prodName: 'Plumas', prodTime: 90, growTime: 180, sellAdult: 400, vida: 10, tipo: 'productor' },
+  abeja:   { emoji: '🐝', cria: '🐛', costo: 500, prod: '🍯', prodName: 'Miel', prodTime: 150, growTime: 200, sellAdult: 800, vida: 8, tipo: 'productor' },
+  gallo:   { emoji: '🐓', cria: '🐣', costo: 1000, tipo: 'especial', desc: 'Escanea la granja y avisa de cosechas.' },
+  perro:   { emoji: '🐕', cria: '🐶', costo: 1500, tipo: 'especial', desc: 'Evita robos de zorros en la cosecha.' },
+  gato:    { emoji: '🐈', cria: '🐱', costo: 1200, tipo: 'especial', desc: 'Evita que los ratones coman tu comida.' }
 };
 
 const MERCADO = { '🥚': 20, '🥛': 80, '🧶': 50, '🪶': 35, '🍯': 100, '🥓': 0 };
@@ -35,7 +35,7 @@ module.exports = {
   name: 'granja',
   aliases: ['farm', 'agro'],
   category: 'juegos',
-  desc: 'Simulador profesional de Granja RPG con subcomandos anti-conflictos',
+  desc: 'Simulador RPG de Granja con sistema de hambre, vejez y subcomandos',
 
   execute: async ({ sock, msg, remoteJid, args, commandName, sender, reply }) => {
     let db = cargarGranjas();
@@ -60,11 +60,11 @@ module.exports = {
       let txt = `🏪 *AGRO MERCADO* 🏪\n_Monedas:_ 🪙 ${miGranja.monedas}\n\n`;
       for (const [key, data] of Object.entries(CATALOGO)) {
         txt += `*${data.emoji} ${key.toUpperCase()}* - 🪙 ${data.costo}\n`;
-        if (data.tipo === 'productor') txt += `↳ Produce: ${data.prod} (Venta: 🪙${MERCADO[data.prod]})\n`;
-        if (data.tipo === 'engorde') txt += `↳ Uso: Engordar y vender (🪙${data.sellAdult})\n`;
+        if (data.tipo === 'productor') txt += `↳ Produce: ${data.prod} | Vida: ${data.vida} cosechas\n`;
+        if (data.tipo === 'engorde') txt += `↳ Uso: Engordar y vender de adulto\n`;
         if (data.tipo === 'especial') txt += `↳ Pasiva: ${data.desc}\n`;
       }
-      txt += `\n📌 *Comprar animal:* .granja comprar [animal] [nombre]\n📌 *Comprar terreno:* .granja comprar terreno (🪙1000, +5 espacios)`;
+      txt += `\n📌 *Comprar animal:* .granja comprar [animal] [nombre]\n📌 *Mejorar Terreno:* .granja comprar terreno (🪙1000)`;
       return reply(txt);
     }
 
@@ -85,7 +85,7 @@ module.exports = {
 
       if (!CATALOGO[tipo]) return reply('❌ Animal no válido. Usa *.granja tienda*');
       if (!nombre) return reply('❌ Ponle un nombre a tu animal. Ejemplo: *.granja comprar vaca Lola*');
-      if (miGranja.animales.length >= miGranja.terreno) return reply('❌ Terreno lleno. Expande tu granja o vende animales.');
+      if (miGranja.animales.length >= miGranja.terreno) return reply('❌ Terreno lleno. Expande tu granja o vende animales viejos.');
       if (miGranja.monedas < CATALOGO[tipo].costo) return reply(`❌ Cuesta 🪙 ${CATALOGO[tipo].costo}. Te faltan monedas.`);
 
       if (miGranja.animales.some(a => a.nombre.toLowerCase() === nombre.toLowerCase())) {
@@ -99,60 +99,87 @@ module.exports = {
         nacio: Date.now(),
         ultimaCosecha: Date.now(),
         adulto: false,
-        enfermo: false
+        enfermo: false,
+        hambre: false,
+        cosechas: 0,
+        viejo: false
       });
       guardarGranjas(db);
-      return reply(`🎉 ¡Has comprado a *${nombre}* ${CATALOGO[tipo].cria}!\nRecuerda cuidarlo hasta que crezca.`);
+      return reply(`🎉 ¡Has comprado a *${nombre}* ${CATALOGO[tipo].cria}!\nUsa *.granja estado* para vigilar su crecimiento.`);
     }
 
     // ==========================================
-    // 🔍 SUBCOMANDO: ver
+    // 📊 SUBCOMANDO: estado (Tiempos Globales)
     // ==========================================
-    if (action === 'ver') {
-      const nombre = args.slice(1).join(' ');
-      if (!nombre) return reply('❌ Escribe el nombre. Ejemplo: *.granja ver Lola*');
+    if (action === 'estado' || action === 'info') {
+      if (miGranja.animales.length === 0) return reply('❌ No tienes animales en tu granja.');
       
-      const animal = miGranja.animales.find(a => a.nombre.toLowerCase() === nombre.toLowerCase());
-      if (!animal) return reply('❌ No tienes ningún animal con ese nombre.');
-
-      const spec = CATALOGO[animal.tipo];
+      let txt = `📊 *ESTADO GLOBAL DE LA GRANJA* 📊\n\n`;
       const ahora = Date.now();
-      const estado = animal.adulto ? 'Adulto' : 'Cría (Creciendo...)';
-      const icono = animal.adulto ? spec.emoji : spec.cria;
-      const salud = animal.enfermo ? '🤒 Enfermo (Usa .granja curar)' : '💚 Sano';
-      
-      let info = `📋 *REGISTRO VETERINARIO* 📋\n\n`;
-      info += `${icono} *Nombre:* ${animal.nombre}\n`;
-      info += `🏷️ *Especie:* ${animal.tipo.toUpperCase()}\n`;
-      info += `📈 *Estado:* ${estado}\n`;
-      info += `⚕️ *Salud:* ${salud}\n`;
 
-      if (animal.adulto && spec.tipo === 'productor' && !animal.enfermo) {
-        const tiempoFaltante = (spec.prodTime * 60 * 1000) - (ahora - animal.ultimaCosecha);
-        if (tiempoFaltante <= 0) info += `✅ *Producción:* ¡Lista para recolectar!\n`;
-        else info += `⏳ *Producción:* Faltan ${Math.ceil(tiempoFaltante / 60000)} minutos.\n`;
-      }
+      miGranja.animales.forEach(a => {
+        const spec = CATALOGO[a.tipo];
+        const icono = a.viejo ? '👴' : (a.adulto ? spec.emoji : spec.cria);
+        txt += `${icono} *${a.nombre}* (${a.tipo}):\n`;
+
+        if (a.viejo) {
+          txt += `↳ ⚠️ *Viejo:* Ya no produce. ¡Véndelo!\n`;
+        } else if (!a.adulto) {
+          const tiempoFaltante = (spec.growTime * 60 * 1000) - (ahora - a.nacio);
+          if (tiempoFaltante <= 0) txt += `↳ ✅ *Crecimiento:* ¡Listo para madurar!\n`;
+          else txt += `↳ 📈 *Creciendo:* Faltan ${Math.ceil(tiempoFaltante / 60000)} min.\n`;
+        } else if (spec.tipo === 'productor') {
+          if (a.enfermo) {
+            txt += `↳ 🤒 *Enfermo:* Usa .granja curar\n`;
+          } else if (a.hambre) {
+            txt += `↳ 🍽️ *Hambriento:* Usa .granja alimentar\n`;
+          } else {
+            const tiempoFaltante = (spec.prodTime * 60 * 1000) - (ahora - a.ultimaCosecha);
+            if (tiempoFaltante <= 0) txt += `↳ ✅ *Producción:* ¡Lista para cosechar!\n`;
+            else txt += `↳ ⏳ *Producción:* Faltan ${Math.ceil(tiempoFaltante / 60000)} min.\n`;
+          }
+          txt += `↳ 📊 *Vida:* ${a.cosechas || 0}/${spec.vida} cosechas.\n`;
+        } else {
+          txt += `↳ 💰 *Engorde:* Listo para vender.\n`;
+        }
+        txt += '\n';
+      });
+
+      return reply(txt.trim());
+    }
+
+    // ==========================================
+    // 🌾 SUBCOMANDO: alimentar
+    // ==========================================
+    if (action === 'alimentar') {
+      let hambrientos = miGranja.animales.filter(a => a.hambre && !a.viejo);
+      if (hambrientos.length === 0) return reply('✅ Todos tus animales están llenos y felices.');
       
-      if (animal.adulto) info += `💰 *Valor en Mercado:* 🪙 ${spec.sellAdult}\n`;
-      return reply(info);
+      const costo = hambrientos.length * 15; // 15 monedas por animal
+      if (miGranja.monedas < costo) return reply(`❌ Cuesta 🪙 ${costo} alimentar a tus ${hambrientos.length} animales hambrientos.`);
+
+      miGranja.monedas -= costo;
+      miGranja.animales.forEach(a => { if (a.hambre) a.hambre = false; });
+      guardarGranjas(db);
+      
+      return reply(`🌾 Has pagado 🪙 ${costo} en comida. ¡Tus animales han comido y volverán a producir!`);
     }
 
     // ==========================================
     // 💉 SUBCOMANDO: curar
     // ==========================================
     if (action === 'curar') {
-      const nombre = args.slice(1).join(' ');
-      if (!nombre) return reply('❌ Escribe a quién curar. Ejemplo: *.granja curar Lola*');
+      let enfermos = miGranja.animales.filter(a => a.enfermo);
+      if (enfermos.length === 0) return reply('✅ No tienes animales enfermos en la granja.');
       
-      const animal = miGranja.animales.find(a => a.nombre.toLowerCase() === nombre.toLowerCase());
-      if (!animal) return reply('❌ Animal no encontrado.');
-      if (!animal.enfermo) return reply(`✅ *${animal.nombre}* ya está perfectamente sano.`);
-      if (miGranja.monedas < 100) return reply('❌ El veterinario cobra 🪙 100. No tienes suficiente.');
+      const costo = enfermos.length * 100;
+      if (miGranja.monedas < costo) return reply(`❌ El veterinario cobra 🪙 ${costo} por curar a todos. No tienes suficiente.`);
 
-      miGranja.monedas -= 100;
-      animal.enfermo = false;
+      miGranja.monedas -= costo;
+      miGranja.animales.forEach(a => { if (a.enfermo) a.enfermo = false; });
       guardarGranjas(db);
-      return reply(`⚕️ Has pagado 🪙 100 al veterinario. ¡*${animal.nombre}* ha sido curado y volverá a producir!`);
+      
+      return reply(`⚕️ Has pagado 🪙 ${costo} al veterinario. ¡Tus animales están curados!`);
     }
 
     // ==========================================
@@ -162,10 +189,12 @@ module.exports = {
       const ahora = Date.now();
       if (ahora > miGranja.alquilerVence) return reply('⚠️ El banco congeló tus bienes por falta de pago. Usa *.granja alquiler* primero.');
 
+      let animalesConHambre = miGranja.animales.some(a => a.hambre && !a.viejo);
+      if (animalesConHambre) return reply('⚠️ Algunos de tus animales tienen hambre. Usa *.granja alimentar* antes de cosechar.');
+
       const tienePerro = miGranja.animales.some(a => a.tipo === 'perro' && a.adulto);
       const tieneGato = miGranja.animales.some(a => a.tipo === 'gato' && a.adulto);
 
-      // Eventos Aleatorios Pro
       if (Math.random() < 0.15) {
         if (tienePerro) await reply('🦊 *¡Un zorro intentó atacar la granja!*\n🐕 Tu perro lo espantó a mordiscos. ¡Cosecha salvada!');
         else return reply('🦊 *¡ATAQUE DE ZORRO!*\nEl zorro asustó a los animales y arruinó la cosecha de hoy. Necesitas un perro.');
@@ -174,8 +203,8 @@ module.exports = {
       if (Math.random() < 0.10) {
         if (tieneGato) await reply('🐁 *¡Plaga de ratones en el silo!*\n🐈 Tu gato cazó a los intrusos protegiendo tu inventario.');
         else {
-          miGranja.inventario['🥚'] = Math.floor(miGranja.inventario['🥚'] * 0.8);
-          await reply('🐁 *¡PLAGA DE RATONES!*\nSe comieron parte de tus productos guardados. Necesitas un gato.');
+          miGranja.inventario['🥚'] = Math.floor((miGranja.inventario['🥚'] || 0) * 0.8);
+          await reply('🐁 *¡PLAGA DE RATONES!*\nSe comieron parte de tus huevos guardados. Necesitas un gato.');
         }
       }
 
@@ -184,25 +213,30 @@ module.exports = {
 
       miGranja.animales.forEach(a => {
         const spec = CATALOGO[a.tipo];
-        if (a.adulto && spec.tipo === 'productor') {
-          if (!a.enfermo && (ahora - a.ultimaCosecha) >= (spec.prodTime * 60 * 1000)) {
-            // 10% de probabilidad de enfermarse al cosechar
+        if (a.adulto && spec.tipo === 'productor' && !a.viejo) {
+          if (!a.enfermo && !a.hambre && (ahora - a.ultimaCosecha) >= (spec.prodTime * 60 * 1000)) {
+            
             if (Math.random() < 0.10) a.enfermo = true;
             
             miGranja.inventario[spec.prod] = (miGranja.inventario[spec.prod] || 0) + 1;
             recolectado[spec.prod] = (recolectado[spec.prod] || 0) + 1;
+            
             a.ultimaCosecha = ahora;
+            a.hambre = true; // Le da hambre después de producir
+            a.cosechas = (a.cosechas || 0) + 1;
+            
+            if (a.cosechas >= spec.vida) a.viejo = true; // Envejece
             total++;
           }
         }
       });
       guardarGranjas(db);
 
-      if (total === 0) return reply('❌ No hay nada listo o tus animales están enfermos. Usa *.granja ver [nombre]*');
+      if (total === 0) return reply('❌ No hay nada listo para cosechar. Revisa los tiempos con *.granja estado*');
       
       let res = `🧺 *COSECHA EXITOSA* 🧺\nHas recogido:\n`;
       for (const [item, cant] of Object.entries(recolectado)) res += `${item} x${cant}\n`;
-      res += `\nUsa *.granja vender productos* para ganar oro.`;
+      res += `\n⚠️ Tus animales quedaron hambrientos tras producir.\nUsa *.granja alimentar* para iniciar el próximo ciclo.`;
       return reply(res);
     }
 
@@ -234,13 +268,20 @@ module.exports = {
       if (index === -1) return reply('❌ No tienes un animal con ese nombre.');
       const animal = miGranja.animales[index];
       
-      if (!animal.adulto) return reply(`❌ ${animal.nombre} aún es una cría. El mercado solo compra adultos.`);
+      if (!animal.adulto) return reply(`❌ ${animal.nombre} aún es una cría. El mercado solo compra adultos o viejos.`);
       
-      const oro = CATALOGO[animal.tipo].sellAdult;
+      let oro = CATALOGO[animal.tipo].sellAdult;
+      if (animal.viejo) oro = Math.floor(oro * 1.2); // Bono por vender animal viejo para carne
+      
       miGranja.monedas += oro;
       miGranja.animales.splice(index, 1);
       guardarGranjas(db);
-      return reply(`🚜 Un camión vino y se llevó a *${animal.nombre}* al matadero.\nHas ganado 🪙 ${oro} por la venta.`);
+      
+      if (animal.viejo) {
+        return reply(`🥩 Un carnicero se llevó a *${animal.nombre}* (Viejo).\nHas ganado 🪙 ${oro} por la venta de carne.`);
+      } else {
+        return reply(`🚜 Un camión vino y se llevó a *${animal.nombre}*.\nHas ganado 🪙 ${oro} por la venta.`);
+      }
     }
 
     // ==========================================
@@ -273,26 +314,35 @@ module.exports = {
     
     let reporteGallo = '';
     let animalesEnfermos = 0;
+    let animalesHambrientos = 0;
     let listosCosecha = 0;
-    let recienAdultos = 0;
+
+    // Resumen de población y actualización de estados
+    let emojisCount = {};
 
     miGranja.animales.forEach(a => {
       const spec = CATALOGO[a.tipo];
-      if (!a.adulto && (ahora - a.nacio) >= (spec.growTime * 60 * 1000)) {
-        a.adulto = true;
-        recienAdultos++;
-      }
-      if (a.adulto && spec.tipo === 'productor' && !a.enfermo && (ahora - a.ultimaCosecha) >= (spec.prodTime * 60 * 1000)) {
+      
+      // Actualizar crecimiento
+      if (!a.adulto && (ahora - a.nacio) >= (spec.growTime * 60 * 1000)) a.adulto = true;
+      
+      // Conteo de iconos
+      const icon = a.viejo ? '👴' : (a.adulto ? spec.emoji : spec.cria);
+      emojisCount[icon] = (emojisCount[icon] || 0) + 1;
+
+      // Verificaciones de estado
+      if (a.adulto && spec.tipo === 'productor' && !a.viejo && !a.enfermo && !a.hambre && (ahora - a.ultimaCosecha) >= (spec.prodTime * 60 * 1000)) {
         listosCosecha++;
       }
       if (a.enfermo) animalesEnfermos++;
+      if (a.hambre && !a.viejo) animalesHambrientos++;
     });
     guardarGranjas(db);
 
     if (miGranja.animales.some(a => a.tipo === 'gallo' && a.adulto)) {
       reporteGallo = `\n🐓 *Alerta de Gallo:* `;
-      if (listosCosecha > 0 || recienAdultos > 0 || animalesEnfermos > 0) {
-        reporteGallo += `¡Hay ${listosCosecha} cosechas listas, ${recienAdultos} crecieron y ${animalesEnfermos} están enfermos!\n`;
+      if (listosCosecha > 0 || animalesEnfermos > 0 || animalesHambrientos > 0) {
+        reporteGallo += `¡Hay ${listosCosecha} cosechas listas, ${animalesHambrientos} con hambre y ${animalesEnfermos} enfermos!\n`;
       } else {
         reporteGallo += `Todo tranquilo.\n`;
       }
@@ -300,13 +350,12 @@ module.exports = {
 
     // Generador Dinámico de Corral ASCII
     let slots = Array(15).fill('  ');
-    let displayAnimals = miGranja.animales.slice(0, 15); // Mostrar máx 15 visualmente
+    let displayAnimals = miGranja.animales.slice(0, 15);
     
-    // Posicionar animales al azar en el corral
     displayAnimals.forEach(a => {
       let pos = Math.floor(Math.random() * 15);
       while (slots[pos] !== '  ') pos = Math.floor(Math.random() * 15);
-      slots[pos] = a.enfermo ? '🤒' : (a.adulto ? CATALOGO[a.tipo].emoji : CATALOGO[a.tipo].cria);
+      slots[pos] = a.viejo ? '👴' : (a.enfermo ? '🤒' : (a.hambre ? '🍽️' : (a.adulto ? CATALOGO[a.tipo].emoji : CATALOGO[a.tipo].cria)));
     });
 
     let corralASCII = `
@@ -316,7 +365,13 @@ module.exports = {
 ║ ${slots[10]}  ${slots[11]}  ${slots[12]}  ${slots[13]}  ${slots[14]} ║
 ╚═════════════════════════╝`;
 
-    let msgText = `🏡 *GRANJA DE @${sender.split('@')[0]}* 🏡\n${reporteGallo}${corralASCII}\n\n`;
+    // Resumen de población formateado
+    let poblacionTxt = Object.entries(emojisCount).map(([e, c]) => `${e}x${c}`).join(' | ');
+    if (!poblacionTxt) poblacionTxt = 'Ninguno';
+
+    let msgText = `🏡 *GRANJA DE @${sender.split('@')[0]}* 🏡\n${reporteGallo}${corralASCII}\n`;
+    msgText += `👥 *Población:* ${poblacionTxt}\n\n`;
+    
     msgText += `🪙 *Bóveda:* ${miGranja.monedas} Monedas\n`;
     msgText += `📦 *Terreno:* ${miGranja.animales.length}/${miGranja.terreno} ocupado\n`;
     
@@ -326,7 +381,7 @@ module.exports = {
       : `📜 *Contrato Vigente:* ${diasAlquiler} días\n`;
     
     msgText += `\n🎒 *Silo:* 🥚${miGranja.inventario['🥚'] || 0} | 🥛${miGranja.inventario['🥛'] || 0} | 🧶${miGranja.inventario['🧶'] || 0} | 🪶${miGranja.inventario['🪶'] || 0} | 🍯${miGranja.inventario['🍯'] || 0}\n`;
-    msgText += `\n📌 *Comandos:* .granja tienda | comprar | ver | cosechar | vender | curar`;
+    msgText += `\n📌 *Comandos:* .granja tienda | comprar | estado | cosechar | alimentar | vender | curar`;
 
     return sock.sendMessage(remoteJid, { text: msgText, mentions: [sender] }, { quoted: msg });
   }
