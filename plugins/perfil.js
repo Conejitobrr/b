@@ -76,7 +76,7 @@ module.exports = {
         
         let isPartnerInGroup = false;
         
-        // 🔍 Verificamos si la pareja está actualmente en el grupo
+        // 🔍 ESCÁNER: Verificamos si la pareja está actualmente en el grupo
         if (remoteJid.endsWith('@g.us')) {
           try {
             const metadata = await sock.groupMetadata(remoteJid);
@@ -88,24 +88,32 @@ module.exports = {
         }
 
         if (isPartnerInGroup) {
-          // Opción 1: SÍ está en el grupo (Mención azul clásica)
+          // 🔵 SÍ está en el grupo: Mención azul real clásica
           partnerText = `@${partnerNum}`;
           mentions.push(partnerJid);
         } else {
-          // Opción 2: NO está en el grupo. Buscamos su nombre de WhatsApp en la memoria RAM (Baileys)
+          // ⚪ NO está en el grupo: Extracción de nombre y truco visual en blanco
           let pushname = null;
+          
           if (sock.store && sock.store.contacts && sock.store.contacts[partnerJid]) {
             const contact = sock.store.contacts[partnerJid];
             pushname = contact.notify || contact.pushname || contact.name || contact.verifiedName;
           }
           
+          if (!pushname) {
+            const partnerData = await db.getUser(partnerJid);
+            if (partnerData && partnerData.name) {
+              pushname = partnerData.name;
+            }
+          }
+          
           if (pushname) {
-            // Logró extraer el nombre: Lo imprimimos como texto plano normal (@Alexa)
-            partnerText = `@${pushname}`;
+            // Truco maestro: \u200B es un espacio invisible. 
+            // Hace que tú veas "@Alexa" pero bloquea a WhatsApp para que no lo pinte de azul.
+            partnerText = `@\u200B${pushname}`;
           } else {
-            // Si la memoria está vacía, forzamos la mención nativa para evitar que salgan números crudos
-            partnerText = `@${partnerNum}`;
-            mentions.push(partnerJid);
+            // Fallback limpio por si es un número fantasma sin nombre en absoluto
+            partnerText = `${partnerNum}`;
           }
         }
       }
