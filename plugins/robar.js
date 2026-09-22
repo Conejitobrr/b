@@ -22,16 +22,26 @@ function saveCooldowns(data) { fs.writeFileSync(COOLDOWN_PATH, JSON.stringify(da
 function getJail() { try { return JSON.parse(fs.readFileSync(JAIL_PATH, 'utf8') || '{"jailed":{}}'); } catch { return { jailed: {} }; } }
 function saveJail(data) { fs.writeFileSync(JAIL_PATH, JSON.stringify(data, null, 2)); }
 
-function cleanJid(jid = '') { return String(jid).split(':')[0]; }
-function cleanNumber(jid = '') { return cleanJid(jid).split('@')[0].replace(/\D/g, ''); }
+// ==========================================
+// 🧹 EXTRACCIÓN EXACTA DE TU PERFIL.JS
+// ==========================================
+function cleanJid(jid = '') { 
+  return String(jid).split(':')[0]; 
+}
+
+function cleanNumber(jid = '') { 
+  return cleanJid(jid).split('@')[0].replace(/\D/g, ''); 
+}
 
 function getTarget(msg, args) {
   const quoted = msg.message?.extendedTextMessage?.contextInfo?.participant;
   if (quoted) return cleanJid(quoted);
+  
   const mentioned = msg.message?.extendedTextMessage?.contextInfo?.mentionedJid?.[0];
   if (mentioned) return cleanJid(mentioned);
+  
   if (args && args[0]) {
-    const cleanArgs = args[0].replace(/\D/g, '');
+    const cleanArgs = args.join('').replace(/\D/g, '');
     if (cleanArgs) return `${cleanArgs}@s.whatsapp.net`;
   }
   return null;
@@ -52,15 +62,17 @@ module.exports = {
   execute: async ({ sock, msg, remoteJid, sender, args, db, reply }) => {
     try {
       const rawTarget = getTarget(msg, args);
-      const attackerJid = `${cleanNumber(sender)}@s.whatsapp.net`;
-
       if (!rawTarget) return reply('❌ Debes mencionar a quién quieres robar.\n📌 Ejemplo: *.robar @usuario*');
       
-      const targetJid = `${cleanNumber(rawTarget)}@s.whatsapp.net`;
-      if (targetJid === attackerJid) return reply('❌ No puedes robarte a ti mismo.');
-
+      // Preservamos el JID puro (@c.us o @s.whatsapp.net)
+      const targetJid = rawTarget.includes('@') ? rawTarget : `${cleanNumber(rawTarget)}@s.whatsapp.net`;
       const targetNum = cleanNumber(targetJid);
+      
+      const rawSender = cleanJid(sender);
+      const attackerJid = rawSender.includes('@') ? rawSender : `${cleanNumber(rawSender)}@s.whatsapp.net`;
       const attackerNum = cleanNumber(attackerJid);
+
+      if (targetNum === attackerNum) return reply('❌ No puedes robarte a ti mismo.');
 
       // 1. VERIFICAR SI EL LADRÓN ESTÁ EN LA CÁRCEL 🚨
       const attackerData = await db.getUser(attackerJid);
@@ -96,15 +108,17 @@ module.exports = {
         }
       }
 
+      // 3. INTERCEPCIÓN DE ESCUDO
+      // (El inventario se busca por el formato forzado para compatibilidad)
       const dbInv = getInv();
-      if (!dbInv[targetJid]) dbInv[targetJid] = {};
-      const targetInv = dbInv[targetJid];
+      const targetInvKey = `${targetNum}@s.whatsapp.net`;
+      if (!dbInv[targetInvKey]) dbInv[targetInvKey] = {};
+      const targetInv = dbInv[targetInvKey];
 
       if (!cooldowns[attackerJid]) cooldowns[attackerJid] = {};
       cooldowns[attackerJid].lastRob = now;
       saveCooldowns(cooldowns);
 
-      // 🔥 INTERCEPCIÓN DE ESCUDO
       if (Number(targetInv.shieldUses || 0) > 0) {
         targetInv.shieldUses -= 1;
         saveInv(dbInv);
