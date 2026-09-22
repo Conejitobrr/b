@@ -64,14 +64,47 @@ module.exports = {
       const jailTimeLeft = Number(user.jailUntil || 0) - Date.now();
       const isJailed = jailTimeLeft > 0;
       
-      // Mantenemos tu lógica intacta, solo sumamos la extracción segura de la pareja
       let partnerText = '*Nadie (Soltero/a)*';
       const mentions = [target];
       
       if (user.partner && user.partner !== 'null') {
-        const partnerJid = user.partner; // Conserva el JID intacto
-        partnerText = `@${cleanNumber(partnerJid)}`;
-        mentions.push(partnerJid); // Se añade al array de menciones para que salga azul
+        const partnerJid = user.partner; 
+        const partnerNum = cleanNumber(partnerJid);
+        
+        let isPartnerInGroup = false;
+        
+        // 🔍 ESCÁNER DE PARTICIPANTES EN TIEMPO REAL
+        if (remoteJid.endsWith('@g.us')) {
+          try {
+            const metadata = await sock.groupMetadata(remoteJid);
+            const participants = metadata.participants.map(p => cleanNumber(p.id));
+            if (participants.includes(partnerNum)) {
+              isPartnerInGroup = true;
+            }
+          } catch (e) {}
+        }
+
+        if (isPartnerInGroup) {
+          // Opción 1: Está en el grupo (Mención azul real, WhatsApp pone el nombre solo)
+          partnerText = `@${partnerNum}`;
+          mentions.push(partnerJid);
+        } else {
+          // Opción 2: NO está en el grupo (Texto normal extrayendo el nombre a la fuerza)
+          let partnerName = partnerNum; 
+          
+          // Buscamos en la memoria RAM de WhatsApp (Baileys)
+          if (sock.store?.contacts?.[partnerJid]) {
+            partnerName = sock.store.contacts[partnerJid].name || sock.store.contacts[partnerJid].notify || partnerNum;
+          }
+          // Buscamos en tu Base de Datos por si tiene un nombre guardado
+          const partnerData = await db.getUser(partnerJid);
+          if (partnerData && partnerData.name) {
+            partnerName = partnerData.name;
+          }
+
+          // Lo imprimimos en texto plano, sin forzar la mención azul
+          partnerText = `~${partnerName}`; 
+        }
       }
 
       const image = await getProfileBuffer(sock, target);
