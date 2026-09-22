@@ -75,7 +75,7 @@ module.exports = {
         
         let isPartnerInGroup = false;
         
-        // 🔍 Verificar si la pareja está en el grupo
+        // 🔍 Verificar si la pareja está en el grupo actual
         if (remoteJid.endsWith('@g.us')) {
           try {
             const metadata = await sock.groupMetadata(remoteJid);
@@ -91,48 +91,8 @@ module.exports = {
           partnerText = `@${partnerNum}`;
           mentions.push(partnerJid);
         } else {
-          // ⚪ NO ESTÁ EN EL GRUPO: Extractor Profundo de Memoria
-          let pushname = null;
-          
-          // 1. Escanear la memoria RAM de WhatsApp (Baileys Store)
-          if (sock.store && sock.store.contacts) {
-            const pNet = `${partnerNum}@s.whatsapp.net`;
-            const pCus = `${partnerNum}@c.us`;
-            
-            const contact = sock.store.contacts[pNet] || sock.store.contacts[pCus];
-            if (contact) {
-              pushname = contact.notify || contact.pushname || contact.name || contact.verifiedName;
-            }
-            
-            // Búsqueda de fuerza bruta por si el formato guardado es distinto
-            if (!pushname) {
-              for (const key in sock.store.contacts) {
-                if (key.includes(partnerNum)) {
-                  const c = sock.store.contacts[key];
-                  if (c && (c.notify || c.pushname || c.name)) {
-                    pushname = c.notify || c.pushname || c.name;
-                    break;
-                  }
-                }
-              }
-            }
-          }
-          
-          // 2. Escanear tu Base de Datos por si su nombre quedó registrado ahí
-          if (!pushname && db && typeof db.getUser === 'function') {
-            const pData = await db.getUser(partnerJid);
-            if (pData) {
-              pushname = pData.name || pData.pushname || pData.registeredName;
-            }
-          }
-          
-          if (pushname) {
-            // Imprime el nombre rescatado como texto normal blanco
-            partnerText = `@${pushname}`;
-          } else {
-            // Último recurso de emergencia para que no se vea feo
-            partnerText = `+${partnerNum}`;
-          }
+          // ⚪ NO ESTÁ EN EL GRUPO: Texto elegante sin números
+          partnerText = '*Sí (Casado/a)*';
         }
       }
 
