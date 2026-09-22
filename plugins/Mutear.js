@@ -6,7 +6,7 @@ const path = require('path');
 const MUTED_FILE = path.join(process.cwd(), 'database', 'muted.json');
 
 // ==========================================
-// 🧹 FUNCIONES EXACTAS DE TU PERFIL.JS
+// 🧹 FUNCIONES IDÉNTICAS A TU PERFIL.JS
 // ==========================================
 function cleanJid(jid = '') {
   return String(jid).split(':')[0];
@@ -23,6 +23,7 @@ function getTarget(msg, args) {
   const mentioned = msg.message?.extendedTextMessage?.contextInfo?.mentionedJid?.[0];
   if (mentioned) return cleanJid(mentioned);
 
+  // Soporte por si escribes el número a mano (.mutear 123456789)
   if (args && args.length > 0) {
     const cleanArgs = args.join('').replace(/\D/g, '');
     if (cleanArgs) return `${cleanArgs}@s.whatsapp.net`;
@@ -75,7 +76,7 @@ function saveMutes(data) {
 
 function isUserMuted(groupId, userJid) {
   const data = loadMutes();
-  return !!data?.[groupId]?.[`${cleanNumber(userJid)}@s.whatsapp.net`];
+  return !!data?.[groupId]?.[cleanJid(userJid)];
 }
 
 module.exports = {
@@ -90,7 +91,7 @@ module.exports = {
 
     if (!fromGroup || !sender || !msg?.key || !sock) return;
 
-    const userJid = `${cleanNumber(sender)}@s.whatsapp.net`;
+    const userJid = cleanJid(sender);
 
     if (isUserMuted(remoteJid, userJid)) {
       const targetKey = {
@@ -103,7 +104,7 @@ module.exports = {
       try {
         await tryDeleteMessage(sock, remoteJid, targetKey);
       } catch (e) {
-        // Silencioso para no saturar la consola si el bot no es admin
+        // Silencioso para no hacer spam en consola
       }
     }
   },
@@ -119,16 +120,13 @@ module.exports = {
       return reply('❌ Solo los administradores o el owner pueden usar este comando.');
     }
 
-    const rawTarget = getTarget(msg, args);
+    // 🎯 USAMOS EXACTAMENTE LA VARIABLE TARGET DE TUS PLUGINS
+    const target = getTarget(msg, args);
     
-    if (!rawTarget) {
+    if (!target) {
       return reply('❌ Debes responder a un mensaje, mencionar a alguien o escribir su número.\n\n*Ejemplo:*\n.mutear @usuario');
     }
 
-    // 🎯 CREAMOS LA VARIABLE EXACTA AL IGUAL QUE EN PERFIL.JS
-    const targetNum = cleanNumber(rawTarget);
-    const targetJid = `${targetNum}@s.whatsapp.net`;
-    
     const data = loadMutes();
     const cmd = String(commandName || '').toLowerCase();
 
@@ -136,59 +134,49 @@ module.exports = {
     // 🔴 ACCIÓN: MUTEAR / SILENCIAR
     // ==========================================
     if (cmd === 'mutear' || cmd === 'silenciar') {
-      const botNum = cleanNumber(sock.user?.id || sock.user?.jid || '');
-      if (targetNum === botNum) {
+      const botJid = cleanJid(sock.user?.id || sock.user?.jid || '');
+      if (target === botJid) {
         return reply('🛡️ No puedes mutearme a mí. ¡Soy el bot!');
       }
 
       const ownerNumbers = Array.isArray(config?.owner) ? config.owner.map(n => String(n).replace(/\D/g, '')) : [];
-      if (ownerNumbers.includes(targetNum)) {
-        return sock.sendMessage(remoteJid, { 
-          text: `🛡️ Inmunidad. No se puede silenciar al Owner @${targetNum}.`, 
-          mentions: [targetJid] 
-        }, { quoted: msg });
+      if (ownerNumbers.includes(cleanNumber(target))) {
+        const textMsg = `🛡️ Inmunidad de sistema. No se puede silenciar al Owner @${cleanNumber(target)}.`;
+        return sock.sendMessage(remoteJid, { text: textMsg, mentions: [target] }, { quoted: msg });
       }
 
       if (!data[remoteJid]) data[remoteJid] = {};
       
-      if (data[remoteJid][targetJid]) {
-        return sock.sendMessage(remoteJid, { 
-          text: `⚠️ @${targetNum} ya se encuentra silenciado en este chat.`, 
-          mentions: [targetJid] 
-        }, { quoted: msg });
+      if (data[remoteJid][target]) {
+        const textMsg = `⚠️ @${cleanNumber(target)} ya se encuentra silenciado en este chat.`;
+        return sock.sendMessage(remoteJid, { text: textMsg, mentions: [target] }, { quoted: msg });
       }
 
-      data[remoteJid][targetJid] = {
-        mutedBy: `${cleanNumber(sender)}@s.whatsapp.net`,
+      data[remoteJid][target] = {
+        mutedBy: cleanJid(sender),
         time: Date.now()
       };
       saveMutes(data);
 
-      return sock.sendMessage(remoteJid, { 
-        text: `🤐 *¡USUARIO SILENCIADO!* 🤐\n\nEl usuario @${targetNum} ha sido muteado.\n\n_Sus mensajes serán eliminados al instante._ 🚷\n\n⚠️ *Nota:* Asegúrate de que yo tenga rango de Administrador.`, 
-        mentions: [targetJid] 
-      }, { quoted: msg });
+      const textMsg = `🤐 *¡USUARIO SILENCIADO!* 🤐\n\nEl usuario @${cleanNumber(target)} ha sido muteado.\n\n_Sus mensajes serán eliminados al instante._ 🚷\n\n⚠️ *Nota:* Asegúrate de que yo tenga rango de Administrador.`;
+      return sock.sendMessage(remoteJid, { text: textMsg, mentions: [target] }, { quoted: msg });
     }
 
     // ==========================================
     // 🟢 ACCIÓN: UNMUTEAR / DESILENCIAR
     // ==========================================
     if (cmd === 'unmutear' || cmd === 'desilenciar') {
-      if (!data[remoteJid] || !data[remoteJid][targetJid]) {
-        return sock.sendMessage(remoteJid, { 
-          text: `⚠️ @${targetNum} no está silenciado en este grupo.`, 
-          mentions: [targetJid] 
-        }, { quoted: msg });
+      if (!data[remoteJid] || !data[remoteJid][target]) {
+        const textMsg = `⚠️ @${cleanNumber(target)} no está silenciado en este grupo.`;
+        return sock.sendMessage(remoteJid, { text: textMsg, mentions: [target] }, { quoted: msg });
       }
 
-      delete data[remoteJid][targetJid];
+      delete data[remoteJid][target];
       if (Object.keys(data[remoteJid]).length === 0) delete data[remoteJid];
       saveMutes(data);
 
-      return sock.sendMessage(remoteJid, { 
-        text: `🔊 @${targetNum} ha sido desilenciado. Ya puede volver a escribir normalmente en el grupo.`, 
-        mentions: [targetJid] 
-      }, { quoted: msg });
+      const textMsg = `🔊 @${cleanNumber(target)} ha sido desilenciado. Ya puede volver a escribir normalmente en el grupo.`;
+      return sock.sendMessage(remoteJid, { text: textMsg, mentions: [target] }, { quoted: msg });
     }
   }
 };
