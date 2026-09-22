@@ -11,7 +11,7 @@ const { getBody, normalizeJid, detectPrefix, cleanNumber, getReadableType } = re
 const BANNED_PATH = path.join(process.cwd(), 'lib', 'banned.json');
 
 async function checkBannedUser(sock, remoteJid, sender, msg, isOwner) {
-  if (isOwner) return false; // El owner nunca es bloqueado
+  if (isOwner) return false; 
   try {
     const senderPure = cleanJid(sender);
     if (!fs.existsSync(BANNED_PATH)) return false;
@@ -30,7 +30,7 @@ async function checkBannedUser(sock, remoteJid, sender, msg, isOwner) {
           mentions: [senderPure]
         }, { quoted: msg });
       }
-      return true; // Bloquea completamente la ejecución
+      return true; 
     }
     return false;
   } catch {
@@ -212,7 +212,6 @@ async function messageHandler(sock, msg, store = {}) {
     const adminStatus = isAdmin ? chalk.green('Sí') : chalk.red('No');
     const ownerStatus = isOwner ? chalk.green('Sí') : chalk.red('No');
 
-    // 📩 LOG DE MENSAJE ENTRANTE
     if (config.debug && body) {
       const time = getTime();
       console.log(chalk.gray(`╭─── 📥 `) + chalk.green.bold(`MENSAJE ENTRANTE`) + chalk.cyan(` [${time}]`) + chalk.gray(` ──────────`));
@@ -229,7 +228,7 @@ async function messageHandler(sock, msg, store = {}) {
     if (fromGroup) groupData = await db.getGroup(remoteJid);
     const userData = await db.getUser(sender);
 
-    // 🔥 EJECUTAR ESCUCHADORES PASIVOS (Trivia, Juegos, Anti-Link)
+    // 🔥 EJECUTAR ESCUCHADORES PASIVOS
     if (!fromGroup || (groupData && groupData.bot !== false) || isOwner) {
       for (const listener of messageListeners) {
         try {
@@ -257,6 +256,27 @@ async function messageHandler(sock, msg, store = {}) {
     const plugin = commands.get(cmdKey);
     
     if (!plugin) return;
+
+    // ==========================================
+    // 🚨 ESCUDO POLICIAL GLOBAL ANTI-COMANDOS
+    // ==========================================
+    if (userData && !isOwner) { // El Owner tiene inmunidad diplomática
+      const jailTimeLeft = Number(userData.jailUntil || 0) - Date.now();
+      
+      if (jailTimeLeft > 0) {
+        // Solo pueden usar plugins de tienda, policía y consultas básicas.
+        const pluginsPermitidos = ['tienda', 'policia', 'perfil', 'inventario', 'estado'];
+        
+        if (!pluginsPermitidos.includes(cmdKey)) {
+          const min = Math.floor(jailTimeLeft / 60000);
+          const sec = Math.floor((jailTimeLeft % 60000) / 1000);
+          
+          return sock.sendMessage(remoteJid, { 
+            text: `🚨 *ESTÁS ARRESTADO*\n\nNo puedes usar comandos como *.${commandName}* desde la cárcel.\n\n⏳ Condena restante: *${min}m ${sec}s*\n📌 Opciones para salir: *.usar llave* | *.fianza pagar* | *.sobornar pagar*` 
+          }, { quoted: msg });
+        }
+      }
+    }
 
     if (config.debug) {
       const time = getTime();
