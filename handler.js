@@ -42,7 +42,6 @@ function cleanJid(jid = '') {
   return String(jid).split(':')[0];
 }
 
-// ⏱️ OBTENER HORA FORMATEADA (12 horas AM/PM)
 function getTime() {
   return new Date().toLocaleTimeString('es-PE', { 
     hour: '2-digit', 
@@ -52,9 +51,6 @@ function getTime() {
   });
 }
 
-// ==========================================
-// 🛡️ SISTEMA DE COLA ANTI-OVERLIMIT 
-// ==========================================
 const sendQueue = [];
 let isSending = false;
 const SEND_DELAY = 1000; 
@@ -116,9 +112,6 @@ function attachSendLogger(sock) {
   };
 }
 
-// ==========================================
-// 🧩 CARGA DE PLUGINS (Comandos y Escuchas)
-// ==========================================
 const PLUGINS_DIR = path.join(process.cwd(), 'plugins');
 if (!fs.existsSync(PLUGINS_DIR)) fs.mkdirSync(PLUGINS_DIR, { recursive: true });
 
@@ -163,9 +156,6 @@ function loadPlugins() {
 
 loadPlugins();
 
-// ==========================================
-// ⚡ HANDLER PRINCIPAL
-// ==========================================
 async function messageHandler(sock, msg, store = {}) {
   try {
     attachSendLogger(sock);
@@ -187,7 +177,6 @@ async function messageHandler(sock, msg, store = {}) {
     const ownerNumbers = Array.isArray(config.owner) ? config.owner.map(n => String(n).replace(/\D/g, '')) : [];
     const isOwner = !!key.fromMe || ownerNumbers.includes(senderNumber);
 
-    // 🛡️ VERIFICACIÓN DE BANEO CON AVISO ÚNICO
     if (await checkBannedUser(sock, remoteJid, sender, msg, isOwner)) return;
 
     let groupName = 'Privado';
@@ -208,27 +197,10 @@ async function messageHandler(sock, msg, store = {}) {
       }
     }
 
-    const msgType = getReadableType(msg);
-    const adminStatus = isAdmin ? chalk.green('Sí') : chalk.red('No');
-    const ownerStatus = isOwner ? chalk.green('Sí') : chalk.red('No');
-
-    if (config.debug && body) {
-      const time = getTime();
-      console.log(chalk.gray(`╭─── 📥 `) + chalk.green.bold(`MENSAJE ENTRANTE`) + chalk.cyan(` [${time}]`) + chalk.gray(` ──────────`));
-      console.log(chalk.gray(`│ 🏷️  Chat    : `) + chatLabel + (fromGroup ? chalk.white(` ${groupName}`) : ''));
-      console.log(chalk.gray(`│ 👤  De      : `) + chalk.white(pushName) + chalk.yellow(` (+${senderNumber})`));
-      console.log(chalk.gray(`│ 🛡️  Admin   : `) + adminStatus);
-      console.log(chalk.gray(`│ 👑  Owner   : `) + ownerStatus);
-      console.log(chalk.gray(`│ 📦  Tipo    : `) + chalk.white(msgType));
-      console.log(chalk.gray(`│ 💬  Texto   : `) + chalk.white(String(body).slice(0, 80).replace(/\n/g, ' ')));
-      console.log(chalk.gray(`╰──────────────────────────────────────────`));
-    }
-
     let groupData = null;
     if (fromGroup) groupData = await db.getGroup(remoteJid);
     const userData = await db.getUser(sender);
 
-    // 🔥 EJECUTAR ESCUCHADORES PASIVOS
     if (!fromGroup || (groupData && groupData.bot !== false) || isOwner) {
       for (const listener of messageListeners) {
         try {
@@ -237,9 +209,7 @@ async function messageHandler(sock, msg, store = {}) {
             fromGroup, isOwner, isAdmin, groupData, userData,
             reply: (text) => sock.sendMessage(remoteJid, { text: String(text) }, { quoted: msg })
           });
-        } catch (e) {
-          console.log(chalk.red(`❌ Error en detector pasivo: ${e.message}`));
-        }
+        } catch (e) {}
       }
     }
 
@@ -249,71 +219,53 @@ async function messageHandler(sock, msg, store = {}) {
     if (!parsed) return;
 
     const args = parsed.body.trim().split(/\s+/).filter(Boolean);
-    const commandName = args.shift()?.toLowerCase();
-    if (!commandName) return;
+    const rawCommand = args.shift()?.toLowerCase();
+    if (!rawCommand) return;
 
-    const cmdKey = aliases.has(commandName) ? aliases.get(commandName) : commandName;
+    const cmdKey = aliases.has(rawCommand) ? aliases.get(rawCommand) : rawCommand;
     const plugin = commands.get(cmdKey);
     
     if (!plugin) return;
 
     // ==========================================
-    // 🚨 ESCUDO POLICIAL GLOBAL ANTI-COMANDOS
+    // 🚨 ESCUDO POLICIAL GLOBAL ESTRICTO (BLOQUEO ABSOLUTO)
     // ==========================================
-    if (userData && !isOwner) { // El Owner tiene inmunidad diplomática
+    if (userData && !isOwner) {
       const jailTimeLeft = Number(userData.jailUntil || 0) - Date.now();
       
       if (jailTimeLeft > 0) {
-        // Solo pueden usar plugins de tienda, policía y consultas básicas.
-        const pluginsPermitidos = ['tienda', 'policia', 'perfil', 'inventario', 'estado'];
+        // Únicos comandos permitidos en la cárcel
+        const permitidos = ['carcel', 'fianza', 'sobornar', 'tienda', 'comprar', 'shop', 'usar', 'perfil', 'inventario', 'estado'];
         
-        if (!pluginsPermitidos.includes(cmdKey)) {
+        if (!permitidos.includes(cmdKey)) {
           const min = Math.floor(jailTimeLeft / 60000);
           const sec = Math.floor((jailTimeLeft % 60000) / 1000);
           
           return sock.sendMessage(remoteJid, { 
-            text: `🚨 *ESTÁS ARRESTADO*\n\nNo puedes usar comandos como *.${commandName}* desde la cárcel.\n\n⏳ Condena restante: *${min}m ${sec}s*\n📌 Opciones para salir: *.usar llave* | *.fianza pagar* | *.sobornar pagar*` 
+            text: `🚨 *ESTÁS ARRESTADO*\n\nNo puedes usar comandos desde la cárcel.\n\n⏳ Condena restante: *${min}m ${sec}s*\n📌 Opciones permitidas: *.usar llave* | *.fianza pagar* | *.sobornar pagar* | *.tienda*` 
           }, { quoted: msg });
         }
       }
-    }
-
-    if (config.debug) {
-      const time = getTime();
-      console.log(chalk.gray(`╭─── ⚡ `) + chalk.yellow.bold(`EJECUTANDO COMANDO`) + chalk.cyan(` [${time}]`) + chalk.gray(` ────────`));
-      console.log(chalk.gray(`│ 🚀  Cmd     : `) + chalk.yellow(`${config.prefix}${commandName}`));
-      console.log(chalk.gray(`│ 👤  Por     : `) + chalk.white(pushName));
-      console.log(chalk.gray(`╰──────────────────────────────────────────`));
     }
 
     if (fromGroup && groupData.bot === false && !isOwner && !['config'].includes(cmdKey)) return; 
 
     try {
       await plugin.execute({
-        sock, msg, remoteJid, sender, botJid, pushName, body, args, commandName, config, db,
+        sock, msg, remoteJid, sender, botJid, pushName, body, args, commandName: rawCommand, config, db,
         fromGroup, isOwner, isAdmin, groupData, userData,
         reply: (text) => sock.sendMessage(remoteJid, { text: String(text) }, { quoted: msg })
       });
       
       if (!isOwner) await db.addXP(sender, Math.floor(Math.random() * 10) + 5);
 
-      if (config.debug) {
-        const time = getTime();
-        console.log(chalk.gray(`╭─── ✅ `) + chalk.green.bold(`ÉXITO`) + chalk.cyan(` [${time}]`) + chalk.gray(` ─────────────────────`));
-        console.log(chalk.gray(`│ ⚙️  Comando completado sin errores.`));
-        console.log(chalk.gray(`╰──────────────────────────────────────────\n`));
-      }
-      
     } catch (e) {
-      const time = getTime();
-      console.log(chalk.gray(`╭─── ❌ `) + chalk.red.bold(`ERROR EN COMANDO`) + chalk.cyan(` [${time}]`) + chalk.gray(` ───────────`));
-      console.log(chalk.gray(`│ ⚠️  Detalle : `) + chalk.red(e.message || e));
-      console.log(chalk.gray(`╰──────────────────────────────────────────\n`));
+      console.log(chalk.red(`❌ Error en comando ${rawCommand}: ${e.message}`));
       await sock.sendMessage(remoteJid, { text: '❌ Ocurrió un error interno al ejecutar este comando.' }, { quoted: msg });
     }
 
   } catch (err) {
-    console.log(chalk.bgRed.white('\n ❌ ERROR CRÍTICO '), chalk.red(err.message || err));
+    console.log(chalk.red(`❌ Error crítico en handler: ${err.message}`));
   }
 }
 
