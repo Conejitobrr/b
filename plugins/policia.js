@@ -28,7 +28,6 @@ const EXTRA_SOBORNO_POR_INTENTO = 1000;
 const MAX_SOBORNO = 25000;
 const MAX_SOBORNO_INTENTOS = 3;
 const PENALIDAD_SOBORNO = 5 * 60 * 1000;
-
 const DECAY_INTERVAL = 12 * 60 * 60 * 1000;
 const DECAY_AMOUNT = 5;
 
@@ -52,7 +51,7 @@ function loadJail() {
 function saveJail(data) { fs.writeFileSync(JAIL_PATH, JSON.stringify(data, null, 2)); }
 function loadRobos() { ensureFile(ROBOS_PATH, {}); try { return JSON.parse(fs.readFileSync(ROBOS_PATH, 'utf8')); } catch { return {}; } }
 function saveRobos(data) { fs.writeFileSync(ROBOS_PATH, JSON.stringify(data, null, 2)); }
-function getInv(jid) { try { const data = JSON.parse(fs.readFileSync(INV_PATH, 'utf8')); return data[cleanJid(jid)] || {}; } catch { return {}; } }
+function getInv(jid) { try { const data = JSON.parse(fs.readFileSync(INV_PATH, 'utf8')); return data[`${cleanNumber(jid)}@s.whatsapp.net`] || {}; } catch { return {}; } }
 
 function msToTime(ms = 0) {
   const total = Math.max(0, Math.floor(ms / 1000));
@@ -62,7 +61,7 @@ function msToTime(ms = 0) {
 }
 
 function applyFameDecay(jailDB, jid) {
-  const user = cleanJid(jid);
+  const user = `${cleanNumber(jid)}@s.whatsapp.net`;
   jailDB.fame = jailDB.fame || {};
   jailDB.lastCrimeAt = jailDB.lastCrimeAt || {};
   let fame = Number(jailDB.fame[user] || 0);
@@ -86,14 +85,14 @@ function applyFameDecay(jailDB, jid) {
 }
 
 function addFame(jailDB, jid, amount) {
-  const user = cleanJid(jid);
+  const user = `${cleanNumber(jid)}@s.whatsapp.net`;
   jailDB.fame[user] = Math.max(0, Number(jailDB.fame[user] || 0) + Number(amount || 0));
   jailDB.lastCrimeAt[user] = Date.now();
   return jailDB.fame[user];
 }
 
 function getJailOptions(jailDB, jid) {
-  const user = cleanJid(jid);
+  const user = `${cleanNumber(jid)}@s.whatsapp.net`;
   const jail = jailDB.jailed?.[user] || {};
   const fame = applyFameDecay(jailDB, user);
   const attempts = Number(jail.sobornoAttempts || 0);
@@ -139,7 +138,7 @@ async function makeArrestCollage(sock, captured, output) {
   const files = [];
   try {
     for (let i = 0; i < captured.length; i++) {
-      const jid = cleanJid(captured[i].thief);
+      const jid = `${cleanNumber(captured[i].thief)}@s.whatsapp.net`;
       const profile = path.join(TEMP_DIR, `police_profile_${Date.now()}_${i}.jpg`);
       const tile = path.join(TEMP_DIR, `police_tile_${Date.now()}_${i}.jpg`);
       await downloadProfile(sock, jid, profile);
@@ -166,7 +165,7 @@ module.exports = {
     let collagePath = null;
     try {
       const now = Date.now();
-      const me = cleanJid(sender);
+      const me = `${cleanNumber(sender)}@s.whatsapp.net`;
       const myNum = cleanNumber(me);
       
       const jailDB = loadJail();
@@ -175,27 +174,33 @@ module.exports = {
       // 1. ESTADO DE LA CÁRCEL
       if (commandName === 'carcel') {
         const jail = jailDB.jailed[me];
+        const userData = await db.getUser(me);
+        
         if (!jail || jail.until <= now) {
           delete jailDB.jailed[me]; saveJail(jailDB);
+          userData.jailUntil = 0; if (userData.save) await userData.save();
           return reply('✅ No estás arrestado.');
         }
+        
         const opts = getJailOptions(jailDB, me);
         return reply(`⛓️ *ESTÁS ARRESTADO*\n\n⏳ Tiempo restante: *${msToTime(jail.until - now)}*\n☠️ Fama criminal: *${opts.fame}*\n\n💰 *FIANZA SEGURA*\n➤ Costo: *${opts.fianzaCost} XP*\n➤ Usar: *.fianza pagar*\n\n💸 *SOBORNO ARRIESGADO*\n➤ Intentos: *${opts.remainingAttempts}/${MAX_SOBORNO_INTENTOS}*\n➤ Costo: *${opts.remainingAttempts > 0 ? `${opts.sobornoCost} XP` : 'Agotado'}*\n➤ Usar: *.sobornar pagar*\n\n🔑 *LLAVE DE CELDA*\n➤ Llaves disponibles: *${opts.keys}*\n➤ Usar: *.usar llave*`);
       }
 
-      // 2. VER FAMA CRIMINAL
       if (commandName === 'fama') {
         const fame = jailDB.fame[me] || 0;
         return sock.sendMessage(remoteJid, { text: `☠️ *FAMA CRIMINAL*\n\n👤 @${myNum}\n🔥 Nivel criminal: *${fame}*\n🚨 Riesgo policial: *${Math.min(90, 10 + fame)}%*\n\n📉 Si dejas de robar, tu fama bajará poco a poco.`, mentions: [me] }, { quoted: msg });
       }
 
-      // 3. PAGAR FIANZA
       if (commandName === 'fianza') {
         const jail = jailDB.jailed[me];
-        if (!jail || jail.until <= now) { delete jailDB.jailed[me]; saveJail(jailDB); return reply('✅ No estás arrestado. No necesitas pagar fianza.'); }
+        const userData = await db.getUser(me);
+        if (!jail || jail.until <= now) { 
+          delete jailDB.jailed[me]; saveJail(jailDB); 
+          userData.jailUntil = 0; if (userData.save) await userData.save();
+          return reply('✅ No estás arrestado. No necesitas pagar fianza.'); 
+        }
         
         const opts = getJailOptions(jailDB, me);
-        const userData = await db.getUser(me);
         const xp = Number(userData.xp || 0);
         const opt = (args?.[0] || '').toLowerCase();
 
@@ -206,6 +211,7 @@ module.exports = {
         if (xp < opts.fianzaCost) return reply(`❌ No tienes suficiente XP.\n💸 Fianza: *${opts.fianzaCost} XP*\n⭐ Tienes: *${xp} XP*`);
         
         userData.xp -= opts.fianzaCost;
+        userData.jailUntil = 0;
         if (userData.save) await userData.save();
         
         delete jailDB.jailed[me];
@@ -214,15 +220,18 @@ module.exports = {
         return sock.sendMessage(remoteJid, { text: `💰 *FIANZA PAGADA*\n\n👤 @${myNum} pagó *${opts.fianzaCost} XP*.\n✅ Saliste de prisión libremente.`, mentions: [me] }, { quoted: msg });
       }
 
-      // 4. SOBORNAR
       if (commandName === 'sobornar') {
         const jail = jailDB.jailed[me];
-        if (!jail || jail.until <= now) { delete jailDB.jailed[me]; saveJail(jailDB); return reply('✅ No estás arrestado.'); }
+        const userData = await db.getUser(me);
+        if (!jail || jail.until <= now) { 
+          delete jailDB.jailed[me]; saveJail(jailDB); 
+          userData.jailUntil = 0; if (userData.save) await userData.save();
+          return reply('✅ No estás arrestado.'); 
+        }
         
         const opts = getJailOptions(jailDB, me);
         if (opts.remainingAttempts <= 0) return reply(`❌ Agotaste tus *${MAX_SOBORNO_INTENTOS} intentos* de soborno.\nUsa *.fianza pagar* o *.usar llave*.`);
         
-        const userData = await db.getUser(me);
         const xp = Number(userData.xp || 0);
         const opt = (args?.[0] || '').toLowerCase();
 
@@ -233,7 +242,6 @@ module.exports = {
         if (xp < opts.sobornoCost) return reply(`❌ XP insuficiente.\n💸 Soborno: *${opts.sobornoCost} XP*\n⭐ Tienes: *${xp} XP*`);
         
         userData.xp -= opts.sobornoCost;
-        if (userData.save) await userData.save();
 
         const chance = Math.max(0.20, 0.45 - (opts.attempts * 0.10));
         
@@ -241,31 +249,36 @@ module.exports = {
           delete jailDB.jailed[me];
           jailDB.fame[me] = Math.max(0, Number(jailDB.fame[me] || 0) - 5);
           saveJail(jailDB);
+          userData.jailUntil = 0;
+          if (userData.save) await userData.save();
           return reply(`💸 *SOBORNO EXITOSO*\n\nPagaste *${opts.sobornoCost} XP*.\n🚓 La policía aceptó el trato y estás libre.`);
         } else {
           jail.sobornoAttempts = Number(jail.sobornoAttempts || 0) + 1;
           jail.until += PENALIDAD_SOBORNO;
           addFame(jailDB, me, 3);
           saveJail(jailDB);
+          
+          userData.jailUntil = jail.until;
+          if (userData.save) await userData.save();
           return reply(`❌ *SOBORNO FALLIDO*\n\nPagaste *${opts.sobornoCost} XP* pero el policía te delató.\n\n⛓️ Penalidad: *+5 minutos de cárcel*\n☠️ Tu fama criminal aumentó.\n⏳ Tiempo restante: *${msToTime(jail.until - now)}*`);
         }
       }
 
-      // 5. CAZAR LADRONES (Comando Principal .policia)
+      // 5. CAZAR LADRONES (.policia)
       const robosDB = loadRobos();
       const robos = robosDB[remoteJid] || [];
       const mentionedRaw = msg.message?.extendedTextMessage?.contextInfo?.mentionedJid?.[0];
-      const mentioned = mentionedRaw ? cleanJid(mentionedRaw) : null;
+      const mentioned = mentionedRaw ? `${cleanNumber(mentionedRaw)}@s.whatsapp.net` : null;
 
       let suspects = robos.filter(r => !r.caught && now - Number(r.time || 0) <= ROB_TIME);
-      if (mentioned) suspects = suspects.filter(r => cleanJid(r.thief) === mentioned);
+      if (mentioned) suspects = suspects.filter(r => r.thief === mentioned);
       const oldRobos = robos.filter(r => !r.caught && now - Number(r.time || 0) > ROB_TIME);
 
       if (!suspects.length) {
         if (mentioned) return sock.sendMessage(remoteJid, { text: `🚓 *SIN PRUEBAS*\n\n@${cleanNumber(mentioned)} no tiene robos recientes o ya escapó.`, mentions: [mentioned] }, { quoted: msg });
         
         if (oldRobos.length) {
-          const escapedMentions = [...new Set(oldRobos.map(r => cleanJid(r.thief)))];
+          const escapedMentions = [...new Set(oldRobos.map(r => r.thief))];
           robosDB[remoteJid] = robos.filter(r => now - Number(r.time || 0) <= 10 * 60 * 1000);
           saveRobos(robosDB);
           return sock.sendMessage(remoteJid, { text: `🚓 *LA POLICÍA LLEGÓ TARDE*\n\nLos sospechosos ya escaparon:\n${escapedMentions.map(j => `➤ @${cleanNumber(j)}`).join('\n')}`, mentions: escapedMentions }, { quoted: msg });
@@ -277,7 +290,8 @@ module.exports = {
       const escaped = [];
 
       for (const robbery of suspects) {
-        const thief = cleanJid(robbery.thief);
+        const thief = robbery.thief;
+        const victim = robbery.victim;
         const fame = applyFameDecay(jailDB, thief);
         const captureChance = Math.min(0.85, 0.55 + fame / 200);
 
@@ -286,6 +300,21 @@ module.exports = {
           jailDB.jailed[thief] = { until: now + JAIL_TIME, by: me, chat: remoteJid, at: now, sobornoAttempts: 0 };
           addFame(jailDB, thief, 10);
           robbery.caught = true;
+
+          // 🔥 DEVOLUCIÓN DE XP A LA VÍCTIMA
+          const thiefData = await db.getUser(thief);
+          const victimData = await db.getUser(victim);
+
+          if (thiefData) {
+            thiefData.xp = Math.max(0, (thiefData.xp || 0) - robbery.amount);
+            thiefData.jailUntil = now + JAIL_TIME;
+            if (thiefData.save) await thiefData.save();
+          }
+          if (victimData) {
+            victimData.xp = (victimData.xp || 0) + robbery.amount;
+            if (victimData.save) await victimData.save();
+          }
+
         } else {
           escaped.push(robbery);
           addFame(jailDB, thief, 5);
@@ -296,27 +325,25 @@ module.exports = {
       saveRobos(robosDB);
       saveJail(jailDB);
 
-      // 🔥 RECOLECTAR MENCIONES AZULES ESTRICTAS
       const allMentions = new Set([me]);
-      captured.forEach(r => { allMentions.add(cleanJid(r.thief)); allMentions.add(cleanJid(r.victim)); });
-      escaped.forEach(r => { allMentions.add(cleanJid(r.thief)); allMentions.add(cleanJid(r.victim)); });
+      captured.forEach(r => { allMentions.add(r.thief); allMentions.add(r.victim); });
+      escaped.forEach(r => { allMentions.add(r.thief); allMentions.add(r.victim); });
 
       let text = `🚔 *OPERATIVO POLICIAL*\n\n`;
 
       if (captured.length) {
         text += `⛓️ *Arrestados:*\n`;
         for (const r of captured) {
-          const thief = cleanJid(r.thief);
-          const opts = getJailOptions(jailDB, thief);
-          text += `➤ @${cleanNumber(r.thief)} fue arrestado por robar *${r.amount} XP* a @${cleanNumber(r.victim)}\n`;
-          text += `   💰 Fianza: *${opts.fianzaCost} XP* → *.fianza pagar*\n`;
-          text += `   💸 Soborno: *${opts.sobornoCost} XP* → *.sobornar pagar*\n\n`;
+          const opts = getJailOptions(jailDB, r.thief);
+          text += `➤ @${cleanNumber(r.thief)} fue arrestado en pleno escape.\n`;
+          text += `   💙 *Se recuperaron ${r.amount} XP y fueron devueltos a @${cleanNumber(r.victim)}*\n`;
+          text += `   💰 Fianza: *${opts.fianzaCost} XP*\n\n`;
         }
         text += `📌 Condena: *10 minutos en prisión*\n\n`;
       }
 
       if (escaped.length) {
-        text += `🚓 *Escaparon:*\n`;
+        text += `🚓 *Escaparon en la patrulla:*\n`;
         for (const r of escaped) { text += `➤ @${cleanNumber(r.thief)} escapó con *${r.amount} XP* de @${cleanNumber(r.victim)}\n`; }
       }
 
@@ -324,7 +351,6 @@ module.exports = {
         const id = `${Date.now()}_${Math.floor(Math.random() * 9999)}`;
         collagePath = path.join(TEMP_DIR, `police_collage_${id}.jpg`);
         await makeArrestCollage(sock, captured, collagePath);
-        
         return sock.sendMessage(remoteJid, { image: fs.readFileSync(collagePath), caption: text, mentions: [...allMentions] }, { quoted: msg });
       }
 
