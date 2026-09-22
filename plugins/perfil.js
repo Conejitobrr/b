@@ -54,32 +54,31 @@ module.exports = {
   
   execute: async ({ sock, msg, remoteJid, sender, config, db }) => {
     try {
-      const rawTarget = getTarget(msg, sender);
-      const targetNum = cleanNumber(rawTarget);
-      const targetJid = `${targetNum}@s.whatsapp.net`;
-      
-      const user = await db.getUser(targetJid);
+      const target = getTarget(msg, sender);
+      const user = await db.getUser(target);
 
       const ownerNumbers = Array.isArray(config.owner) ? config.owner.map(n => String(n).replace(/\D/g, '')) : [];
-      const isOwner = ownerNumbers.includes(targetNum);
+      const isOwner = ownerNumbers.includes(cleanNumber(target));
       const isPremium = user.premium === true || Number(user.premiumUntil || 0) > Date.now();
       
       const jailTimeLeft = Number(user.jailUntil || 0) - Date.now();
       const isJailed = jailTimeLeft > 0;
       
-      // 🎯 Corrección: Extraer y limpiar el número de la pareja
-      let partnerNum = null;
-      let partnerJid = null;
+      // Mantenemos tu lógica intacta, solo sumamos la extracción segura de la pareja
+      let partnerText = '*Nadie (Soltero/a)*';
+      const mentions = [target];
+      
       if (user.partner && user.partner !== 'null') {
-        partnerNum = cleanNumber(user.partner);
-        partnerJid = `${partnerNum}@s.whatsapp.net`;
+        const partnerJid = user.partner; // Conserva el JID intacto
+        partnerText = `@${cleanNumber(partnerJid)}`;
+        mentions.push(partnerJid); // Se añade al array de menciones para que salga azul
       }
 
-      const image = await getProfileBuffer(sock, targetJid);
+      const image = await getProfileBuffer(sock, target);
 
       const text = `👤 *PERFIL DE USUARIO*
 
-👤 Usuario: @${targetNum}
+👤 Usuario: @${cleanNumber(target)}
 ⭐ XP: *${user.xp || 0}*
 🏆 Nivel: *${user.level || 1}*
 💎 Premium: *${isPremium ? 'Sí' : 'No'}*
@@ -88,15 +87,11 @@ module.exports = {
 
 ⛓️ Arrestado: *${isJailed ? 'Sí' : 'No'}*
 ${isJailed ? `⏳ Tiempo restante: *${msToTime(jailTimeLeft)}*\n` : ''}☠️ Fama criminal: *${user.fame || 0}*
-💍 Pareja: ${partnerNum ? `@${partnerNum}` : '*Nadie (Soltero/a)*'}`;
-
-      // Inyectamos el target y su pareja al array de menciones para que WhatsApp los pinte de azul
-      const mentionsArr = [targetJid];
-      if (partnerJid) mentionsArr.push(partnerJid);
+💍 Pareja: ${partnerText}`;
 
       const messageOptions = {
         caption: text,
-        mentions: mentionsArr
+        mentions: mentions
       };
 
       if (image) messageOptions.image = image;
