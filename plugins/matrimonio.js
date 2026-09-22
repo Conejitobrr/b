@@ -28,7 +28,7 @@ function saveDB(data) {
 }
 
 function cleanJid(jid = '') { return String(jid).split(':')[0]; }
-function cleanNumber(jid = '') { return cleanJid(jid).split('@')[0].replace(/\D/g, ''); }
+function number(jid = '') { return cleanJid(jid).split('@')[0].replace(/\D/g, ''); }
 function getPartner(data, user) { return data.marriages?.[cleanJid(user)]?.partner || null; }
 function isMarried(data, user) { return !!getPartner(data, user); }
 
@@ -42,11 +42,9 @@ module.exports = {
 
   execute: async ({ sock, msg, remoteJid, sender, commandName, args, isOwner, db, reply }) => {
     const data = loadDB();
-    const user = cleanJid(sender);
-    const userJid = `${cleanNumber(user)}@s.whatsapp.net`;
+    const user = cleanJid(sender); // JID puro sin alterar
     const mentioned = msg.message?.extendedTextMessage?.contextInfo?.mentionedJid?.[0];
     const target = mentioned ? cleanJid(mentioned) : null;
-    const targetJid = target ? `${cleanNumber(target)}@s.whatsapp.net` : null;
     
     const cmd = commandName.toLowerCase();
 
@@ -62,7 +60,7 @@ module.exports = {
       if (data.cooldowns[target]) {
         delete data.cooldowns[target];
         saveDB(data);
-        return sock.sendMessage(remoteJid, { text: `✨ *PERDÓN PAPAL CONCEDIDO* ✨\n\nEl Owner ha purificado los pecados de @${cleanNumber(target)}. Ya puede casarse de nuevo.`, mentions: [targetJid] }, { quoted: msg });
+        return sock.sendMessage(remoteJid, { text: `✨ *PERDÓN PAPAL CONCEDIDO* ✨\n\nEl Owner ha purificado los pecados de @${number(target)}. Ya puede casarse de nuevo.`, mentions: [target] }, { quoted: msg });
       } else {
         return reply('Esa persona no tiene ningún castigo activo.');
       }
@@ -75,29 +73,26 @@ module.exports = {
       const miPareja = getPartner(data, user);
       if (!miPareja) return reply('❌ No estás casado/a. Usa *.proponer @usuario* para conseguir pareja primero.');
       
-      const parejaNum = cleanNumber(miPareja);
-      const parejaJid = `${parejaNum}@s.whatsapp.net`;
       let txt = '';
-
       if (cmd === 'amor') {
         const amorTxt = [
-          `🥰 *@${cleanNumber(user)}* le dio un beso apasionado a su espos@ *@${parejaNum}*.\n¡Que viva el amor! 💕`,
-          `🫂 *@${cleanNumber(user)}* abrazó fuertemente a *@${parejaNum}* por la espalda.\n"Eres lo mejor que me ha pasado" 💖`,
-          `🍽️ *@${cleanNumber(user)}* le preparó una cena romántica a *@${parejaNum}*.\n¡Qué detallazo! 🍷🍝`
+          `🥰 *@${number(user)}* le dio un beso apasionado a su espos@ *@${number(miPareja)}*.\n¡Que viva el amor! 💕`,
+          `🫂 *@${number(user)}* abrazó fuertemente a *@${number(miPareja)}* por la espalda.\n"Eres lo mejor que me ha pasado" 💖`,
+          `🍽️ *@${number(user)}* le preparó una cena romántica a *@${number(miPareja)}*.\n¡Qué detallazo! 🍷🍝`
         ];
         txt = amorTxt[Math.floor(Math.random() * amorTxt.length)];
       } 
       else if (cmd === 'celos') {
         const celosTxt = [
-          `😤 *@${cleanNumber(user)}* le revisó el celular a *@${parejaNum}* y le hizo una escena de celos.\n¡Se va a dormir al sofá! 🛋️`,
-          `👀 *@${cleanNumber(user)}* vio a *@${parejaNum}* sonriéndole al teléfono y le quitó el internet de la casa. 📡✂️`
+          `😤 *@${number(user)}* le revisó el celular a *@${number(miPareja)}* y le hizo una escena de celos.\n¡Se va a dormir al sofá! 🛋️`,
+          `👀 *@${number(user)}* vio a *@${number(miPareja)}* sonriéndole al teléfono y le quitó el internet de la casa. 📡✂️`
         ];
         txt = celosTxt[Math.floor(Math.random() * celosTxt.length)];
       }
       else if (cmd === 'regalo') {
-        txt = `🎁 *@${cleanNumber(user)}* le compró un regalo sorpresa carísimo a *@${parejaNum}*.\n¡El amor está en el aire! ✨`;
+        txt = `🎁 *@${number(user)}* le compró un regalo sorpresa carísimo a *@${number(miPareja)}*.\n¡El amor está en el aire! ✨`;
       }
-      return sock.sendMessage(remoteJid, { text: txt, mentions: [userJid, parejaJid] }, { quoted: msg });
+      return sock.sendMessage(remoteJid, { text: txt, mentions: [user, miPareja] }, { quoted: msg });
     }
 
     // ==========================================
@@ -122,8 +117,8 @@ module.exports = {
       if (isMarried(data, target)) return reply('Padre SiriusBot: "Esa oveja ya está casada con otro."');
 
       PROPOSALS.set(target, { from: user, to: target, chat: remoteJid, time: Date.now() });
-      const txt = `🔔 *¡SUENAN LAS CAMPANAS!* 🔔\n\nHermanos, *@${cleanNumber(user)}* se ha arrodillado frente a *@${cleanNumber(target)}*.\n\nPadre SiriusBot:\n*"¿Aceptas tomar a esta persona para amarla y respetarla?"*\n\n👰/🤵 Di *.aceptar*\n🏃💨 Di *.rechazar*`;
-      return sock.sendMessage(remoteJid, { text: txt, mentions: [userJid, targetJid] }, { quoted: msg });
+      const txt = `🔔 *¡SUENAN LAS CAMPANAS!* 🔔\n\nHermanos, *@${number(user)}* se ha arrodillado frente a *@${number(target)}*.\n\nPadre SiriusBot:\n*"¿Aceptas tomar a esta persona para amarla y respetarla?"*\n\n👰/🤵 Di *.aceptar*\n🏃💨 Di *.rechazar*`;
+      return sock.sendMessage(remoteJid, { text: txt, mentions: [user, target] }, { quoted: msg });
     }
 
     if (cmd === 'aceptar') {
@@ -136,9 +131,8 @@ module.exports = {
 
       PROPOSALS.delete(user);
       CEREMONIES.set(remoteJid, { activo: true, novia: user, novio: proposal.from });
-      const novioJid = `${cleanNumber(proposal.from)}@s.whatsapp.net`;
 
-      await sock.sendMessage(remoteJid, { text: `✨🕊️ *LA CEREMONIA HA COMENZADO* 🕊️✨\n\n@${cleanNumber(user)} dijo: *¡SÍ, ACEPTO!*\n\n🗣️ _"Si hay alguien que se oponga... que escriba **.oponerse** AHORA MISMO."_\n\n⏳ *Tienen 8 segundos...*`, mentions: [userJid, novioJid] });
+      await sock.sendMessage(remoteJid, { text: `✨🕊️ *LA CEREMONIA HA COMENZADO* 🕊️✨\n\n@${number(user)} dijo: *¡SÍ, ACEPTO!*\n\n🗣️ _"Si hay alguien que se oponga... que escriba **.oponerse** AHORA MISMO."_\n\n⏳ *Tienen 8 segundos...*`, mentions: [user, proposal.from] });
       
       await sleep(8000);
       if (!CEREMONIES.get(remoteJid)?.activo) return; 
@@ -149,42 +143,39 @@ module.exports = {
       CEREMONIES.delete(remoteJid);
 
       // 🎯 ACTUALIZAR LA BASE DE DATOS PRINCIPAL PARA EL PERFIL
-      const userA = await db.getUser(userJid);
-      const userB = await db.getUser(novioJid);
-      if (userA) { userA.partner = novioJid; if(userA.save) await userA.save(); }
-      if (userB) { userB.partner = userJid; if(userB.save) await userB.save(); }
+      const userA = await db.getUser(user);
+      const userB = await db.getUser(proposal.from);
+      if (userA) { userA.partner = proposal.from; if(userA.save) await userA.save(); }
+      if (userB) { userB.partner = user; if(userB.save) await userB.save(); }
 
-      await db.addXP(userJid, 30000);
-      await db.addXP(novioJid, 30000);
+      await db.addXP(user, 30000);
+      await db.addXP(proposal.from, 30000);
       
-      return sock.sendMessage(remoteJid, { text: `*(Silencio total en la iglesia...)* 🦗\n\n_"¡Los declaro unidos en sagrado matrimonio!"_\n\n🎊 ¡Lluvia de arroz para @${cleanNumber(proposal.from)} y @${cleanNumber(user)}! 🎊\n💰 *DOTE MATRIMONIAL:* ¡Se les ha otorgado *30,000 XP* a cada uno!`, mentions: [novioJid, userJid] });
+      return sock.sendMessage(remoteJid, { text: `*(Silencio total en la iglesia...)* 🦗\n\n_"¡Los declaro unidos en sagrado matrimonio!"_\n\n🎊 ¡Lluvia de arroz para @${number(proposal.from)} y @${number(user)}! 🎊\n💰 *DOTE MATRIMONIAL:* ¡Se les ha otorgado *30,000 XP* a cada uno!`, mentions: [proposal.from, user] });
     }
 
     if (cmd === 'rechazar') {
       const proposal = PROPOSALS.get(user);
       if (!proposal || proposal.chat !== remoteJid) return reply('No tienes ninguna propuesta pendiente.');
       PROPOSALS.delete(user);
-      const novioJid = `${cleanNumber(proposal.from)}@s.whatsapp.net`;
-      return sock.sendMessage(remoteJid, { text: `💔 *@${cleanNumber(user)}* ha salido corriendo de la iglesia llorando.\nLa boda se cancela. @${cleanNumber(proposal.from)} ha quedado plantado/a en el altar.`, mentions: [userJid, novioJid] }, { quoted: msg });
+      return sock.sendMessage(remoteJid, { text: `💔 *@${number(user)}* ha salido corriendo de la iglesia llorando.\nLa boda se cancela. @${number(proposal.from)} ha quedado plantado/a en el altar.`, mentions: [user, proposal.from] }, { quoted: msg });
     }
 
     if (cmd === 'oponerse') {
       const ceremonia = CEREMONIES.get(remoteJid);
       if (!ceremonia || !ceremonia.activo) return reply('No hay ninguna boda llevándose a cabo en este momento para oponerse.');
       ceremonia.activo = false;
-      return sock.sendMessage(remoteJid, { text: `😱 *¡ESCÁNDALO!* 😱\n\n@${cleanNumber(user)} ha pateado las puertas de la iglesia gritando: *"¡ME OPONGO!"*\n\nEl Padre SiriusBot se desmaya. ¡LA BODA SE CANCELA!`, mentions: [userJid] }, { quoted: msg });
+      return sock.sendMessage(remoteJid, { text: `😱 *¡ESCÁNDALO!* 😱\n\n@${number(user)} ha pateado las puertas de la iglesia gritando: *"¡ME OPONGO!"*\n\nEl Padre SiriusBot se desmaya. ¡LA BODA SE CANCELA!`, mentions: [user] }, { quoted: msg });
     }
 
     if (cmd === 'pareja') {
       const userCheck = target || user;
-      const jidCheck = `${cleanNumber(userCheck)}@s.whatsapp.net`;
       const partner = getPartner(data, userCheck);
       
-      if (!partner) return sock.sendMessage(remoteJid, { text: `@${cleanNumber(userCheck)} está más soltero/a que el uno.`, mentions: [jidCheck] }, { quoted: msg });
+      if (!partner) return sock.sendMessage(remoteJid, { text: `@${number(userCheck)} está más soltero/a que el uno.`, mentions: [userCheck] }, { quoted: msg });
       
-      const partnerJid = `${cleanNumber(partner)}@s.whatsapp.net`;
       const date = new Date(data.marriages[userCheck].since).toLocaleDateString('es-PE');
-      return sock.sendMessage(remoteJid, { text: `💍 *REGISTRO CIVIL* 💍\n\n@${cleanNumber(userCheck)} está felizmente casado/a con @${cleanNumber(partner)} desde el ${date}.`, mentions: [jidCheck, partnerJid] }, { quoted: msg });
+      return sock.sendMessage(remoteJid, { text: `💍 *REGISTRO CIVIL* 💍\n\n@${number(userCheck)} está felizmente casado/a con @${number(partner)} desde el ${date}.`, mentions: [userCheck, partner] }, { quoted: msg });
     }
 
     // ==========================================
@@ -194,10 +185,9 @@ module.exports = {
       const partner = getPartner(data, user);
       if (!partner) return reply('Juez SiriusBot: "No puede divorciarse si no está casado."');
       DIVORCES.set(partner, { from: user, to: partner, chat: remoteJid });
-      const partnerJid = `${cleanNumber(partner)}@s.whatsapp.net`;
 
-      const txt = `🏛️ *JUZGADO DE FAMILIA VIRTUAL* 🏛️\n\nEl ciudadano @${cleanNumber(user)} ha presentado una demanda de divorcio contra @${cleanNumber(partner)}.\n\n💸 *ADVERTENCIA:* Firmar costará **15,000 XP** a cada uno y un veto de 14 días.\n\n@${cleanNumber(partner)}:\n✍️ Di *.firmar* para aceptar.\n🛑 Di *.romperpapeles* para negarte.`;
-      return sock.sendMessage(remoteJid, { text: txt, mentions: [userJid, partnerJid] }, { quoted: msg });
+      const txt = `🏛️ *JUZGADO DE FAMILIA VIRTUAL* 🏛️\n\nEl ciudadano @${number(user)} ha presentado una demanda de divorcio contra @${number(partner)}.\n\n💸 *ADVERTENCIA:* Firmar costará **15,000 XP** a cada uno y un veto de 14 días.\n\n@${number(partner)}:\n✍️ Di *.firmar* para aceptar.\n🛑 Di *.romperpapeles* para negarte.`;
+      return sock.sendMessage(remoteJid, { text: txt, mentions: [user, partner] }, { quoted: msg });
     }
 
     if (cmd === 'firmar') {
@@ -211,26 +201,23 @@ module.exports = {
       saveDB(data);
       DIVORCES.delete(user);
       
-      const exJid = `${cleanNumber(divorce.from)}@s.whatsapp.net`;
-
       // 🎯 ACTUALIZAR LA BASE DE DATOS PRINCIPAL PARA EL PERFIL (BORRAR PAREJA)
-      const userA = await db.getUser(userJid);
-      const userB = await db.getUser(exJid);
+      const userA = await db.getUser(user);
+      const userB = await db.getUser(divorce.from);
       if (userA) { userA.partner = null; userA.xp -= 15000; if(userA.save) await userA.save(); }
       if (userB) { userB.partner = null; userB.xp -= 15000; if(userB.save) await userB.save(); }
 
-      const txt = `🔨 *¡CASO CERRADO!*\n\n@${cleanNumber(user)} ha firmado los papeles. El sagrado vínculo con @${cleanNumber(divorce.from)} queda OFICIALMENTE ROTO.\n\n⛔ *PENALIDAD:* 14 días de veto para casarse.\n💸 *HONORARIOS:* -15,000 XP a cada uno.\n\nEl amor ha muerto.`;
-      return sock.sendMessage(remoteJid, { text: txt, mentions: [userJid, exJid] }, { quoted: msg });
+      const txt = `🔨 *¡CASO CERRADO!*\n\n@${number(user)} ha firmado los papeles. El sagrado vínculo con @${number(divorce.from)} queda OFICIALMENTE ROTO.\n\n⛔ *PENALIDAD:* 14 días de veto para casarse.\n💸 *HONORARIOS:* -15,000 XP a cada uno.\n\nEl amor ha muerto.`;
+      return sock.sendMessage(remoteJid, { text: txt, mentions: [user, divorce.from] }, { quoted: msg });
     }
 
     if (cmd === 'romperpapeles') {
       const divorce = DIVORCES.get(user);
       if (!divorce || divorce.chat !== remoteJid) return reply('No hay papeles que romper.');
       DIVORCES.delete(user);
-      const exJid = `${cleanNumber(divorce.from)}@s.whatsapp.net`;
       
-      const txt = `🛑 *¡DRAMA EN EL JUZGADO!* 🛑\n\n@${cleanNumber(user)} ha roto la demanda de divorcio en la cara del juez gritando a @${cleanNumber(divorce.from)}: *"¡NO TE DARÉ EL DIVORCIO!"* 😱\n\nSiguen infelizmente casados. 💍🔒`;
-      return sock.sendMessage(remoteJid, { text: txt, mentions: [userJid, exJid] }, { quoted: msg });
+      const txt = `🛑 *¡DRAMA EN EL JUZGADO!* 🛑\n\n@${number(user)} ha roto la demanda de divorcio en la cara del juez gritando a @${number(divorce.from)}: *"¡NO TE DARÉ EL DIVORCIO!"* 😱\n\nSiguen infelizmente casados. 💍🔒`;
+      return sock.sendMessage(remoteJid, { text: txt, mentions: [user, divorce.from] }, { quoted: msg });
     }
   }
 };
