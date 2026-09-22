@@ -7,7 +7,6 @@ const { execFile } = require('child_process');
 const { promisify } = require('util');
 const execFileAsync = promisify(execFile);
 
-// 🗄️ RUTAS LOCALES
 const TEMP_DIR = path.join(process.cwd(), 'temp');
 const JAIL_PATH = path.join(process.cwd(), 'lib', 'jail.json');
 const ROBOS_PATH = path.join(process.cwd(), 'lib', 'robos_recientes.json');
@@ -17,7 +16,6 @@ const DEFAULT_PROFILE = path.join(process.cwd(), 'assets', 'Sinperfil.jpg');
 const JAIL_TIME = 10 * 60 * 1000;
 const ROB_TIME = 5 * 60 * 1000;
 
-// 💰 ECONOMÍA POLICIAL
 const BASE_FIANZA = 1000;
 const EXTRA_FIANZA_POR_FAMA = 100;
 const MAX_FIANZA = 50000;
@@ -31,7 +29,9 @@ const PENALIDAD_SOBORNO = 5 * 60 * 1000;
 const DECAY_INTERVAL = 12 * 60 * 60 * 1000;
 const DECAY_AMOUNT = 5;
 
-// 🔥 FÓRMULA DE MENCIONES AZULES ESTRICTAS
+// ==========================================
+// 🧹 EXTRACCIÓN EXACTA DE TU PERFIL.JS
+// ==========================================
 function cleanJid(jid = '') { return String(jid).split(':')[0]; }
 function cleanNumber(jid = '') { return cleanJid(jid).split('@')[0].replace(/\D/g, ''); }
 
@@ -61,7 +61,7 @@ function msToTime(ms = 0) {
 }
 
 function applyFameDecay(jailDB, jid) {
-  const user = `${cleanNumber(jid)}@s.whatsapp.net`;
+  const user = jid; // Mantener JID original intacto
   jailDB.fame = jailDB.fame || {};
   jailDB.lastCrimeAt = jailDB.lastCrimeAt || {};
   let fame = Number(jailDB.fame[user] || 0);
@@ -85,14 +85,14 @@ function applyFameDecay(jailDB, jid) {
 }
 
 function addFame(jailDB, jid, amount) {
-  const user = `${cleanNumber(jid)}@s.whatsapp.net`;
+  const user = jid;
   jailDB.fame[user] = Math.max(0, Number(jailDB.fame[user] || 0) + Number(amount || 0));
   jailDB.lastCrimeAt[user] = Date.now();
   return jailDB.fame[user];
 }
 
 function getJailOptions(jailDB, jid) {
-  const user = `${cleanNumber(jid)}@s.whatsapp.net`;
+  const user = jid;
   const jail = jailDB.jailed?.[user] || {};
   const fame = applyFameDecay(jailDB, user);
   const attempts = Number(jail.sobornoAttempts || 0);
@@ -138,7 +138,7 @@ async function makeArrestCollage(sock, captured, output) {
   const files = [];
   try {
     for (let i = 0; i < captured.length; i++) {
-      const jid = `${cleanNumber(captured[i].thief)}@s.whatsapp.net`;
+      const jid = captured[i].thief;
       const profile = path.join(TEMP_DIR, `police_profile_${Date.now()}_${i}.jpg`);
       const tile = path.join(TEMP_DIR, `police_tile_${Date.now()}_${i}.jpg`);
       await downloadProfile(sock, jid, profile);
@@ -165,7 +165,9 @@ module.exports = {
     let collagePath = null;
     try {
       const now = Date.now();
-      const me = `${cleanNumber(sender)}@s.whatsapp.net`;
+      
+      const rawSender = cleanJid(sender);
+      const me = rawSender.includes('@') ? rawSender : `${cleanNumber(rawSender)}@s.whatsapp.net`;
       const myNum = cleanNumber(me);
       
       const jailDB = loadJail();
@@ -267,8 +269,10 @@ module.exports = {
       // 5. CAZAR LADRONES (.policia)
       const robosDB = loadRobos();
       const robos = robosDB[remoteJid] || [];
+      
       const mentionedRaw = msg.message?.extendedTextMessage?.contextInfo?.mentionedJid?.[0];
-      const mentioned = mentionedRaw ? `${cleanNumber(mentionedRaw)}@s.whatsapp.net` : null;
+      const mentionedJid = mentionedRaw ? cleanJid(mentionedRaw) : null;
+      const mentioned = mentionedJid ? (mentionedJid.includes('@') ? mentionedJid : `${cleanNumber(mentionedJid)}@s.whatsapp.net`) : null;
 
       let suspects = robos.filter(r => !r.caught && now - Number(r.time || 0) <= ROB_TIME);
       if (mentioned) suspects = suspects.filter(r => r.thief === mentioned);
@@ -325,6 +329,7 @@ module.exports = {
       saveRobos(robosDB);
       saveJail(jailDB);
 
+      // Recopilamos todas las menciones puras
       const allMentions = new Set([me]);
       captured.forEach(r => { allMentions.add(r.thief); allMentions.add(r.victim); });
       escaped.forEach(r => { allMentions.add(r.thief); allMentions.add(r.victim); });
