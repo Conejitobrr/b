@@ -197,6 +197,23 @@ async function messageHandler(sock, msg, store = {}) {
       }
     }
 
+    const msgType = getReadableType(msg);
+    const adminStatus = isAdmin ? chalk.green('Sí') : chalk.red('No');
+    const ownerStatus = isOwner ? chalk.green('Sí') : chalk.red('No');
+
+    // 📩 LOG DE MENSAJE ENTRANTE RESTAURADO
+    if (config.debug) {
+      const time = getTime();
+      console.log(chalk.gray(`╭─── 📥 `) + chalk.green.bold(`MENSAJE ENTRANTE`) + chalk.cyan(` [${time}]`) + chalk.gray(` ──────────`));
+      console.log(chalk.gray(`│ 🏷️  Chat    : `) + chatLabel + (fromGroup ? chalk.white(` ${groupName}`) : ''));
+      console.log(chalk.gray(`│ 👤  De      : `) + chalk.white(pushName) + chalk.yellow(` (+${senderNumber})`));
+      console.log(chalk.gray(`│ 🛡️  Admin   : `) + adminStatus);
+      console.log(chalk.gray(`│ 👑  Owner   : `) + ownerStatus);
+      console.log(chalk.gray(`│ 📦  Tipo    : `) + chalk.white(msgType));
+      console.log(chalk.gray(`│ 💬  Texto   : `) + chalk.white(String(body || '[Multimedia/Sticker]').slice(0, 80).replace(/\n/g, ' ')));
+      console.log(chalk.gray(`╰──────────────────────────────────────────`));
+    }
+
     let groupData = null;
     if (fromGroup) groupData = await db.getGroup(remoteJid);
     const userData = await db.getUser(sender);
@@ -228,13 +245,12 @@ async function messageHandler(sock, msg, store = {}) {
     if (!plugin) return;
 
     // ==========================================
-    // 🚨 ESCUDO POLICIAL GLOBAL ESTRICTO (BLOQUEO ABSOLUTO)
+    // 🚨 ESCUDO POLICIAL GLOBAL ESTRICTO
     // ==========================================
     if (userData && !isOwner) {
       const jailTimeLeft = Number(userData.jailUntil || 0) - Date.now();
       
       if (jailTimeLeft > 0) {
-        // Únicos comandos permitidos en la cárcel
         const permitidos = ['carcel', 'fianza', 'sobornar', 'tienda', 'comprar', 'shop', 'usar', 'perfil', 'inventario', 'estado'];
         
         if (!permitidos.includes(cmdKey)) {
@@ -248,6 +264,14 @@ async function messageHandler(sock, msg, store = {}) {
       }
     }
 
+    if (config.debug) {
+      const time = getTime();
+      console.log(chalk.gray(`╭─── ⚡ `) + chalk.yellow.bold(`EJECUTANDO COMANDO`) + chalk.cyan(` [${time}]`) + chalk.gray(` ────────`));
+      console.log(chalk.gray(`│ 🚀  Cmd     : `) + chalk.yellow(`${config.prefix}${rawCommand}`));
+      console.log(chalk.gray(`│ 👤  Por     : `) + chalk.white(pushName));
+      console.log(chalk.gray(`╰──────────────────────────────────────────`));
+    }
+
     if (fromGroup && groupData.bot === false && !isOwner && !['config'].includes(cmdKey)) return; 
 
     try {
@@ -258,6 +282,13 @@ async function messageHandler(sock, msg, store = {}) {
       });
       
       if (!isOwner) await db.addXP(sender, Math.floor(Math.random() * 10) + 5);
+
+      if (config.debug) {
+        const time = getTime();
+        console.log(chalk.gray(`╭─── ✅ `) + chalk.green.bold(`ÉXITO`) + chalk.cyan(` [${time}]`) + chalk.gray(` ─────────────────────`));
+        console.log(chalk.gray(`│ ⚙️  Comando completado sin errores.`));
+        console.log(chalk.gray(`╰──────────────────────────────────────────\n`));
+      }
 
     } catch (e) {
       console.log(chalk.red(`❌ Error en comando ${rawCommand}: ${e.message}`));
