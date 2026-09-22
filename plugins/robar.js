@@ -22,16 +22,8 @@ function saveCooldowns(data) { fs.writeFileSync(COOLDOWN_PATH, JSON.stringify(da
 function getJail() { try { return JSON.parse(fs.readFileSync(JAIL_PATH, 'utf8') || '{"jailed":{}}'); } catch { return { jailed: {} }; } }
 function saveJail(data) { fs.writeFileSync(JAIL_PATH, JSON.stringify(data, null, 2)); }
 
-// ==========================================
-// 🧹 EXTRACCIÓN EXACTA DE TU PERFIL.JS
-// ==========================================
-function cleanJid(jid = '') { 
-  return String(jid).split(':')[0]; 
-}
-
-function cleanNumber(jid = '') { 
-  return cleanJid(jid).split('@')[0].replace(/\D/g, ''); 
-}
+function cleanJid(jid = '') { return String(jid).split(':')[0]; }
+function cleanNumber(jid = '') { return cleanJid(jid).split('@')[0].replace(/\D/g, ''); }
 
 function getTarget(msg, args) {
   const quoted = msg.message?.extendedTextMessage?.contextInfo?.participant;
@@ -64,7 +56,6 @@ module.exports = {
       const rawTarget = getTarget(msg, args);
       if (!rawTarget) return reply('❌ Debes mencionar a quién quieres robar.\n📌 Ejemplo: *.robar @usuario*');
       
-      // Preservamos el JID puro (@c.us o @s.whatsapp.net)
       const targetJid = rawTarget.includes('@') ? rawTarget : `${cleanNumber(rawTarget)}@s.whatsapp.net`;
       const targetNum = cleanNumber(targetJid);
       
@@ -108,16 +99,16 @@ module.exports = {
         }
       }
 
+      // 🔥 ANOTAR COOLDOWN ANTES DEL ESCUDO
+      if (!cooldowns[attackerJid]) cooldowns[attackerJid] = {};
+      cooldowns[attackerJid].lastRob = now;
+      saveCooldowns(cooldowns);
+
       // 3. INTERCEPCIÓN DE ESCUDO
-      // (El inventario se busca por el formato forzado para compatibilidad)
       const dbInv = getInv();
       const targetInvKey = `${targetNum}@s.whatsapp.net`;
       if (!dbInv[targetInvKey]) dbInv[targetInvKey] = {};
       const targetInv = dbInv[targetInvKey];
-
-      if (!cooldowns[attackerJid]) cooldowns[attackerJid] = {};
-      cooldowns[attackerJid].lastRob = now;
-      saveCooldowns(cooldowns);
 
       if (Number(targetInv.shieldUses || 0) > 0) {
         targetInv.shieldUses -= 1;
@@ -170,7 +161,8 @@ module.exports = {
 
       } else {
         const multa = 800;
-        const tiempoCarcel = 20 * 60 * 1000; 
+        // Bajar cárcel a 10 minutos
+        const tiempoCarcel = 10 * 60 * 1000; 
 
         attackerData.xp = Math.max(0, (attackerData.xp || 0) - multa);
         attackerData.jailUntil = now + tiempoCarcel;
@@ -180,7 +172,7 @@ module.exports = {
         saveJail(jailDB);
 
         return sock.sendMessage(remoteJid, {
-          text: `🚨 *¡TE ATRAPARON!*\n\n@${targetNum} se defendió y llamó a la policía.\n📉 @${attackerNum} pierde *-${multa} XP*.\n⛓️ Has sido enviado a la cárcel por *20 minutos*.`,
+          text: `🚨 *¡TE ATRAPARON!*\n\n@${targetNum} se defendió y llamó a la policía.\n📉 @${attackerNum} pierde *-${multa} XP*.\n⛓️ Has sido enviado a la cárcel por *10 minutos*.`,
           mentions: [attackerJid, targetJid]
         }, { quoted: msg });
       }
