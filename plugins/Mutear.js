@@ -16,7 +16,6 @@ function cleanNumber(jid = '') {
   return cleanJid(jid).split('@')[0].replace(/\D/g, '');
 }
 
-// Adaptado de tu perfil.js para extraer el usuario a mutear sin errores
 function getTarget(msg, args) {
   const quoted = msg.message?.extendedTextMessage?.contextInfo?.participant;
   if (quoted) return cleanJid(quoted);
@@ -24,10 +23,9 @@ function getTarget(msg, args) {
   const mentioned = msg.message?.extendedTextMessage?.contextInfo?.mentionedJid?.[0];
   if (mentioned) return cleanJid(mentioned);
 
-  // Si se escribe el número manualmente en el comando
   if (args && args.length > 0) {
-    const num = args.join('').replace(/\D/g, '');
-    if (num.length >= 6) return `${num}@s.whatsapp.net`;
+    const cleanArgs = args.join('').replace(/\D/g, '');
+    if (cleanArgs) return `${cleanArgs}@s.whatsapp.net`;
   }
 
   return null;
@@ -77,7 +75,7 @@ function saveMutes(data) {
 
 function isUserMuted(groupId, userJid) {
   const data = loadMutes();
-  return !!data?.[groupId]?.[cleanJid(userJid)];
+  return !!data?.[groupId]?.[`${cleanNumber(userJid)}@s.whatsapp.net`];
 }
 
 module.exports = {
@@ -92,7 +90,7 @@ module.exports = {
 
     if (!fromGroup || !sender || !msg?.key || !sock) return;
 
-    const userJid = cleanJid(sender);
+    const userJid = `${cleanNumber(sender)}@s.whatsapp.net`;
 
     if (isUserMuted(remoteJid, userJid)) {
       const targetKey = {
@@ -105,7 +103,7 @@ module.exports = {
       try {
         await tryDeleteMessage(sock, remoteJid, targetKey);
       } catch (e) {
-        // Silencioso para no hacer spam si no es admin
+        // Silencioso para no saturar la consola si el bot no es admin
       }
     }
   },
@@ -121,19 +119,16 @@ module.exports = {
       return reply('❌ Solo los administradores o el owner pueden usar este comando.');
     }
 
-    // 🎯 Usamos la extracción exacta de tu perfil.js
-    let target = getTarget(msg, args);
+    const rawTarget = getTarget(msg, args);
     
-    if (!target) {
+    if (!rawTarget) {
       return reply('❌ Debes responder a un mensaje, mencionar a alguien o escribir su número.\n\n*Ejemplo:*\n.mutear @usuario');
     }
 
-    // Formateamos el JID estrictamente para que la mención sea azul real
-    if (!target.includes('@s.whatsapp.net')) {
-      target = `${target}@s.whatsapp.net`;
-    }
-
-    const targetNum = cleanNumber(target);
+    // 🎯 CREAMOS LA VARIABLE EXACTA AL IGUAL QUE EN PERFIL.JS
+    const targetNum = cleanNumber(rawTarget);
+    const targetJid = `${targetNum}@s.whatsapp.net`;
+    
     const data = loadMutes();
     const cmd = String(commandName || '').toLowerCase();
 
@@ -141,37 +136,37 @@ module.exports = {
     // 🔴 ACCIÓN: MUTEAR / SILENCIAR
     // ==========================================
     if (cmd === 'mutear' || cmd === 'silenciar') {
-      const botRaw = cleanJid(sock.user?.id || sock.user?.jid || '');
-      if (cleanJid(target) === botRaw) {
+      const botNum = cleanNumber(sock.user?.id || sock.user?.jid || '');
+      if (targetNum === botNum) {
         return reply('🛡️ No puedes mutearme a mí. ¡Soy el bot!');
       }
 
       const ownerNumbers = Array.isArray(config?.owner) ? config.owner.map(n => String(n).replace(/\D/g, '')) : [];
       if (ownerNumbers.includes(targetNum)) {
         return sock.sendMessage(remoteJid, { 
-          text: `🛡️ Inmunidad de sistema. No se puede silenciar al Owner @${targetNum}.`, 
-          mentions: [target] 
+          text: `🛡️ Inmunidad. No se puede silenciar al Owner @${targetNum}.`, 
+          mentions: [targetJid] 
         }, { quoted: msg });
       }
 
       if (!data[remoteJid]) data[remoteJid] = {};
       
-      if (data[remoteJid][target]) {
+      if (data[remoteJid][targetJid]) {
         return sock.sendMessage(remoteJid, { 
           text: `⚠️ @${targetNum} ya se encuentra silenciado en este chat.`, 
-          mentions: [target] 
+          mentions: [targetJid] 
         }, { quoted: msg });
       }
 
-      data[remoteJid][target] = {
-        mutedBy: cleanJid(sender),
+      data[remoteJid][targetJid] = {
+        mutedBy: `${cleanNumber(sender)}@s.whatsapp.net`,
         time: Date.now()
       };
       saveMutes(data);
 
       return sock.sendMessage(remoteJid, { 
         text: `🤐 *¡USUARIO SILENCIADO!* 🤐\n\nEl usuario @${targetNum} ha sido muteado.\n\n_Sus mensajes serán eliminados al instante._ 🚷\n\n⚠️ *Nota:* Asegúrate de que yo tenga rango de Administrador.`, 
-        mentions: [target] 
+        mentions: [targetJid] 
       }, { quoted: msg });
     }
 
@@ -179,20 +174,20 @@ module.exports = {
     // 🟢 ACCIÓN: UNMUTEAR / DESILENCIAR
     // ==========================================
     if (cmd === 'unmutear' || cmd === 'desilenciar') {
-      if (!data[remoteJid] || !data[remoteJid][target]) {
+      if (!data[remoteJid] || !data[remoteJid][targetJid]) {
         return sock.sendMessage(remoteJid, { 
           text: `⚠️ @${targetNum} no está silenciado en este grupo.`, 
-          mentions: [target] 
+          mentions: [targetJid] 
         }, { quoted: msg });
       }
 
-      delete data[remoteJid][target];
+      delete data[remoteJid][targetJid];
       if (Object.keys(data[remoteJid]).length === 0) delete data[remoteJid];
       saveMutes(data);
 
       return sock.sendMessage(remoteJid, { 
         text: `🔊 @${targetNum} ha sido desilenciado. Ya puede volver a escribir normalmente en el grupo.`, 
-        mentions: [target] 
+        mentions: [targetJid] 
       }, { quoted: msg });
     }
   }
