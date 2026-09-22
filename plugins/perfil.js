@@ -65,15 +65,18 @@ module.exports = {
       const isJailed = jailTimeLeft > 0;
       
       let partnerText = '*Nadie (Soltero/a)*';
-      const mentions = [target];
+      
+      // Siempre incluimos al dueño del perfil para que su mención principal funcione
+      const targetJid = target.includes('@') ? target : `${cleanNumber(target)}@s.whatsapp.net`;
+      const mentions = [targetJid]; 
       
       if (user.partner && user.partner !== 'null') {
-        const partnerJid = user.partner; 
+        const partnerJid = user.partner.includes('@') ? user.partner : `${cleanNumber(user.partner)}@s.whatsapp.net`;
         const partnerNum = cleanNumber(partnerJid);
         
         let isPartnerInGroup = false;
         
-        // 🔍 ESCÁNER DE PARTICIPANTES EN TIEMPO REAL
+        // 🔍 Verificamos si la pareja está actualmente en el grupo
         if (remoteJid.endsWith('@g.us')) {
           try {
             const metadata = await sock.groupMetadata(remoteJid);
@@ -85,29 +88,29 @@ module.exports = {
         }
 
         if (isPartnerInGroup) {
-          // Opción 1: Está en el grupo (Mención azul real, WhatsApp pone el nombre solo)
+          // Opción 1: SÍ está en el grupo (Mención azul clásica)
           partnerText = `@${partnerNum}`;
           mentions.push(partnerJid);
         } else {
-          // Opción 2: NO está en el grupo (Texto normal extrayendo el nombre a la fuerza)
-          let partnerName = partnerNum; 
+          // Opción 2: NO está en el grupo. Buscamos su nombre de WhatsApp en la memoria RAM (Baileys)
+          let pushname = null;
+          if (sock.store && sock.store.contacts && sock.store.contacts[partnerJid]) {
+            const contact = sock.store.contacts[partnerJid];
+            pushname = contact.notify || contact.pushname || contact.name || contact.verifiedName;
+          }
           
-          // Buscamos en la memoria RAM de WhatsApp (Baileys)
-          if (sock.store?.contacts?.[partnerJid]) {
-            partnerName = sock.store.contacts[partnerJid].name || sock.store.contacts[partnerJid].notify || partnerNum;
+          if (pushname) {
+            // Logró extraer el nombre: Lo imprimimos como texto plano normal (@Alexa)
+            partnerText = `@${pushname}`;
+          } else {
+            // Si la memoria está vacía, forzamos la mención nativa para evitar que salgan números crudos
+            partnerText = `@${partnerNum}`;
+            mentions.push(partnerJid);
           }
-          // Buscamos en tu Base de Datos por si tiene un nombre guardado
-          const partnerData = await db.getUser(partnerJid);
-          if (partnerData && partnerData.name) {
-            partnerName = partnerData.name;
-          }
-
-          // Lo imprimimos en texto plano, sin forzar la mención azul
-          partnerText = `~${partnerName}`; 
         }
       }
 
-      const image = await getProfileBuffer(sock, target);
+      const image = await getProfileBuffer(sock, targetJid);
 
       const text = `👤 *PERFIL DE USUARIO*
 
