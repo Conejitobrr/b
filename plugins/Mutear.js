@@ -6,25 +6,54 @@ const path = require('path');
 const MUTED_FILE = path.join(process.cwd(), 'database', 'muted.json');
 
 // ==========================================
-// FUNCIONES DE CONTROL Y LIMPIEZA DE JID
+// 🧹 FUNCIONES DE LIMPIEZA (Extraídas de tu insulto.js)
 // ==========================================
-function getPureJid(jid = '') {
-  const str = String(jid);
-  if (!str) return '';
-  const num = str.split('@')[0].replace(/\D/g, '');
-  return `${num}@s.whatsapp.net`;
+function cleanJid(jid = '') { 
+  return String(jid).split(':')[0]; 
 }
 
-function getTarget(msg) {
+function cleanNumber(jid = '') { 
+  return cleanJid(jid).split('@')[0].replace(/\D/g, ''); 
+}
+
+function getTarget(msg, args) {
   const quoted = msg.message?.extendedTextMessage?.contextInfo?.participant;
-  if (quoted) return getPureJid(quoted);
+  if (quoted) return cleanJid(quoted);
+  
   const mentioned = msg.message?.extendedTextMessage?.contextInfo?.mentionedJid?.[0];
-  if (mentioned) return getPureJid(mentioned);
+  if (mentioned) return cleanJid(mentioned);
+  
+  if (args && args[0]) {
+    const cleanArgs = args.join('').replace(/\D/g, '');
+    if (cleanArgs) return `${cleanArgs}@s.whatsapp.net`;
+  }
   return null;
 }
 
 // ==========================================
-// GESTIÓN DEL ARCHIVO DE SILENCIADOS (JSON)
+// 🔥 FUNCIÓN BLINDADA DE BORRADO (De tu del.js)
+// ==========================================
+async function tryDeleteMessage(sock, remoteJid, key) {
+  const attempts = [
+    key,
+    { ...key, fromMe: true },
+    { ...key, fromMe: false }
+  ];
+
+  let lastError = null;
+  for (const deleteKey of attempts) {
+    try {
+      await sock.sendMessage(remoteJid, { delete: deleteKey });
+      return true; 
+    } catch (err) {
+      lastError = err;
+    }
+  }
+  throw lastError || new Error('No se pudo eliminar.');
+}
+
+// ==========================================
+// GESTIÓN DEL ARCHIVO DE SILENCIADOS
 // ==========================================
 function loadMutes() {
   try {
@@ -45,30 +74,22 @@ function saveMutes(data) {
 
 function isUserMuted(groupId, userJid) {
   const data = loadMutes();
-  return !!data?.[groupId]?.[getPureJid(userJid)];
+  return !!data?.[groupId]?.[cleanJid(userJid)];
 }
 
 module.exports = {
   name: 'mutear',
   aliases: ['unmutear', 'silenciar', 'desilenciar'],
   category: 'moderación',
-  desc: 'Silencia a un usuario eliminando sus mensajes al instante (Fuerza Bruta)',
+  desc: 'Silencia a un usuario eliminando sus mensajes al instante',
 
-  // 🔥 MONITOR PASIVO (Sin colas lentas, borrado instantáneo)
-  async onMessage(ctx) {
-    // Extraemos las variables previniendo cualquier fallo del framework
-    const sock = ctx.sock || ctx.conn || ctx.client;
-    const msg = ctx.msg || ctx.message || ctx.m;
-    const remoteJid = ctx.remoteJid;
-    const sender = ctx.sender;
-    const fromGroup = ctx.fromGroup;
-
+  // 🔥 ESCÁNER DE MENSAJES PASIVO (Para borrar en tiempo real)
+  async onMessage({ sock, msg, remoteJid, sender, fromGroup }) {
     if (!fromGroup || !sender || !msg?.key || !sock) return;
 
-    const userJid = getPureJid(sender);
+    const userJid = cleanJid(sender);
 
     if (isUserMuted(remoteJid, userJid)) {
-      // 1️⃣ LLAVE EXACTA DEL MENSAJE (Copia fiel de tu plugin .del)
       const targetKey = {
         remoteJid: remoteJid,
         id: msg.key.id,
@@ -76,64 +97,51 @@ module.exports = {
         fromMe: false
       };
 
-      // 2️⃣ ATAQUE DE FUERZA BRUTA
-      const attempts = [
-        targetKey,
-        { ...targetKey, fromMe: true }
-      ];
-
-      for (const key of attempts) {
-        try {
-          await sock.sendMessage(remoteJid, { delete: key });
-          break; // Si WhatsApp acepta el borrado, corta el ciclo de inmediato
-        } catch (e) {
-          // Falla silenciosa si WhatsApp lo rechaza (ej. el bot perdió el admin)
-        }
+      try {
+        await tryDeleteMessage(sock, remoteJid, targetKey);
+      } catch (e) {
+        // Silencioso para no hacer spam si no es administrador
       }
     }
   },
 
-  // 🛠️ EJECUCIÓN DE COMANDOS MANUALES
-  async execute(ctx) {
-    const { sock, remoteJid, msg, sender, args, commandName, fromGroup, isOwner, isAdmin, reply } = ctx;
-
+  // 🛠️ COMANDOS MANUALES
+  async execute({ sock, remoteJid, msg, sender, args, commandName, fromGroup, isOwner, isAdmin, reply, config }) {
+    
     if (!fromGroup) {
       return reply('❌ Este comando solo se puede usar dentro de grupos.');
     }
 
     if (!isAdmin && !isOwner) {
-      return reply('❌ Solo los administradores del grupo o el owner pueden usar este comando.');
+      return reply('❌ Solo los administradores o el owner pueden usar este comando.');
     }
 
-    let target = getTarget(msg);
+    // 🎯 Usamos el getTarget infalible de tu insulto.js
+    const target = getTarget(msg, args);
     
-    if (!target && args.length > 0) {
-      const num = args.join('').replace(/\D/g, '');
-      if (num.length >= 6) target = `${num}@s.whatsapp.net`;
-    }
-
     if (!target) {
       return reply('❌ Debes responder a un mensaje, mencionar a alguien o escribir su número.\n\n*Ejemplo:*\n.mutear @usuario');
     }
 
-    const targetJid = getPureJid(target);
-    const targetNum = targetJid.split('@')[0];
+    // Aseguramos formato estricto JID para que funcione la mención azul
+    const targetJid = target.includes('@s.whatsapp.net') ? target : `${cleanNumber(target)}@s.whatsapp.net`;
+    const targetNum = cleanNumber(targetJid);
+    
     const data = loadMutes();
     const cmd = String(commandName || '').toLowerCase();
 
     // ==========================================
-    // ACCIÓN: MUTEAR / SILENCIAR
+    // 🔴 ACCIÓN: MUTEAR / SILENCIAR
     // ==========================================
     if (cmd === 'mutear' || cmd === 'silenciar') {
       const botRaw = sock.user?.id || sock.user?.jid || '';
-      if (targetJid === getPureJid(botRaw)) {
+      if (targetJid === cleanJid(botRaw)) {
         return reply('🛡️ No puedes mutearme a mí. ¡Soy el bot!');
       }
 
-      // Protección para Owners
-      const ownerNumbers = Array.isArray(ctx.config?.owner) ? ctx.config.owner.map(n => String(n).replace(/\D/g, '')) : [];
+      // Inmunidad al Owner
+      const ownerNumbers = Array.isArray(config?.owner) ? config.owner.map(n => String(n).replace(/\D/g, '')) : [];
       if (ownerNumbers.includes(targetNum)) {
-        // Obligamos al socket a lanzar la mención nativa
         return sock.sendMessage(remoteJid, { 
           text: `🛡️ Inmunidad de sistema. No se puede silenciar al Owner @${targetNum}.`, 
           mentions: [targetJid] 
@@ -150,12 +158,11 @@ module.exports = {
       }
 
       data[remoteJid][targetJid] = {
-        mutedBy: getPureJid(sender),
+        mutedBy: cleanJid(sender),
         time: Date.now()
       };
       saveMutes(data);
 
-      // Usamos sock.sendMessage directo para asegurar que la mención sea azul y real
       return sock.sendMessage(remoteJid, { 
         text: `🤐 *¡USUARIO SILENCIADO!* 🤐\n\nEl usuario @${targetNum} ha sido muteado.\n\n_Sus mensajes serán eliminados al instante._ 🚷\n\n⚠️ *Nota:* Asegúrate de que yo tenga rango de Administrador.`, 
         mentions: [targetJid] 
@@ -163,7 +170,7 @@ module.exports = {
     }
 
     // ==========================================
-    // ACCIÓN: UNMUTEAR / DESILENCIAR
+    // 🟢 ACCIÓN: UNMUTEAR / DESILENCIAR
     // ==========================================
     if (cmd === 'unmutear' || cmd === 'desilenciar') {
       if (!data[remoteJid] || !data[remoteJid][targetJid]) {
