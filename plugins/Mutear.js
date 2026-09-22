@@ -3,24 +3,35 @@
 const fs = require('fs');
 const path = require('path');
 
-const MUTED_FILE = path.join(process.cwd(), 'lib', 'muted.json');
+// Movemos el archivo a la carpeta database para mantener el orden de tus otros plugins
+const MUTED_FILE = path.join(process.cwd(), 'database', 'muted.json'); 
 
-// 🛡️ COLA DE SEGURIDAD EN RAM PARA EVITAR CAÍDAS POR SPAM
+// 🛡️ COLA DE SEGURIDAD REESCRITA (Anti-errores y Anti-Spam)
 const deleteQueue = [];
 let isDeleting = false;
 
-async function processDeleteQueue(sock, remoteJid) {
+async function processDeleteQueue(sock) {
   if (isDeleting) return;
   isDeleting = true;
 
   while (deleteQueue.length > 0) {
     const task = deleteQueue.shift();
     try {
-      await sock.sendMessage(remoteJid, { delete: task.key });
-      // Pequeña pausa de 250ms entre borrados para no saturar los sockets de WhatsApp
-      await new Promise(resolve => setTimeout(resolve, 250));
+      // 🛠️ RECONSTRUCCIÓN EXACTA DE LA LLAVE PARA BAILEYS
+      const keyToDelete = {
+        remoteJid: task.remoteJid,
+        fromMe: false,
+        id: task.id,
+        participant: task.participant
+      };
+      
+      await sock.sendMessage(task.remoteJid, { delete: keyToDelete });
+      
+      // Pequeña pausa de 300ms para no saturar los sockets de WhatsApp y evitar baneos
+      await new Promise(resolve => setTimeout(resolve, 300));
     } catch (err) {
-      // Ignoramos si el mensaje ya fue borrado o expiró
+      // Si falla (ej: el bot no es admin), lo registramos sin crashear el bot
+      console.log('⚠️ Error al borrar msj de silenciado:', err.message);
     }
   }
   isDeleting = false;
@@ -34,7 +45,7 @@ function cleanJid(jid = '') {
   if (!value) return '';
   if (value.includes('@')) {
     const [user, server] = value.split('@');
-    return `${user.split(':')[0]}@${server}`;
+    return `${user.split(':')[0]}@${server}`; // Remueve el ID de sesión del dispositivo
   }
   return value.split(':')[0];
 }
@@ -85,7 +96,7 @@ module.exports = {
   category: 'moderación',
   desc: 'Silencia a un usuario del grupo eliminando sus mensajes automáticamente',
 
-  // 🔥 MONITOR PASIVO BLINDADO CONTRA SPAM
+  // 🔥 MONITOR PASIVO CORREGIDO
   async onMessage(ctx) {
     const { sock, msg, remoteJid, sender, fromGroup } = ctx;
 
@@ -94,13 +105,19 @@ module.exports = {
     const userJid = cleanJid(sender);
 
     if (isUserMuted(remoteJid, userJid)) {
-      // Agregamos el mensaje a la cola para que se elimine ordenadamente sin apagar el bot
-      deleteQueue.push({ sock, remoteJid, key: msg.key });
-      processDeleteQueue(sock, remoteJid);
+      // Empujamos a la cola las variables exactas desglosadas
+      deleteQueue.push({ 
+        sock: sock, 
+        remoteJid: remoteJid, 
+        id: msg.key.id, 
+        participant: msg.key.participant || userJid 
+      });
+      
+      processDeleteQueue(sock);
     }
   },
 
-  // 🛠️ EJECUCIÓN DE COMANDOS MANUALES (.mutear / .unmutear)
+  // 🛠️ EJECUCIÓN DE COMANDOS MANUALES
   async execute(ctx) {
     const { sock, remoteJid, msg, sender, args, commandName, fromGroup, isOwner, isAdmin, reply } = ctx;
 
@@ -138,6 +155,7 @@ module.exports = {
         return reply('🛡️ No puedes mutearme a mí. ¡Soy el bot!');
       }
 
+      // Protección para los Owners
       const ownerNumbers = Array.isArray(ctx.config?.owner) ? ctx.config.owner.map(n => String(n).replace(/\D/g, '')) : [];
       if (ownerNumbers.includes(targetNum)) {
         return reply(`🛡️ No se puede mutear a @${targetNum} porque cuenta con inmunidad (es Owner).`, { mentions: [targetJid] });
@@ -156,7 +174,7 @@ module.exports = {
       saveMutes(data);
 
       return sock.sendMessage(remoteJid, { 
-        text: `🤐 *¡USUARIO SILENCIADO!* 🤐\n\nEl usuario @${targetNum} ha sido muteado en el grupo.\n\n_Cada mensaje que intente enviar será eliminado automáticamente._ 🚷`, 
+        text: `🤐 *¡USUARIO SILENCIADO!* 🤐\n\nEl usuario @${targetNum} ha sido muteado.\n\n_Sus mensajes serán eliminados automáticamente._ 🚷\n\n⚠️ *Nota:* Asegúrate de que el bot sea Administrador para que esto funcione.`, 
         mentions: [targetJid] 
       }, { quoted: msg });
     }
@@ -174,7 +192,7 @@ module.exports = {
       saveMutes(data);
 
       return sock.sendMessage(remoteJid, { 
-        text: `🔊 @${targetNum} ha sido desilenciado. Ya puede volver a escribir normalmente en el grupo.`, 
+        text: `🔊 @${targetNum} ha sido desilenciado. Ya puede volver a escribir normalmente.`, 
         mentions: [targetJid] 
       }, { quoted: msg });
     }
