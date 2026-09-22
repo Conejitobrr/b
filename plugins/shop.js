@@ -9,6 +9,7 @@ if (!fs.existsSync(path.dirname(JAIL_PATH))) fs.mkdirSync(path.dirname(JAIL_PATH
 
 function loadJail() { try { return JSON.parse(fs.readFileSync(JAIL_PATH, 'utf8') || '{"jailed":{}}'); } catch { return { jailed: {} }; } }
 function saveJail(data) { try { fs.writeFileSync(JAIL_PATH, JSON.stringify(data, null, 2)); } catch {} }
+function cleanNumber(jid = '') { return String(jid).split('@')[0].split(':')[0].replace(/\D/g, ''); }
 function getInv() { try { return JSON.parse(fs.readFileSync(INV_PATH, 'utf8')); } catch { return {}; } }
 function saveInv(data) { fs.writeFileSync(INV_PATH, JSON.stringify(data, null, 2)); }
 
@@ -35,27 +36,45 @@ module.exports = {
   desc: 'Compra ítems o usa los que ya tienes',
 
   execute: async ({ sock, msg, remoteJid, sender, args, commandName, db, reply }) => {
-    const userData = await db.getUser(sender);
+    const userJid = `${cleanNumber(sender)}@s.whatsapp.net`;
+    const userData = await db.getUser(userJid);
+    
+    // Verificar si está en la cárcel ANTES de comprar (Solo pueden usar la llave)
+    const jailTimeLeft = Number(userData.jailUntil || 0) - Date.now();
+    const isCommandComprar = ['tienda', 'comprar', 'shop'].includes(commandName.toLowerCase());
+
+    if (isCommandComprar && jailTimeLeft > 0) {
+      return reply('🚨 *ESTÁS ARRESTADO*\nNo puedes ir de compras mientras estás en la cárcel.\n\n📌 Para salir usa: *.usar llave*, *.fianza pagar* o *.sobornar pagar*');
+    }
+
     const dbInv = getInv();
-    if (!dbInv[sender]) dbInv[sender] = {};
-    const myInv = dbInv[sender];
+    if (!dbInv[userJid]) dbInv[userJid] = {};
+    const myInv = dbInv[userJid];
 
     if (commandName === 'usar') {
       const itemKey = (args[0] || '').toLowerCase();
 
       if (itemKey === 'llave') {
-        if ((myInv.keys || 0) <= 0) return reply('❌ No tienes llaves en tu inventario.');
+        if ((myInv.keys || 0) <= 0) return reply('❌ No tienes llaves en tu inventario.\nCómpralas con *.comprar llave*');
+        
         const jailDB = loadJail();
-        if (!jailDB.jailed[sender]) return reply('✅ No estás arrestado.');
+        if (!jailDB.jailed[userJid] && jailTimeLeft <= 0) return reply('✅ No estás arrestado.');
         
         myInv.keys -= 1;
         saveInv(dbInv);
-        delete jailDB.jailed[sender];
+        
+        delete jailDB.jailed[userJid];
         saveJail(jailDB);
-        return reply('🔑 Has usado una llave de celda y escapaste de prisión.');
+
+        // 🎯 Sincronizamos la liberación con la Base de Datos principal
+        userData.jailUntil = 0;
+        if (userData.save) await userData.save();
+
+        return reply('🔑 Has deslizado la llave en la celda y escapaste de prisión en silencio. ¡Eres libre!');
       }
 
       if (itemKey === 'caja') {
+        if (jailTimeLeft > 0) return reply('❌ Los guardias confiscaron tus cajas. Debes salir de prisión para abrirlas.');
         if ((myInv.cajaUses || 0) <= 0) return reply('❌ No tienes cajas sorpresa en tu mochila.');
         
         myInv.cajaUses -= 1;
@@ -95,8 +114,8 @@ module.exports = {
       return reply(`✅ Has adquirido *${amount} Día(s) VIP* por ${total} XP.`);
     } else {
       myInv[item.key] = (myInv[item.key] || 0) + amount;
-      saveInv(dbInv); // Guarda local blindado
-      if (userData.save) await userData.save(); // Guarda el cobro de XP en Mongo
+      saveInv(dbInv); 
+      if (userData.save) await userData.save(); 
       return reply(`✅ Compraste ${amount}x *${item.name}* por ${total} XP.\n🎒 Revisa tu mochila usando *.inventario*`);
     }
   }
