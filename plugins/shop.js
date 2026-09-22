@@ -9,7 +9,6 @@ if (!fs.existsSync(path.dirname(JAIL_PATH))) fs.mkdirSync(path.dirname(JAIL_PATH
 
 function loadJail() { try { return JSON.parse(fs.readFileSync(JAIL_PATH, 'utf8') || '{"jailed":{}}'); } catch { return { jailed: {} }; } }
 function saveJail(data) { try { fs.writeFileSync(JAIL_PATH, JSON.stringify(data, null, 2)); } catch {} }
-function cleanNumber(jid = '') { return String(jid).split('@')[0].split(':')[0].replace(/\D/g, ''); }
 function getInv() { try { return JSON.parse(fs.readFileSync(INV_PATH, 'utf8')); } catch { return {}; } }
 function saveInv(data) { fs.writeFileSync(INV_PATH, JSON.stringify(data, null, 2)); }
 
@@ -36,20 +35,18 @@ module.exports = {
   desc: 'Compra ítems o usa los que ya tienes',
 
   execute: async ({ sock, msg, remoteJid, sender, args, commandName, db, reply }) => {
-    const userJid = `${cleanNumber(sender)}@s.whatsapp.net`;
-    const userData = await db.getUser(userJid);
-    
-    // Verificar si está en la cárcel ANTES de comprar (Solo pueden usar la llave)
+    // Obtenemos los datos del usuario exactamente igual que en perfil.js
+    const userData = await db.getUser(sender);
+    const dbInv = getInv();
+    if (!dbInv[sender]) dbInv[sender] = {};
+    const myInv = dbInv[sender];
+
     const jailTimeLeft = Number(userData.jailUntil || 0) - Date.now();
     const isCommandComprar = ['tienda', 'comprar', 'shop'].includes(commandName.toLowerCase());
 
     if (isCommandComprar && jailTimeLeft > 0) {
       return reply('🚨 *ESTÁS ARRESTADO*\nNo puedes ir de compras mientras estás en la cárcel.\n\n📌 Para salir usa: *.usar llave*, *.fianza pagar* o *.sobornar pagar*');
     }
-
-    const dbInv = getInv();
-    if (!dbInv[userJid]) dbInv[userJid] = {};
-    const myInv = dbInv[userJid];
 
     if (commandName === 'usar') {
       const itemKey = (args[0] || '').toLowerCase();
@@ -58,15 +55,14 @@ module.exports = {
         if ((myInv.keys || 0) <= 0) return reply('❌ No tienes llaves en tu inventario.\nCómpralas con *.comprar llave*');
         
         const jailDB = loadJail();
-        if (!jailDB.jailed[userJid] && jailTimeLeft <= 0) return reply('✅ No estás arrestado.');
+        if (!jailDB.jailed[sender] && jailTimeLeft <= 0) return reply('✅ No estás arrestado.');
         
         myInv.keys -= 1;
         saveInv(dbInv);
         
-        delete jailDB.jailed[userJid];
+        delete jailDB.jailed[sender];
         saveJail(jailDB);
 
-        // 🎯 Sincronizamos la liberación con la Base de Datos principal
         userData.jailUntil = 0;
         if (userData.save) await userData.save();
 
