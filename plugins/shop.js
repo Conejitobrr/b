@@ -5,7 +5,7 @@ const path = require('path');
 
 const JAIL_PATH = path.join(process.cwd(), 'lib', 'jail.json');
 const INV_PATH = path.join(process.cwd(), 'lib', 'inventario.json');
-const LOTERIA_PATH = path.join(process.cwd(), 'lib', 'loteria.json'); // 🎰 Nueva base de datos
+const LOTERIA_PATH = path.join(process.cwd(), 'lib', 'loteria.json');
 
 if (!fs.existsSync(path.dirname(JAIL_PATH))) fs.mkdirSync(path.dirname(JAIL_PATH), { recursive: true });
 
@@ -28,7 +28,7 @@ const ITEMS = {
   mascota: { key: 'licencia_mascota', name: '🐶 Licencia de Mascota', price: 50000, desc: 'Permite adoptar un animal en el centro' },
   anillo: { key: 'anillo', name: '💍 Anillo de Bodas', price: 25000, desc: 'Requisito para casarte' },
   sobre: { key: 'sobre', name: '✉️ Sobre Gacha', price: 1500, desc: 'Contiene una carta al azar. Ábrelo con .abrirsobre' },
-  boleto: { key: 'boleto', name: '🎫 Boleto de Lotería', price: 5000, desc: 'Participa en el sorteo millonario (.comprar boleto [1-100])' } // 🔥 NUEVO
+  boleto: { key: 'boleto', name: '🎫 Boleto de Lotería', price: 5000, desc: 'Participa en el sorteo millonario (.comprar boleto)' }
 };
 
 module.exports = {
@@ -61,13 +61,11 @@ module.exports = {
         
         myInv.keys -= 1;
         saveInv(dbInv);
-        
         delete jailDB.jailed[sender];
         saveJail(jailDB);
 
         userData.jailUntil = 0;
         if (userData.save) await userData.save();
-
         return reply('🔑 Has deslizado la llave en la celda y escapaste de prisión en silencio. ¡Eres libre!');
       }
 
@@ -81,7 +79,6 @@ module.exports = {
         const ganar = Math.floor(Math.random() * 2000) + 500;
         userData.xp = (userData.xp || 0) + ganar;
         if (userData.save) await userData.save();
-        
         return reply(`📦 Abriste la caja y ganaste *+${ganar} XP*`);
       }
       return reply('❌ Ítem desconocido o no utilizable (solo: llave, caja).');
@@ -96,38 +93,39 @@ module.exports = {
 
     const itemName = args[0].toLowerCase();
 
-    // 🎰 LÓGICA ESPECIAL PARA EL BOLETO DE LOTERÍA
+    // 🎰 NUEVA LÓGICA DEL BOLETO ALEATORIO
     if (itemName === 'boleto') {
-      const numBoleto = parseInt(args[1]);
-      if (isNaN(numBoleto) || numBoleto < 1 || numBoleto > 100) {
-        return reply('❌ Debes elegir un número del 1 al 100.\n📌 Ejemplo: *.comprar boleto 14*');
-      }
-
       let loteriaDB = { pozo: 0, tickets: {} };
       try { loteriaDB = JSON.parse(fs.readFileSync(LOTERIA_PATH, 'utf8')); } catch {}
 
       if (loteriaDB.tickets[sender]) {
-        return reply(`❌ Ya tienes el boleto #${loteriaDB.tickets[sender]} para este sorteo.\nSolo se permite un boleto por persona.`);
+        return reply(`❌ Ya tienes el boleto #${loteriaDB.tickets[sender].num} para este sorteo.\nSolo se permite un boleto por ronda. Tus boletos perdidos se queman en el sorteo y ahí podrás comprar uno nuevo.`);
       }
 
-      if (Object.values(loteriaDB.tickets).includes(numBoleto.toString())) {
-        return reply(`❌ El boleto #${numBoleto} ya fue comprado por otra persona. ¡Elige otro número!`);
-      }
+      const ticketsComprados = Object.values(loteriaDB.tickets).map(t => t.num);
+      if (ticketsComprados.length >= 100) return reply('❌ Se han agotado los 100 boletos de esta ronda. Espera al sorteo.');
 
       const precioBoleto = ITEMS.boleto.price;
       if ((userData.xp || 0) < precioBoleto) return reply(`❌ No tienes XP suficiente.\nEl boleto cuesta *${precioBoleto} XP* y tienes *${userData.xp || 0} XP*.`);
 
+      // Asignar número aleatorio libre del 1 al 100
+      let numBoleto;
+      do {
+        numBoleto = Math.floor(Math.random() * 100) + 1;
+      } while (ticketsComprados.includes(numBoleto));
+
       userData.xp -= precioBoleto;
       if (userData.save) await userData.save();
 
-      loteriaDB.tickets[sender] = numBoleto.toString();
+      // Guardamos su número y el CHAT donde lo compró para mandarle el mensaje ahí cuando gane
+      loteriaDB.tickets[sender] = { num: numBoleto, chat: remoteJid };
       loteriaDB.pozo += precioBoleto;
       fs.writeFileSync(LOTERIA_PATH, JSON.stringify(loteriaDB, null, 2));
 
-      return reply(`🎫 *¡BOLETO COMPRADO!*\n\nHas adquirido el número *${numBoleto}*.\n💰 Todo tu XP fue inyectado al Pozo Acumulado que ahora tiene: *${loteriaDB.pozo} XP*.\n\n¡Usa *.sorteo* para ver los detalles!`);
+      return reply(`🎫 *¡BOLETO COMPRADO!*\n\nEl sistema te ha asignado aleatoriamente el número *${numBoleto}*.\n💰 Todo tu XP fue inyectado al Pozo Acumulado que ahora tiene: *${loteriaDB.pozo} XP*.\n\n🕒 *Sorteo Diario:* 7:30 PM\n🎁 *Sorteo Garantizado:* Domingos 6:00 AM\nUsa *.sorteo* para ver los detalles.`);
     }
 
-    // LÓGICA NORMAL PARA EL RESTO DE ÍTEMS
+    // Lógica Normal
     const amount = Math.max(1, Math.min(10, Number(args[1]) || 1));
     const item = ITEMS[itemName];
     if (!item) return reply('❌ Producto no válido. Usa *.tienda* para ver el catálogo.');
