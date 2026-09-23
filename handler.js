@@ -201,7 +201,6 @@ async function messageHandler(sock, msg, store = {}) {
     const adminStatus = isAdmin ? chalk.green('Sí') : chalk.red('No');
     const ownerStatus = isOwner ? chalk.green('Sí') : chalk.red('No');
 
-    // 📩 LOG DE MENSAJE ENTRANTE RESTAURADO
     if (config.debug) {
       const time = getTime();
       console.log(chalk.gray(`╭─── 📥 `) + chalk.green.bold(`MENSAJE ENTRANTE`) + chalk.cyan(` [${time}]`) + chalk.gray(` ──────────`));
@@ -251,14 +250,16 @@ async function messageHandler(sock, msg, store = {}) {
       const jailTimeLeft = Number(userData.jailUntil || 0) - Date.now();
       
       if (jailTimeLeft > 0) {
-        const permitidos = ['carcel', 'fianza', 'sobornar', 'tienda', 'comprar', 'shop', 'usar', 'perfil', 'inventario', 'estado'];
+        // 🔥 Corregido: Ahora revisamos "rawCommand" (lo que escribió) y NO el nombre del plugin.
+        // Se ha removido comprar/tienda para que solo puedan usar ítems.
+        const permitidos = ['carcel', 'fianza', 'sobornar', 'usar', 'perfil', 'inventario', 'estado'];
         
-        if (!permitidos.includes(cmdKey)) {
+        if (!permitidos.includes(rawCommand)) {
           const min = Math.floor(jailTimeLeft / 60000);
           const sec = Math.floor((jailTimeLeft % 60000) / 1000);
           
           return sock.sendMessage(remoteJid, { 
-            text: `🚨 *ESTÁS ARRESTADO*\n\nNo puedes usar comandos desde la cárcel.\n\n⏳ Condena restante: *${min}m ${sec}s*\n📌 Opciones permitidas: *.usar llave* | *.fianza pagar* | *.sobornar pagar* | *.tienda*` 
+            text: `🚨 *ESTÁS ARRESTADO*\n\nNo puedes usar comandos desde la cárcel.\n\n⏳ Condena restante: *${min}m ${sec}s*\n📌 Opciones permitidas: *.usar llave* | *.fianza pagar* | *.sobornar pagar*` 
           }, { quoted: msg });
         }
       }
