@@ -16,25 +16,25 @@ function saveCartas(data) { fs.writeFileSync(CARTAS_PATH, JSON.stringify(data, n
 
 global.tradeRequests = global.tradeRequests || {};
 
-// ==========================================
-// 🧹 EXTRACCIÓN DE IDENTIFICADOR ESTRICTO
-// ==========================================
 function cleanJid(jid = '') { return String(jid).split(':')[0]; }
 function cleanNumber(jid = '') { return cleanJid(jid).split('@')[0].replace(/\D/g, ''); }
 
-function getTarget(msg, args) {
+// 🔥 FIX: Dejamos el Target original y puro, sin forzar sufijos.
+function getTarget(msg) {
   const quoted = msg.message?.extendedTextMessage?.contextInfo?.participant;
-  if (quoted) return cleanJid(quoted);
-  
+  if (quoted) return quoted;
   const mentioned = msg.message?.extendedTextMessage?.contextInfo?.mentionedJid?.[0];
-  if (mentioned) return cleanJid(mentioned);
-  
-  if (args && args.length > 0) {
-    const text = args.join(' ');
-    const match = text.match(/\d+/);
-    if (match && match[0].length >= 6) return match[0];
-  }
+  if (mentioned) return mentioned;
   return null;
+}
+
+// 🔥 FIX: Buscador inteligente para que siempre encuentre el álbum de las personas.
+function getPlayerKey(db, targetJid) {
+    const targetNum = cleanNumber(targetJid);
+    for (const key in db) {
+        if (cleanNumber(key) === targetNum) return key;
+    }
+    return targetJid;
 }
 
 // 🎲 MOTOR DE TIPOS Y ESTADÍSTICAS
@@ -272,35 +272,19 @@ module.exports = {
     const cmd = commandName.toLowerCase();
     const dbCartas = getCartas();
     
-    // 🔥 MIGRACIÓN Y PROTECCIÓN DE DATOS (Arregla el error de "@c.us" antiguo)
-    let needsMigration = false;
-    for (const key in dbCartas) {
-        const properKey = `${cleanNumber(key)}@s.whatsapp.net`;
-        if (key !== properKey) {
-            if (!dbCartas[properKey]) dbCartas[properKey] = dbCartas[key];
-            else dbCartas[properKey] = [...dbCartas[properKey], ...dbCartas[key]];
-            delete dbCartas[key];
-            needsMigration = true;
-        }
-    }
-    if (needsMigration) saveCartas(dbCartas);
+    // Identificamos el álbum de quien envía el comando con el buscador inteligente
+    const miKey = getPlayerKey(dbCartas, sender);
+    if (!dbCartas[miKey]) dbCartas[miKey] = [];
+    let misCartas = dbCartas[miKey];
 
-    const userJid = `${cleanNumber(sender)}@s.whatsapp.net`;
-    if (!dbCartas[userJid]) dbCartas[userJid] = [];
-    let misCartas = dbCartas[userJid];
-
-    // 🔢 EXTRACTOR INTELIGENTE DE NÚMEROS
-    // Busca números sueltos en el texto ignorando letras o menciones
-    const numsArgs = args.filter(a => /^\d+$/.test(a)).map(a => parseInt(a));
-
-    // 📦 ABRIR UN SOBRE
+    // 📦 ABRIR UN SOBRE (CÓDIGO ORIGINAL INTACTO)
     if (cmd === 'abrirsobre') {
       const dbInv = getInv();
-      if (!dbInv[userJid] || (dbInv[userJid].sobre || 0) <= 0) {
+      if (!dbInv[sender] || (dbInv[sender].sobre || 0) <= 0) {
         return reply('❌ No tienes Sobres Gacha. Cómpralos con *.tienda sobre 1*');
       }
 
-      dbInv[userJid].sobre -= 1;
+      dbInv[sender].sobre -= 1;
       saveInv(dbInv);
 
       const loadMsg = await sock.sendMessage(remoteJid, { text: '✨ _Abriendo sobre mágico..._' }, { quoted: msg });
@@ -309,10 +293,10 @@ module.exports = {
         const groupMetadata = await sock.groupMetadata(remoteJid);
         const participants = groupMetadata.participants;
         const randomParticipant = participants[Math.floor(Math.random() * participants.length)];
-        const jidElegido = `${cleanNumber(randomParticipant.id)}@s.whatsapp.net`;
+        const jidElegido = randomParticipant.id;
 
         let nombreElegido = cleanNumber(jidElegido);
-        if (jidElegido === userJid && pushName) {
+        if (jidElegido === sender && pushName) {
             nombreElegido = pushName;
         } else {
             try {
@@ -341,18 +325,17 @@ module.exports = {
             hp: stats.hp, 
             valor: stats.valor 
         };
-        
-        dbCartas[userJid].push(nuevaCarta);
+        misCartas.push(nuevaCarta);
         saveCartas(dbCartas);
 
         const buffer = await dibujarCartaPokemon(pfpUrl, nombreElegido, stats);
         await sock.sendMessage(remoteJid, { delete: loadMsg.key });
 
-        const estaEnElGrupo = participants.some(p => cleanNumber(p.id) === cleanNumber(jidElegido));
+        const estaEnElGrupo = participants.some(p => p.id === jidElegido);
         const textoMencion = estaEnElGrupo ? `@${cleanNumber(jidElegido)}` : `👤 ${nombreElegido}`;
         const arrayMenciones = estaEnElGrupo ? [jidElegido] : [];
 
-        return sock.sendMessage(remoteJid, { 
+        await sock.sendMessage(remoteJid, { 
           image: buffer, 
           caption: `🎉 ¡Felicidades! Has obtenido la carta de ${textoMencion}\n🌟 Rareza: *${stats.rareza}*\n\n🎒 Usa *.miscartas* para ver tu álbum.`,
           mentions: arrayMenciones
@@ -363,9 +346,9 @@ module.exports = {
       }
     }
 
-    // 🖼️ VER EL ARTE DE UNA CARTA
+    // 🖼️ VER EL ARTE DE UNA CARTA ESPECÍFICA (CÓDIGO ORIGINAL INTACTO)
     if (cmd === 'vercarta') {
-      const index = numsArgs.length > 0 ? numsArgs[0] - 1 : NaN;
+      const index = parseInt(args[0]) - 1;
       if (isNaN(index) || index < 0 || index >= misCartas.length) return reply('❌ Indica el número correcto de tu carta (Ej: *.vercarta 1*)');
 
       const carta = misCartas[index];
@@ -387,7 +370,7 @@ module.exports = {
       }, { quoted: msg });
     }
 
-    // 🎒 VER INVENTARIO
+    // 🎒 VER INVENTARIO (CÓDIGO ORIGINAL INTACTO PARA MANTENER LA MAGIA AZUL)
     if (cmd === 'miscartas') {
       if (misCartas.length === 0) return reply('🎒 Tu álbum está vacío. Compra sobres con *.tienda sobre 1*');
 
@@ -397,129 +380,136 @@ module.exports = {
 
       try {
         const groupMetadata = await sock.groupMetadata(remoteJid);
-        participants = groupMetadata.participants.map(p => cleanNumber(p.id));
+        participants = groupMetadata.participants;
       } catch {}
 
       misCartas.forEach((carta, index) => {
-        const cartaNum = cleanNumber(carta.jid);
-        const estaEnElGrupo = participants.includes(cartaNum);
+        const estaEnElGrupo = participants.some(p => p.id === carta.jid);
 
         if (estaEnElGrupo) {
-            txt += `*[ ${index + 1} ]* ✦ ${carta.rareza} | *@${cartaNum}*\n⚔️ ATK: ${carta.atk} | 💖 HP: ${carta.hp} | 💎 ${carta.valor} XP\n\n`;
-            arrayDeMenciones.push(`${cartaNum}@s.whatsapp.net`);
+            txt += `*[ ${index + 1} ]* ✦ ${carta.rareza} | *@${cleanNumber(carta.jid)}*\n⚔️ ATK: ${carta.atk} | 💖 HP: ${carta.hp} | 💎 ${carta.valor} XP\n\n`;
+            arrayDeMenciones.push(carta.jid);
         } else {
-            const nombreMostrar = carta.nombreReal || `User ${cartaNum.slice(-4)}`;
-            txt += `*[ ${index + 1} ]* ✦ ${carta.rareza} | 👤 ${nombreMostrar}\n⚔️ ATK: ${carta.atk} | 💖 HP: ${carta.hp} | 💎 ${carta.valor} XP\n\n`;
+            txt += `*[ ${index + 1} ]* ✦ ${carta.rareza} | 👤 ${carta.nombreReal}\n⚔️ ATK: ${carta.atk} | 💖 HP: ${carta.hp} | 💎 ${carta.valor} XP\n\n`;
         }
       });
 
       txt += `🖼️ *Ver Carta:* .vercarta [número]\n💸 *Vender:* .vendercarta [número] | .vendertodas\n⚔️ *Pelear:* .duelocarta [número] @usuario\n🤝 *Cambio:* .intercambiar @usuario [tu_num] [su_num]`;
 
-      return sock.sendMessage(remoteJid, { text: txt, mentions: [...new Set(arrayDeMenciones)] }, { quoted: msg });
+      return sock.sendMessage(remoteJid, { text: txt, mentions: arrayDeMenciones }, { quoted: msg });
     }
 
     // 💸 VENDER UNA SOLA CARTA
     if (cmd === 'vendercarta') {
-      const index = numsArgs.length > 0 ? numsArgs[0] - 1 : NaN;
+      const index = parseInt(args[0]) - 1;
       if (isNaN(index) || index < 0 || index >= misCartas.length) return reply('❌ Indica el número de la carta (Ej: .vendercarta 1)');
 
       const ganancia = misCartas[index].valor;
       misCartas.splice(index, 1);
       saveCartas(dbCartas);
 
-      const userData = await db.getUser(userJid);
+      const userData = await db.getUser(sender);
       userData.xp = (userData.xp || 0) + ganancia;
       if (userData.save) await userData.save();
 
       return reply(`✅ Carta vendida a la tienda por *${ganancia} XP*.`);
     }
 
-    // 💰 VENDER TODAS
+    // 💰 VENDER TODAS LAS CARTAS DE GOLPE
     if (cmd === 'vendertodas') {
       if (misCartas.length === 0) return reply('❌ No tienes cartas para vender.');
       let gananciaTotal = misCartas.reduce((acc, carta) => acc + carta.valor, 0);
       let cantidad = misCartas.length;
 
-      dbCartas[userJid] = []; 
+      dbCartas[miKey] = []; 
       saveCartas(dbCartas);
 
-      const userData = await db.getUser(userJid);
+      const userData = await db.getUser(sender);
       userData.xp = (userData.xp || 0) + gananciaTotal;
       if (userData.save) await userData.save();
 
       return reply(`✅ Has vaciado tu álbum.\nVendiste *${cantidad} cartas* por un total de *${gananciaTotal} XP*.`);
     }
 
-    // 🤝 SISTEMA DE INTERCAMBIO
+    // 🤝 SISTEMA DE INTERCAMBIO (TRADING)
     if (cmd === 'intercambiar') {
-      const rawTarget = getTarget(msg, args);
-      const targetJid = rawTarget ? `${cleanNumber(rawTarget)}@s.whatsapp.net` : null;
+      const target = getTarget(msg);
+      
+      // Extractor dinámico: Agarra los números en el orden que sea.
+      const numsArgs = args.filter(a => /^\d+$/.test(a)).map(a => parseInt(a) - 1);
+      const miNum = numsArgs[0];
+      const suNum = numsArgs[1];
 
-      const miNum = numsArgs.length > 0 ? numsArgs[0] - 1 : NaN;
-      const suNum = numsArgs.length > 1 ? numsArgs[1] - 1 : NaN;
+      if (!target || isNaN(miNum) || isNaN(suNum)) return reply('❌ Uso correcto:\n*.intercambiar @usuario [Tu_Carta] [Su_Carta]*');
+      if (cleanNumber(target) === cleanNumber(sender)) return reply('❌ No puedes intercambiar contigo mismo.');
+      
+      // Encontramos la bóveda exacta del rival
+      const targetKey = getPlayerKey(dbCartas, target);
+      const rivalCartas = dbCartas[targetKey] || [];
 
-      if (!targetJid || isNaN(miNum) || isNaN(suNum)) return reply('❌ Uso correcto:\n*.intercambiar @usuario [Tu_Carta] [Su_Carta]*');
-      if (targetJid === userJid) return reply('❌ No puedes intercambiar contigo mismo.');
-      if (!dbCartas[userJid] || !dbCartas[userJid][miNum]) return reply('❌ No posees la carta que ofreces.');
-      if (!dbCartas[targetJid] || !dbCartas[targetJid][suNum]) return reply('❌ El rival no posee esa carta.');
+      if (!misCartas[miNum]) return reply('❌ No posees la carta que ofreces.');
+      if (!rivalCartas[suNum]) return reply('❌ El rival no posee esa carta.');
 
-      const miCarta = dbCartas[userJid][miNum];
-      const suCarta = dbCartas[targetJid][suNum];
-      global.tradeRequests[targetJid] = { from: userJid, miNum, suNum };
+      const miCarta = misCartas[miNum];
+      const suCarta = rivalCartas[suNum];
+      global.tradeRequests[targetKey] = { fromKey: miKey, miNum, suNum };
 
       return sock.sendMessage(remoteJid, { 
-        text: `⚖️ *SOLICITUD DE INTERCAMBIO* ⚖️\n\n👤 *${pushName}* ofrece la carta de *${miCarta.nombreReal}* [${miCarta.rareza}]\nA cambio de la carta de *${suCarta.nombreReal}* [${suCarta.rareza}].\n\n@${cleanNumber(targetJid)}, escribe *.aceptar* para confirmar.`, 
-        mentions: [targetJid] 
-      }, { quoted: msg });
+        text: `⚖️ *SOLICITUD DE INTERCAMBIO* ⚖️\n\n👤 *${pushName}* ofrece la carta de *${miCarta.nombreReal}* [${miCarta.rareza}]\nA cambio de la carta de *${suCarta.nombreReal}* [${suCarta.rareza}].\n\n@${cleanNumber(target)}, escribe *.aceptar* para confirmar.`, 
+        mentions: [target] 
+      });
     }
 
     // ✅ ACEPTAR INTERCAMBIO
     if (cmd === 'aceptar') {
-      const trade = global.tradeRequests[userJid];
+      const trade = global.tradeRequests[miKey];
       if (!trade) return reply('❌ No tienes ninguna solicitud pendiente.');
 
-      const { from, miNum, suNum } = trade;
+      const { fromKey, miNum, suNum } = trade;
 
-      // Verificamos de nuevo por si vendieron las cartas antes de aceptar
-      if (!dbCartas[from] || !dbCartas[userJid] || !dbCartas[from][miNum] || !dbCartas[userJid][suNum]) {
-          delete global.tradeRequests[userJid];
-          return reply('❌ El intercambio fue cancelado porque alguien ya no posee la carta prometida.');
+      if (!dbCartas[fromKey] || !dbCartas[miKey] || !dbCartas[fromKey][miNum] || !dbCartas[miKey][suNum]) {
+          delete global.tradeRequests[miKey];
+          return reply('❌ El intercambio fue cancelado porque alguien vendió su carta antes de aceptar.');
       }
 
-      const cartaDelIniciador = dbCartas[from].splice(miNum, 1)[0];
-      const cartaMia = dbCartas[userJid].splice(suNum, 1)[0];
+      const cartaDelIniciador = dbCartas[fromKey].splice(miNum, 1)[0];
+      const cartaMia = dbCartas[miKey].splice(suNum, 1)[0];
 
-      dbCartas[from].push(cartaMia);
-      dbCartas[userJid].push(cartaDelIniciador);
+      dbCartas[fromKey].push(cartaMia);
+      dbCartas[miKey].push(cartaDelIniciador);
       saveCartas(dbCartas);
-      delete global.tradeRequests[userJid];
+      delete global.tradeRequests[miKey];
 
-      return sock.sendMessage(remoteJid, { text: `🤝 *¡INTERCAMBIO EXITOSO!*`, mentions: [userJid, from] }, { quoted: msg });
+      return sock.sendMessage(remoteJid, { text: `🤝 *¡INTERCAMBIO EXITOSO!*`, mentions: [miKey, fromKey] });
     }
 
     // ⚔️ DUELO DE CARTAS POKÉMON
     if (cmd === 'duelocarta') {
-      const rawTarget = getTarget(msg, args);
-      const targetJid = rawTarget ? `${cleanNumber(rawTarget)}@s.whatsapp.net` : null;
-      const index = numsArgs.length > 0 ? numsArgs[0] - 1 : NaN;
+      const numsArgs = args.filter(a => /^\d+$/.test(a)).map(a => parseInt(a) - 1);
+      const index = numsArgs[0];
+      const target = getTarget(msg);
 
-      if (isNaN(index) || !targetJid) return reply('❌ Uso:\n*.duelocarta [tu_numero] @usuario*');
-      if (targetJid === userJid) return reply('❌ No puedes batallar contra ti mismo.');
-      if (!misCartas[index]) return reply('❌ No posees la carta que intentas usar.');
-      if (!dbCartas[targetJid] || dbCartas[targetJid].length === 0) return reply('❌ Tu rival no tiene cartas para defenderse.');
+      if (isNaN(index) || !target) return reply('❌ Uso:\n*.duelocarta [tu_numero] @usuario*');
+      if (cleanNumber(target) === cleanNumber(sender)) return reply('❌ No puedes pelear contigo mismo.');
+
+      const targetKey = getPlayerKey(dbCartas, target);
+      const rivalCartas = dbCartas[targetKey] || [];
+
+      if (!misCartas[index]) return reply('❌ No posees la carta que intentas usar para atacar.');
+      if (rivalCartas.length === 0) return reply('❌ Tu rival no tiene cartas para defenderse.');
 
       const miCarta = misCartas[index];
-      const cartaRival = dbCartas[targetJid][Math.floor(Math.random() * dbCartas[targetJid].length)];
+      const cartaRival = rivalCartas[Math.floor(Math.random() * rivalCartas.length)];
 
       const miPoder = miCarta.atk + Math.floor(Math.random() * 50);
       const poderEnemigo = cartaRival.hp + Math.floor(Math.random() * 50);
 
-      let txt = `⚔️ *BATALLA POKÉMON* ⚔️\n\n🔥 👤 *${pushName}* ataca con *${miCarta.nombreReal}* (Daño: ${miPoder})\n🛡️ *@${cleanNumber(targetJid)}* defiende con *${cartaRival.nombreReal}* (Defensa: ${poderEnemigo})\n\n`;
+      let txt = `⚔️ *BATALLA POKÉMON* ⚔️\n\n🔥 👤 *${pushName}* ataca con *${miCarta.nombreReal}* (Daño: ${miPoder})\n🛡️ *@${cleanNumber(target)}* defiende con *${cartaRival.nombreReal}* (Defensa: ${poderEnemigo})\n\n`;
 
       if (miPoder > poderEnemigo) {
         const botin = Math.floor(Math.random() * 800) + 200;
-        const myData = await db.getUser(userJid);
-        const targetData = await db.getUser(targetJid);
+        const myData = await db.getUser(sender);
+        const targetData = await db.getUser(target);
 
         targetData.xp = Math.max(0, (targetData.xp || 0) - botin);
         myData.xp = (myData.xp || 0) + botin;
@@ -531,7 +521,7 @@ module.exports = {
       } else {
         txt += `🧱 *¡No es muy efectivo!* La defensa del rival resistió tu ataque.`;
       }
-      return sock.sendMessage(remoteJid, { text: txt, mentions: [targetJid] }, { quoted: msg });
+      return sock.sendMessage(remoteJid, { text: txt, mentions: [target] }, { quoted: msg });
     }
   }
 };
