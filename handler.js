@@ -217,6 +217,14 @@ async function messageHandler(sock, msg, store = {}) {
     if (fromGroup) groupData = await db.getGroup(remoteJid);
     const userData = await db.getUser(sender);
 
+    // 🎰 DISPARADOR DE LOTERÍA AUTOMÁTICA
+    try {
+      const sorteoPlugin = commands.get('sorteo');
+      if (sorteoPlugin && typeof sorteoPlugin.autoCheck === 'function') {
+         await sorteoPlugin.autoCheck(sock, db);
+      }
+    } catch (err) {}
+
     if (!fromGroup || (groupData && groupData.bot !== false) || isOwner) {
       for (const listener of messageListeners) {
         try {
@@ -250,8 +258,6 @@ async function messageHandler(sock, msg, store = {}) {
       const jailTimeLeft = Number(userData.jailUntil || 0) - Date.now();
       
       if (jailTimeLeft > 0) {
-        // 🔥 Corregido: Ahora revisamos "rawCommand" (lo que escribió) y NO el nombre del plugin.
-        // Se ha removido comprar/tienda para que solo puedan usar ítems.
         const permitidos = ['carcel', 'fianza', 'sobornar', 'usar', 'perfil', 'inventario', 'estado'];
         
         if (!permitidos.includes(rawCommand)) {
