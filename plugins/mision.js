@@ -135,14 +135,14 @@ const FINALES_CASTIGO = [
 
 module.exports = {
   name: 'mision',
-  aliases: ['misiones', 'expedicion', 'quest', 'aventura'],
+  // 🔥 CORRECCIÓN: Se añade 'misión' con tilde para evitar fallos del autocorrector
+  aliases: ['misión', 'misiones', 'expedicion', 'quest', 'aventura'],
   category: 'economía & rpg',
   desc: 'Envía a tu personaje a una expedición con historia en tiempo real, XP y objetos',
 
   execute: async ({ sock, msg, remoteJid, sender, db, fromGroup, reply }) => {
     if (!fromGroup) return reply('❌ Las expediciones de exploración solo se pueden realizar en grupos.');
 
-    // 1️⃣ Verificación de Cooldown individual en RAM (no bloquea otros comandos)
     const now = Date.now();
     const lastTime = cooldowns.get(sender) || 0;
     const remaining = COOLDOWN_MS - (now - lastTime);
@@ -153,7 +153,6 @@ module.exports = {
       return reply(`⏳ *ESTÁS AGOTADO DE TU ÚLTIMA EXPEDICIÓN*\n\nDebes descansar y afilar tus armas.\nPodrás salir de nuevo en *${min}m ${sec}s*.`);
     }
 
-    // Activar cooldown
     cooldowns.set(sender, now);
 
     const userNum = cleanNumber(sender);
@@ -162,7 +161,6 @@ module.exports = {
     if (!dbInv[sender]) dbInv[sender] = {};
     const myInv = dbInv[sender];
 
-    // Selección de atmósfera
     const lugar = pick(LUGARES);
     const introAccion = pick(INTROS);
     const suspenso = pick(SUSPENSOS);
@@ -173,7 +171,8 @@ module.exports = {
       mentions: [sender]
     }, { quoted: msg });
 
-    await esperar(3500);
+    // 🔥 MODIFICADO: Añadidos 6 segundos adicionales (9.5 segundos en total)
+    await esperar(9500);
 
     // ⚡ ETAPA 2: Edición - Evento de Tensión en directo
     try {
@@ -184,7 +183,8 @@ module.exports = {
       });
     } catch (e) {}
 
-    await esperar(4000);
+    // 🔥 MODIFICADO: Añadidos 6 segundos adicionales (10 segundos en total)
+    await esperar(10000);
 
     // 🎲 ETAPA 3: Cálculo del Desenlace y Recompensas
     const dice = Math.random() * 100;
@@ -200,7 +200,6 @@ module.exports = {
       xpCambio = rand(evento.minXP, evento.maxXP);
       relato = evento.desc;
       
-      // Entrega de ítem garantizada
       if (evento.item) {
         myInv[evento.item] = (myInv[evento.item] || 0) + 1;
         itemObtenido = evento.itemNombre;
@@ -213,7 +212,6 @@ module.exports = {
       xpCambio = rand(evento.minXP, evento.maxXP);
       relato = evento.desc;
 
-      // Probabilidad de ítem
       if (evento.item && Math.random() < (evento.probItem || 0.5)) {
         myInv[evento.item] = (myInv[evento.item] || 0) + 1;
         itemObtenido = evento.itemNombre;
@@ -225,7 +223,6 @@ module.exports = {
       xpCambio = rand(800, 2000);
       relato = pick(FINALES_EXITOSOS);
 
-      // 10% de probabilidad de encontrar una Llave o Caja común
       if (Math.random() < 0.10) {
         const bonusItem = Math.random() < 0.5 ? 'keys' : 'cajaUses';
         myInv[bonusItem] = (myInv[bonusItem] || 0) + 1;
@@ -247,12 +244,10 @@ module.exports = {
       relato = pick(FINALES_CASTIGO);
     }
 
-    // 💾 Aplicar cambios en Base de Datos y Mochila
     if (xpCambio !== 0) {
       userData.xp = Math.max(0, (userData.xp || 0) + xpCambio);
     }
 
-    // Sincronización matemática del nivel con rank.js y perfil.js (0.1 * √XP)
     userData.level = Math.floor(0.1 * Math.sqrt(userData.xp || 0)) || 1;
 
     if (userData.save) {
