@@ -46,6 +46,11 @@ async function getProfileBuffer(sock, jid) {
   }
 }
 
+// 🔥 FÓRMULA MAESTRA DE NIVEL (Sincronizada estrictamente con topxp.js)
+function calculateLevel(xp) {
+  return Math.floor(0.1 * Math.sqrt(xp)) || 0;
+}
+
 module.exports = {
   name: 'perfil',
   aliases: ['profile', 'me', 'xp', 'nivel'],
@@ -75,7 +80,6 @@ module.exports = {
         
         let isPartnerInGroup = false;
         
-        // 🔍 Verificar si la pareja está en el grupo actual
         if (remoteJid.endsWith('@g.us')) {
           try {
             const metadata = await sock.groupMetadata(remoteJid);
@@ -87,22 +91,23 @@ module.exports = {
         }
 
         if (isPartnerInGroup) {
-          // 🔵 ESTÁ EN EL GRUPO: Mención azul real
           partnerText = `@${partnerNum}`;
           mentions.push(partnerJid);
         } else {
-          // ⚪ NO ESTÁ EN EL GRUPO: Texto elegante sin números
           partnerText = '*Sí (Casado/a)*';
         }
       }
 
       const image = await getProfileBuffer(sock, targetJid);
+      
+      // 🔥 Cálculo matemático en vivo del Nivel Real (Evita el bug del nivel estático)
+      const realLevel = (typeof db.calculateLevel === 'function') ? db.calculateLevel(user.xp || 0) : calculateLevel(user.xp || 0);
 
       const text = `👤 *PERFIL DE USUARIO*
 
 👤 Usuario: @${cleanNumber(target)}
 ⭐ XP: *${user.xp || 0}*
-🏆 Nivel: *${user.level || 1}*
+🏆 Nivel: *${realLevel}*
 💎 Premium: *${isPremium ? 'Sí' : 'No'}*
 👑 Owner: *${isOwner ? 'Sí' : 'No'}*
 🚫 Baneado: *${user.banned ? 'Sí' : 'No'}*
