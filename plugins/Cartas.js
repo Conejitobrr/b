@@ -16,14 +16,24 @@ function saveCartas(data) { fs.writeFileSync(CARTAS_PATH, JSON.stringify(data, n
 
 global.tradeRequests = global.tradeRequests || {};
 
+// ==========================================
+// 🧹 EXTRACCIÓN DE IDENTIFICADOR ESTRICTO
+// ==========================================
 function cleanJid(jid = '') { return String(jid).split(':')[0]; }
 function cleanNumber(jid = '') { return cleanJid(jid).split('@')[0].replace(/\D/g, ''); }
 
-function getTarget(msg, args, sender) {
+function getTarget(msg, args) {
   const quoted = msg.message?.extendedTextMessage?.contextInfo?.participant;
-  if (quoted) return cleanJid(quoted) + '@s.whatsapp.net';
+  if (quoted) return cleanJid(quoted);
+  
   const mentioned = msg.message?.extendedTextMessage?.contextInfo?.mentionedJid?.[0];
-  if (mentioned) return cleanJid(mentioned) + '@s.whatsapp.net';
+  if (mentioned) return cleanJid(mentioned);
+  
+  if (args && args.length > 0) {
+    const text = args.join(' ');
+    const match = text.match(/\d+/);
+    if (match && match[0].length >= 6) return match[0];
+  }
   return null;
 }
 
@@ -60,7 +70,7 @@ function generarCarta() {
 function drawSilverFoil(ctx, x, y, w, h) {
   ctx.save();
   ctx.globalCompositeOperation = 'color-dodge';
-  
+
   const holo = ctx.createLinearGradient(x, y, x + w, y + h);
   holo.addColorStop(0, 'rgba(255, 150, 150, 0.4)');
   holo.addColorStop(0.3, 'rgba(255, 255, 150, 0.6)');
@@ -69,7 +79,7 @@ function drawSilverFoil(ctx, x, y, w, h) {
   holo.addColorStop(1, 'rgba(255, 255, 255, 0)');
   ctx.fillStyle = holo;
   ctx.fillRect(x, y, w, h);
-  
+
   ctx.globalAlpha = 0.4;
   for(let i = 0; i < w + h; i += 30) {
     ctx.beginPath();
@@ -104,7 +114,6 @@ async function dibujarCartaPokemon(pfpUrl, renderName, stats) {
 
   if (renderName.length > 15) renderName = renderName.substring(0, 15) + '...';
 
-  // CARGAR IMAGEN (Fallo interno seguro con "?")
   let avatar;
   try {
     if (pfpUrl) avatar = await loadImage(pfpUrl);
@@ -122,10 +131,8 @@ async function dibujarCartaPokemon(pfpUrl, renderName, stats) {
   }
 
   if (stats.isFullArt) {
-    // 🌟 FULL ART HOLO
     ctx.fillStyle = '#111';
     ctx.fillRect(0, 0, width, height);
-    
     ctx.drawImage(avatar, 20, 20, width - 40, height - 40);
     drawSilverFoil(ctx, 20, 20, width - 40, height - 40);
 
@@ -143,7 +150,6 @@ async function dibujarCartaPokemon(pfpUrl, renderName, stats) {
 
     ctx.shadowColor = '#000';
     ctx.shadowBlur = 10;
-    
     ctx.textAlign = 'left';
     ctx.fillStyle = '#FFFFFF';
     ctx.font = 'italic 900 65px sans-serif';
@@ -168,17 +174,16 @@ async function dibujarCartaPokemon(pfpUrl, renderName, stats) {
     ctx.fillStyle = '#FFFFFF';
     ctx.font = 'bold 45px sans-serif';
     ctx.fillText(`${stats.tipo.emoji} Golpe Cataclísmico`, 60, height - 250);
-    
+
     ctx.textAlign = 'right';
     ctx.font = 'bold 60px sans-serif';
     ctx.fillText(`${stats.atk}`, width - 60, height - 250);
-    
+
     ctx.textAlign = 'left';
     ctx.font = '24px sans-serif';
     ctx.fillText(`Rareza: ${stats.rareza} | Valor: ${stats.valor} XP`, 60, height - 170);
 
   } else {
-    // 💛 CLÁSICO BORDES VARIABLES
     let borderColor = '#F5D63D';
     if (stats.rareza === 'COMÚN') borderColor = '#B0BEC5';
     if (stats.rareza === 'ÉPICA') borderColor = '#9C27B0';
@@ -223,12 +228,12 @@ async function dibujarCartaPokemon(pfpUrl, renderName, stats) {
 
     ctx.fillStyle = '#F8F8F8';
     ctx.fillRect(45, 615, 650, 290);
-    
+
     ctx.fillStyle = '#000000';
     ctx.textAlign = 'left';
     ctx.font = 'bold 45px sans-serif';
     ctx.fillText(`${stats.tipo.emoji} Golpe Base`, 65, 695);
-    
+
     ctx.textAlign = 'right';
     ctx.font = 'bold 60px sans-serif';
     ctx.fillText(`${stats.atk}`, width - 65, 695);
@@ -246,7 +251,7 @@ async function dibujarCartaPokemon(pfpUrl, renderName, stats) {
     ctx.fillText('RESISTENCIA', width / 2, 950);
     ctx.textAlign = 'right';
     ctx.fillText('RETIRADA', width - 90, 950);
-    
+
     ctx.font = '26px sans-serif';
     ctx.textAlign = 'left';
     ctx.fillText('💧 x2', 90, 985);
@@ -266,17 +271,36 @@ module.exports = {
   execute: async ({ sock, msg, remoteJid, sender, pushName, args, commandName, db, reply }) => {
     const cmd = commandName.toLowerCase();
     const dbCartas = getCartas();
-    if (!dbCartas[sender]) dbCartas[sender] = [];
-    let misCartas = dbCartas[sender];
+    
+    // 🔥 MIGRACIÓN Y PROTECCIÓN DE DATOS (Arregla el error de "@c.us" antiguo)
+    let needsMigration = false;
+    for (const key in dbCartas) {
+        const properKey = `${cleanNumber(key)}@s.whatsapp.net`;
+        if (key !== properKey) {
+            if (!dbCartas[properKey]) dbCartas[properKey] = dbCartas[key];
+            else dbCartas[properKey] = [...dbCartas[properKey], ...dbCartas[key]];
+            delete dbCartas[key];
+            needsMigration = true;
+        }
+    }
+    if (needsMigration) saveCartas(dbCartas);
+
+    const userJid = `${cleanNumber(sender)}@s.whatsapp.net`;
+    if (!dbCartas[userJid]) dbCartas[userJid] = [];
+    let misCartas = dbCartas[userJid];
+
+    // 🔢 EXTRACTOR INTELIGENTE DE NÚMEROS
+    // Busca números sueltos en el texto ignorando letras o menciones
+    const numsArgs = args.filter(a => /^\d+$/.test(a)).map(a => parseInt(a));
 
     // 📦 ABRIR UN SOBRE
     if (cmd === 'abrirsobre') {
       const dbInv = getInv();
-      if (!dbInv[sender] || (dbInv[sender].sobre || 0) <= 0) {
+      if (!dbInv[userJid] || (dbInv[userJid].sobre || 0) <= 0) {
         return reply('❌ No tienes Sobres Gacha. Cómpralos con *.tienda sobre 1*');
       }
 
-      dbInv[sender].sobre -= 1;
+      dbInv[userJid].sobre -= 1;
       saveInv(dbInv);
 
       const loadMsg = await sock.sendMessage(remoteJid, { text: '✨ _Abriendo sobre mágico..._' }, { quoted: msg });
@@ -285,10 +309,10 @@ module.exports = {
         const groupMetadata = await sock.groupMetadata(remoteJid);
         const participants = groupMetadata.participants;
         const randomParticipant = participants[Math.floor(Math.random() * participants.length)];
-        const jidElegido = randomParticipant.id;
+        const jidElegido = `${cleanNumber(randomParticipant.id)}@s.whatsapp.net`;
 
         let nombreElegido = cleanNumber(jidElegido);
-        if (jidElegido === sender && pushName) {
+        if (jidElegido === userJid && pushName) {
             nombreElegido = pushName;
         } else {
             try {
@@ -317,18 +341,18 @@ module.exports = {
             hp: stats.hp, 
             valor: stats.valor 
         };
-        misCartas.push(nuevaCarta);
+        
+        dbCartas[userJid].push(nuevaCarta);
         saveCartas(dbCartas);
 
         const buffer = await dibujarCartaPokemon(pfpUrl, nombreElegido, stats);
         await sock.sendMessage(remoteJid, { delete: loadMsg.key });
-        
-        // MENCIÓN INTELIGENTE EN ABRIR SOBRE
-        const estaEnElGrupo = participants.some(p => p.id === jidElegido);
+
+        const estaEnElGrupo = participants.some(p => cleanNumber(p.id) === cleanNumber(jidElegido));
         const textoMencion = estaEnElGrupo ? `@${cleanNumber(jidElegido)}` : `👤 ${nombreElegido}`;
         const arrayMenciones = estaEnElGrupo ? [jidElegido] : [];
 
-        await sock.sendMessage(remoteJid, { 
+        return sock.sendMessage(remoteJid, { 
           image: buffer, 
           caption: `🎉 ¡Felicidades! Has obtenido la carta de ${textoMencion}\n🌟 Rareza: *${stats.rareza}*\n\n🎒 Usa *.miscartas* para ver tu álbum.`,
           mentions: arrayMenciones
@@ -339,9 +363,9 @@ module.exports = {
       }
     }
 
-    // 🖼️ VER EL ARTE DE UNA CARTA ESPECÍFICA (Nuevo comando .vercarta)
+    // 🖼️ VER EL ARTE DE UNA CARTA
     if (cmd === 'vercarta') {
-      const index = parseInt(args[0]) - 1;
+      const index = numsArgs.length > 0 ? numsArgs[0] - 1 : NaN;
       if (isNaN(index) || index < 0 || index >= misCartas.length) return reply('❌ Indica el número correcto de tu carta (Ej: *.vercarta 1*)');
 
       const carta = misCartas[index];
@@ -350,152 +374,164 @@ module.exports = {
       let pfpUrl = null;
       try { pfpUrl = await sock.profilePictureUrl(carta.jid, 'image'); } catch {}
 
-      // Reconstruir los stats para dibujarlo de nuevo
       const tipoObj = TIPOS.find(t => t.nombre === carta.tipo) || TIPOS[0];
       const isFullArt = (carta.rareza === 'MÍTICA ex' || carta.rareza === 'LEGENDARIA V');
       const statsToDraw = { rareza: carta.rareza, tipo: tipoObj, atk: carta.atk, hp: carta.hp, valor: carta.valor, isFullArt };
 
       const buffer = await dibujarCartaPokemon(pfpUrl, carta.nombreReal, statsToDraw);
       await sock.sendMessage(remoteJid, { delete: loadMsg.key });
-      
+
       return sock.sendMessage(remoteJid, { 
         image: buffer, 
         caption: `🎴 *CARTA #${index + 1}* | ${carta.rareza}\n👤 *Pertenece a:* ${carta.nombreReal}\n⚔️ ATK: ${carta.atk} | 💖 HP: ${carta.hp}` 
       }, { quoted: msg });
     }
 
-    // 🎒 VER INVENTARIO (Listado con Inteligencia de Grupo)
+    // 🎒 VER INVENTARIO
     if (cmd === 'miscartas') {
       if (misCartas.length === 0) return reply('🎒 Tu álbum está vacío. Compra sobres con *.tienda sobre 1*');
-      
+
       let txt = `🎒 *TU ÁLBUM POKÉMON* 🎒\n\n`;
       let arrayDeMenciones = [];
       let participants = [];
-      
+
       try {
         const groupMetadata = await sock.groupMetadata(remoteJid);
-        participants = groupMetadata.participants;
+        participants = groupMetadata.participants.map(p => cleanNumber(p.id));
       } catch {}
 
       misCartas.forEach((carta, index) => {
-        // ¿El usuario de la carta está en el grupo?
-        const estaEnElGrupo = participants.some(p => p.id === carta.jid);
-        
+        const cartaNum = cleanNumber(carta.jid);
+        const estaEnElGrupo = participants.includes(cartaNum);
+
         if (estaEnElGrupo) {
-            // Mención Azul Real
-            txt += `*[ ${index + 1} ]* ✦ ${carta.rareza} | *@${cleanNumber(carta.jid)}*\n⚔️ ATK: ${carta.atk} | 💖 HP: ${carta.hp} | 💎 ${carta.valor} XP\n\n`;
-            arrayDeMenciones.push(carta.jid);
+            txt += `*[ ${index + 1} ]* ✦ ${carta.rareza} | *@${cartaNum}*\n⚔️ ATK: ${carta.atk} | 💖 HP: ${carta.hp} | 💎 ${carta.valor} XP\n\n`;
+            arrayDeMenciones.push(`${cartaNum}@s.whatsapp.net`);
         } else {
-            // Se salió del grupo: Texto Puro (Nickname)
-            txt += `*[ ${index + 1} ]* ✦ ${carta.rareza} | 👤 ${carta.nombreReal}\n⚔️ ATK: ${carta.atk} | 💖 HP: ${carta.hp} | 💎 ${carta.valor} XP\n\n`;
+            const nombreMostrar = carta.nombreReal || `User ${cartaNum.slice(-4)}`;
+            txt += `*[ ${index + 1} ]* ✦ ${carta.rareza} | 👤 ${nombreMostrar}\n⚔️ ATK: ${carta.atk} | 💖 HP: ${carta.hp} | 💎 ${carta.valor} XP\n\n`;
         }
       });
-      
+
       txt += `🖼️ *Ver Carta:* .vercarta [número]\n💸 *Vender:* .vendercarta [número] | .vendertodas\n⚔️ *Pelear:* .duelocarta [número] @usuario\n🤝 *Cambio:* .intercambiar @usuario [tu_num] [su_num]`;
-      
-      return sock.sendMessage(remoteJid, { text: txt, mentions: arrayDeMenciones }, { quoted: msg });
+
+      return sock.sendMessage(remoteJid, { text: txt, mentions: [...new Set(arrayDeMenciones)] }, { quoted: msg });
     }
 
     // 💸 VENDER UNA SOLA CARTA
     if (cmd === 'vendercarta') {
-      const index = parseInt(args[0]) - 1;
+      const index = numsArgs.length > 0 ? numsArgs[0] - 1 : NaN;
       if (isNaN(index) || index < 0 || index >= misCartas.length) return reply('❌ Indica el número de la carta (Ej: .vendercarta 1)');
 
       const ganancia = misCartas[index].valor;
       misCartas.splice(index, 1);
       saveCartas(dbCartas);
 
-      const userData = await db.getUser(sender);
+      const userData = await db.getUser(userJid);
       userData.xp = (userData.xp || 0) + ganancia;
       if (userData.save) await userData.save();
 
       return reply(`✅ Carta vendida a la tienda por *${ganancia} XP*.`);
     }
 
-    // 💰 VENDER TODAS LAS CARTAS DE GOLPE
+    // 💰 VENDER TODAS
     if (cmd === 'vendertodas') {
       if (misCartas.length === 0) return reply('❌ No tienes cartas para vender.');
       let gananciaTotal = misCartas.reduce((acc, carta) => acc + carta.valor, 0);
       let cantidad = misCartas.length;
-      
-      dbCartas[sender] = []; 
+
+      dbCartas[userJid] = []; 
       saveCartas(dbCartas);
 
-      const userData = await db.getUser(sender);
+      const userData = await db.getUser(userJid);
       userData.xp = (userData.xp || 0) + gananciaTotal;
       if (userData.save) await userData.save();
 
       return reply(`✅ Has vaciado tu álbum.\nVendiste *${cantidad} cartas* por un total de *${gananciaTotal} XP*.`);
     }
 
-    // 🤝 SISTEMA DE INTERCAMBIO (TRADING)
+    // 🤝 SISTEMA DE INTERCAMBIO
     if (cmd === 'intercambiar') {
-      const target = getTarget(msg, args, sender);
-      const miNum = parseInt(args[1]) - 1;
-      const suNum = parseInt(args[2]) - 1;
+      const rawTarget = getTarget(msg, args);
+      const targetJid = rawTarget ? `${cleanNumber(rawTarget)}@s.whatsapp.net` : null;
 
-      if (!target || isNaN(miNum) || isNaN(suNum)) return reply('❌ Uso correcto:\n*.intercambiar @usuario [Tu_Carta] [Su_Carta]*');
-      if (target === sender) return reply('❌ No puedes intercambiar contigo mismo.');
-      if (!dbCartas[sender] || !dbCartas[sender][miNum]) return reply('❌ No posees la carta que ofreces.');
-      if (!dbCartas[target] || !dbCartas[target][suNum]) return reply('❌ El rival no posee esa carta.');
+      const miNum = numsArgs.length > 0 ? numsArgs[0] - 1 : NaN;
+      const suNum = numsArgs.length > 1 ? numsArgs[1] - 1 : NaN;
 
-      const miCarta = dbCartas[sender][miNum];
-      const suCarta = dbCartas[target][suNum];
-      global.tradeRequests[target] = { from: sender, miNum, suNum };
+      if (!targetJid || isNaN(miNum) || isNaN(suNum)) return reply('❌ Uso correcto:\n*.intercambiar @usuario [Tu_Carta] [Su_Carta]*');
+      if (targetJid === userJid) return reply('❌ No puedes intercambiar contigo mismo.');
+      if (!dbCartas[userJid] || !dbCartas[userJid][miNum]) return reply('❌ No posees la carta que ofreces.');
+      if (!dbCartas[targetJid] || !dbCartas[targetJid][suNum]) return reply('❌ El rival no posee esa carta.');
+
+      const miCarta = dbCartas[userJid][miNum];
+      const suCarta = dbCartas[targetJid][suNum];
+      global.tradeRequests[targetJid] = { from: userJid, miNum, suNum };
 
       return sock.sendMessage(remoteJid, { 
-        text: `⚖️ *SOLICITUD DE INTERCAMBIO* ⚖️\n\n👤 *${pushName}* ofrece la carta de *${miCarta.nombreReal}* [${miCarta.rareza}]\nA cambio de la carta de *${suCarta.nombreReal}* [${suCarta.rareza}].\n\n@${cleanNumber(target)}, escribe *.aceptar* para confirmar.`, 
-        mentions: [target] 
-      });
+        text: `⚖️ *SOLICITUD DE INTERCAMBIO* ⚖️\n\n👤 *${pushName}* ofrece la carta de *${miCarta.nombreReal}* [${miCarta.rareza}]\nA cambio de la carta de *${suCarta.nombreReal}* [${suCarta.rareza}].\n\n@${cleanNumber(targetJid)}, escribe *.aceptar* para confirmar.`, 
+        mentions: [targetJid] 
+      }, { quoted: msg });
     }
 
     // ✅ ACEPTAR INTERCAMBIO
     if (cmd === 'aceptar') {
-      const trade = global.tradeRequests[sender];
+      const trade = global.tradeRequests[userJid];
       if (!trade) return reply('❌ No tienes ninguna solicitud pendiente.');
 
       const { from, miNum, suNum } = trade;
+
+      // Verificamos de nuevo por si vendieron las cartas antes de aceptar
+      if (!dbCartas[from] || !dbCartas[userJid] || !dbCartas[from][miNum] || !dbCartas[userJid][suNum]) {
+          delete global.tradeRequests[userJid];
+          return reply('❌ El intercambio fue cancelado porque alguien ya no posee la carta prometida.');
+      }
+
       const cartaDelIniciador = dbCartas[from].splice(miNum, 1)[0];
-      const cartaMia = dbCartas[sender].splice(suNum, 1)[0];
+      const cartaMia = dbCartas[userJid].splice(suNum, 1)[0];
 
       dbCartas[from].push(cartaMia);
-      dbCartas[sender].push(cartaDelIniciador);
+      dbCartas[userJid].push(cartaDelIniciador);
       saveCartas(dbCartas);
-      delete global.tradeRequests[sender];
+      delete global.tradeRequests[userJid];
 
-      return sock.sendMessage(remoteJid, { text: `🤝 *¡INTERCAMBIO EXITOSO!*`, mentions: [sender, from] });
+      return sock.sendMessage(remoteJid, { text: `🤝 *¡INTERCAMBIO EXITOSO!*`, mentions: [userJid, from] }, { quoted: msg });
     }
 
     // ⚔️ DUELO DE CARTAS POKÉMON
     if (cmd === 'duelocarta') {
-      const index = parseInt(args[0]) - 1;
-      const target = getTarget(msg, args.slice(1), sender);
+      const rawTarget = getTarget(msg, args);
+      const targetJid = rawTarget ? `${cleanNumber(rawTarget)}@s.whatsapp.net` : null;
+      const index = numsArgs.length > 0 ? numsArgs[0] - 1 : NaN;
 
-      if (isNaN(index) || !target) return reply('❌ Uso:\n*.duelocarta [tu_numero] @usuario*');
-      if (!dbCartas[target] || dbCartas[target].length === 0) return reply('❌ Tu rival no tiene cartas para defenderse.');
+      if (isNaN(index) || !targetJid) return reply('❌ Uso:\n*.duelocarta [tu_numero] @usuario*');
+      if (targetJid === userJid) return reply('❌ No puedes batallar contra ti mismo.');
+      if (!misCartas[index]) return reply('❌ No posees la carta que intentas usar.');
+      if (!dbCartas[targetJid] || dbCartas[targetJid].length === 0) return reply('❌ Tu rival no tiene cartas para defenderse.');
 
       const miCarta = misCartas[index];
-      const cartaRival = dbCartas[target][Math.floor(Math.random() * dbCartas[target].length)];
+      const cartaRival = dbCartas[targetJid][Math.floor(Math.random() * dbCartas[targetJid].length)];
 
       const miPoder = miCarta.atk + Math.floor(Math.random() * 50);
       const poderEnemigo = cartaRival.hp + Math.floor(Math.random() * 50);
 
-      let txt = `⚔️ *BATALLA POKÉMON* ⚔️\n\n🔥 👤 *${pushName}* ataca con *${miCarta.nombreReal}* (Daño: ${miPoder})\n🛡️ *@${cleanNumber(target)}* defiende con *${cartaRival.nombreReal}* (Defensa: ${poderEnemigo})\n\n`;
+      let txt = `⚔️ *BATALLA POKÉMON* ⚔️\n\n🔥 👤 *${pushName}* ataca con *${miCarta.nombreReal}* (Daño: ${miPoder})\n🛡️ *@${cleanNumber(targetJid)}* defiende con *${cartaRival.nombreReal}* (Defensa: ${poderEnemigo})\n\n`;
 
       if (miPoder > poderEnemigo) {
         const botin = Math.floor(Math.random() * 800) + 200;
-        const myData = await db.getUser(sender);
-        const targetData = await db.getUser(target);
-        
+        const myData = await db.getUser(userJid);
+        const targetData = await db.getUser(targetJid);
+
         targetData.xp = Math.max(0, (targetData.xp || 0) - botin);
         myData.xp = (myData.xp || 0) + botin;
+
         if (myData.save) await myData.save();
         if (targetData.save) await targetData.save();
+
         txt += `💥 *¡Un golpe crítico!* Le robaste *${botin} XP*.`;
       } else {
         txt += `🧱 *¡No es muy efectivo!* La defensa del rival resistió tu ataque.`;
       }
-      return sock.sendMessage(remoteJid, { text: txt, mentions: [target] }, { quoted: msg });
+      return sock.sendMessage(remoteJid, { text: txt, mentions: [targetJid] }, { quoted: msg });
     }
   }
 };
