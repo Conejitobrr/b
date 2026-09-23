@@ -29,6 +29,10 @@ function cleanJid(jid = '') {
   return String(jid).split(':')[0];
 }
 
+function cleanNumber(jid = '') {
+  return cleanJid(jid).split('@')[0].replace(/\D/g, '');
+}
+
 // Función para obtener al usuario objetivo
 function getTarget(msg, sender) {
   const quoted = msg.message?.extendedTextMessage?.contextInfo?.participant;
@@ -40,31 +44,43 @@ function getTarget(msg, sender) {
   return cleanJid(sender);
 }
 
+// 🔥 FÓRMULA MAESTRA DE NIVEL (Igual que topxp.js y perfil.js)
+function calculateLevel(xp) {
+  return Math.floor(0.1 * Math.sqrt(xp)) || 0;
+}
+
 module.exports = {
   name: 'rank',
   aliases: ['rango'],
   category: 'economía',
-  desc: 'Muestra tu rango o el de otro usuario',
+  desc: 'Muestra tu rango o el de otro usuario con la barra de progreso',
 
   execute: async ({ sock, msg, remoteJid, sender, pushName, db }) => {
     const target = getTarget(msg, sender);
     const user = await db.getUser(target);
 
     const xp = user.xp || 0;
-    const level = user.level || 1;
+    
+    // 1️⃣ Calculamos el nivel real
+    const level = (typeof db.calculateLevel === 'function') ? db.calculateLevel(xp) : calculateLevel(xp);
 
-    // Se requieren 10,000 XP por nivel
-    const currentBase = (level - 1) * 10000;
-    const nextBase = level * 10000;
+    // 2️⃣ Matemática inversa para saber la XP exacta de cada nivel
+    const currentBaseXP = 100 * Math.pow(level, 2);       // XP base de tu nivel actual
+    const nextBaseXP = 100 * Math.pow(level + 1, 2);      // XP necesaria para el próximo nivel
 
-    const progress = xp - currentBase;
-    const needed = nextBase - xp;
+    // 3️⃣ Calculamos el progreso dentro del nivel actual
+    const tierTotal = nextBaseXP - currentBaseXP;         // XP total de esta fase
+    const progress = xp - currentBaseXP;                  // XP ganada en esta fase
+    const needed = nextBaseXP - xp;                       // XP que falta para subir
 
     const role = getRole(level);
-    const bar = makeBar(progress, 10000);
+    const bar = makeBar(progress, tierTotal);
 
-    const number = target.split('@')[0];
+    const number = cleanNumber(target);
     const displayUser = target === cleanJid(sender) ? `👤 ${pushName}` : `👤 @${number}`;
+    
+    // Aseguramos que la mención funcione pintándose de azul
+    const targetJid = `${number}@s.whatsapp.net`;
 
     const text = `╔════════════════════╗
 ║      🎖️ PERFIL RANK
@@ -76,11 +92,11 @@ module.exports = {
 ║ 🎭 Rol: *${role}*
 ║
 ║ ${bar}
-║ ${progress} / 10000 XP
+║ ${progress} / ${tierTotal} XP
 ║
 ║ ⏳ Faltan: ${needed} XP
 ╚════════════════════╝`;
 
-    await sock.sendMessage(remoteJid, { text, mentions: [target] }, { quoted: msg });
+    await sock.sendMessage(remoteJid, { text, mentions: [targetJid] }, { quoted: msg });
   }
 };
