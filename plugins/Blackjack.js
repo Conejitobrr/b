@@ -35,10 +35,10 @@ function calculateScore(cards) {
   return score;
 }
 
-// 🎨 DISEÑO LIMPIO: Separador vertical en lugar de corchetes densos
-function renderCards(cards, hideSecond = false) {
-  if (hideSecond && cards.length > 1) {
-    return `${cards[0].value}${cards[0].suit}  |  ❓`;
+// 🎨 DISEÑO ULTRA LIMPIO Y CARTAS DEL BOT 100% OCULTAS
+function renderCards(cards, hideAll = false) {
+  if (hideAll) {
+    return `❓  |  ❓`;
   }
   return cards.map(c => `${c.value}${c.suit}`).join('  |  ');
 }
@@ -49,7 +49,7 @@ module.exports = {
   name: 'blackjack',
   aliases: ['bj', 'pedir', 'plantarse'],
   category: 'juegos',
-  desc: 'Juega al Blackjack (21) contra SiriusBot',
+  desc: 'Juega al 21 contra SiriusBot',
 
   execute: async ({ sock, msg, remoteJid, sender, args, commandName, db, reply }) => {
     const action = commandName.toLowerCase();
@@ -83,7 +83,7 @@ module.exports = {
         uData.xp += bet * 2.5; 
         if (uData.save) await uData.save();
         return sock.sendMessage(remoteJid, { 
-          text: `🎰 *SIRIUS CASINO - 21* 🎰\n\n🤖 *Crupier:*\n🃏 Cartas: ${renderCards(botHand)}\n📊 Total: ${botScore}\n\n👤 *Tu Mano:*\n🃏 Cartas: ${renderCards(playerHand)}\n📊 Total: *21*\n\n🎉 ¡BLACKJACK NATURAL! Ganaste *${bet * 2.5} XP*.`,
+          text: `🎰 *SIRIUS CASINO - 21* 🎰\n\n🤖 *SiriusBot:*\n🃏 Cartas: ${renderCards(botHand)}\n📊 Total: ${botScore}\n\n👤 *Tu Mano:*\n🃏 Cartas: ${renderCards(playerHand)}\n📊 Total: *21*\n\n🎉 ¡BLACKJACK NATURAL! Ganaste *${bet * 2.5} XP*.`,
           mentions: [sender]
         }, { quoted: msg });
       }
@@ -92,12 +92,11 @@ module.exports = {
 
       newSession.timeoutId = setTimeout(() => {
         bjSessions.delete(sender);
-        sock.sendMessage(remoteJid, { text: `⏱️ @${cleanNumber(sender)}, tu partida expiró por inactividad. El crupier se quedó tu apuesta de *${bet} XP*.`, mentions: [sender] });
+        sock.sendMessage(remoteJid, { text: `⏱️ @${cleanNumber(sender)}, tu partida expiró por inactividad. SiriusBot se quedó tu apuesta de *${bet} XP*.`, mentions: [sender] });
       }, 2 * 60 * 1000);
 
-      // 🎨 PANEL VISUAL OPTIMIZADO
       let txt = `🎰 *SIRIUS CASINO - 21* 🎰\n\n`;
-      txt += `🤖 *Crupier:*\n🃏 Cartas: ${renderCards(botHand, true)}\n📊 Total: ?\n\n`;
+      txt += `🤖 *SiriusBot:*\n🃏 Cartas: ${renderCards(botHand, true)}\n📊 Total: ❓\n\n`;
       txt += `👤 *Tu Mano:*\n🃏 Cartas: ${renderCards(playerHand)}\n📊 Total: *${playerScore}*\n\n`;
       txt += `💰 *Apuesta:* ${bet} XP\n`;
       txt += `────────────────\n`;
@@ -135,7 +134,7 @@ module.exports = {
       }, 2 * 60 * 1000);
 
       let txt = `🎰 *SIRIUS CASINO - 21* 🎰\n\n`;
-      txt += `🤖 *Crupier:*\n🃏 Cartas: ${renderCards(session.botHand, true)}\n\n`;
+      txt += `🤖 *SiriusBot:*\n🃏 Cartas: ${renderCards(session.botHand, true)}\n📊 Total: ❓\n\n`;
       txt += `👤 *Tu Mano:*\n🃏 Cartas: ${renderCards(session.playerHand)}\n📊 Total: *${playerScore}*\n\n`;
       txt += `────────────────\n`;
       txt += `👇 *¿Otra carta?*\n🔹 *.pedir*\n🔹 *.plantarse*`;
@@ -154,13 +153,14 @@ module.exports = {
       const playerScore = calculateScore(session.playerHand);
       let botScore = calculateScore(session.botHand);
 
+      // SiriusBot sigue sacando cartas si tiene menos de 17
       while (botScore < 17) {
         session.botHand.push(session.deck.pop());
         botScore = calculateScore(session.botHand);
       }
 
-      let txt = `🎰 *RESULTADO DEL BLACKJACK* 🎰\n\n`;
-      txt += `🤖 *Crupier:*\n🃏 Cartas: ${renderCards(session.botHand)}\n📊 Total: *${botScore}*\n\n`;
+      let txt = `🎰 *RESULTADO DEL JUEGO* 🎰\n\n`;
+      txt += `🤖 *SiriusBot:*\n🃏 Cartas: ${renderCards(session.botHand)}\n📊 Total: *${botScore}*\n\n`;
       txt += `👤 *Jugador:*\n🃏 Cartas: ${renderCards(session.playerHand)}\n📊 Total: *${playerScore}*\n\n`;
       txt += `────────────────\n`;
 
@@ -168,15 +168,15 @@ module.exports = {
 
       if (botScore > 21) {
         uData.xp = (uData.xp || 0) + (session.bet * 2);
-        txt += `🎉 ¡El crupier se pasó! Ganaste *${session.bet * 2} XP*.`;
+        txt += `🎉 ¡SiriusBot se pasó! Ganaste *${session.bet * 2} XP*.`;
       } else if (playerScore > botScore) {
         uData.xp = (uData.xp || 0) + (session.bet * 2);
-        txt += `🏆 ¡Le ganaste al crupier! Te llevas *${session.bet * 2} XP*.`;
+        txt += `🏆 ¡Le ganaste a SiriusBot! Te llevas *${session.bet * 2} XP*.`;
       } else if (playerScore === botScore) {
         uData.xp = (uData.xp || 0) + session.bet;
-        txt += `🤝 ¡Empate! (Push). Se te devuelve tu apuesta de *${session.bet} XP*.`;
+        txt += `🤝 ¡Empate! Se te devuelve tu apuesta de *${session.bet} XP*.`;
       } else {
-        txt += `💀 El crupier gana. Pierdes tu apuesta de *${session.bet} XP*.`;
+        txt += `💀 SiriusBot gana. Pierdes tu apuesta de *${session.bet} XP*.`;
       }
 
       if (uData.save) await uData.save();
