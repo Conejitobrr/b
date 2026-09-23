@@ -35,10 +35,10 @@ function calculateScore(cards) {
   return score;
 }
 
-// 🎨 DISEÑO ULTRA LIMPIO Y CARTAS DEL BOT 100% OCULTAS
-function renderCards(cards, hideAll = false) {
-  if (hideAll) {
-    return `❓  |  ❓`;
+// 🎨 DISEÑO: Muestra la primera carta y esconde la segunda
+function renderCards(cards, hideSecond = false) {
+  if (hideSecond && cards.length > 1) {
+    return `${cards[0].value}${cards[0].suit}  |  ❓`;
   }
   return cards.map(c => `${c.value}${c.suit}`).join('  |  ');
 }
@@ -96,7 +96,7 @@ module.exports = {
       }, 2 * 60 * 1000);
 
       let txt = `🎰 *SIRIUS CASINO - 21* 🎰\n\n`;
-      txt += `🤖 *SiriusBot:*\n🃏 Cartas: ${renderCards(botHand, true)}\n📊 Total: ❓\n\n`;
+      txt += `🤖 *SiriusBot:*\n🃏 Cartas: ${renderCards(botHand, true)}\n📊 Total: ${getCardValue(botHand[0])} + ❓\n\n`;
       txt += `👤 *Tu Mano:*\n🃏 Cartas: ${renderCards(playerHand)}\n📊 Total: *${playerScore}*\n\n`;
       txt += `💰 *Apuesta:* ${bet} XP\n`;
       txt += `────────────────\n`;
@@ -123,21 +123,21 @@ module.exports = {
         }, { quoted: msg });
       }
 
-      if (playerScore === 21) {
-        msg.message.conversation = '.plantarse'; 
-        return module.exports.execute({ sock, msg, remoteJid, sender, args, commandName: 'plantarse', db, reply });
-      }
-
       session.timeoutId = setTimeout(() => {
         bjSessions.delete(sender);
         sock.sendMessage(remoteJid, { text: `⏱️ @${cleanNumber(sender)}, partida expirada. Perdiste tus *${session.bet} XP*.`, mentions: [sender] });
       }, 2 * 60 * 1000);
 
       let txt = `🎰 *SIRIUS CASINO - 21* 🎰\n\n`;
-      txt += `🤖 *SiriusBot:*\n🃏 Cartas: ${renderCards(session.botHand, true)}\n📊 Total: ❓\n\n`;
+      txt += `🤖 *SiriusBot:*\n🃏 Cartas: ${renderCards(session.botHand, true)}\n📊 Total: ${getCardValue(session.botHand[0])} + ❓\n\n`;
       txt += `👤 *Tu Mano:*\n🃏 Cartas: ${renderCards(session.playerHand)}\n📊 Total: *${playerScore}*\n\n`;
       txt += `────────────────\n`;
-      txt += `👇 *¿Otra carta?*\n🔹 *.pedir*\n🔹 *.plantarse*`;
+      
+      if (playerScore === 21) {
+         txt += `⚠️ *¡Llegaste a 21!* Escribe *.plantarse* para cederle el turno a SiriusBot.`;
+      } else {
+         txt += `👇 *¿Otra carta?*\n🔹 *.pedir*\n🔹 *.plantarse*`;
+      }
       
       return sock.sendMessage(remoteJid, { text: txt, mentions: [sender] }, { quoted: msg });
     }
@@ -153,7 +153,6 @@ module.exports = {
       const playerScore = calculateScore(session.playerHand);
       let botScore = calculateScore(session.botHand);
 
-      // SiriusBot sigue sacando cartas si tiene menos de 17
       while (botScore < 17) {
         session.botHand.push(session.deck.pop());
         botScore = calculateScore(session.botHand);
