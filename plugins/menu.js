@@ -3,11 +3,59 @@
 const fs = require('fs');
 const path = require('path');
 
+// 🔄 ENRUTADOR INTELIGENTE (Asigna cada comando a su categoría ideal automáticamente)
+const AUTO_ROUTER = {
+  // 📥 DESCARGAS
+  'play': 'DESCARGAS', 'spotify': 'DESCARGAS', 'facebook': 'DESCARGAS', 'instagram': 'DESCARGAS', 'tiktok': 'DESCARGAS', 'video': 'DESCARGAS',
+  
+  // 🔄 CONVERTIDORES & TOOLS
+  'tomp3': 'CONVERTIDORES', 'tovideo': 'CONVERTIDORES', 'toimage': 'CONVERTIDORES', 'tovoz': 'CONVERTIDORES', 'sticker': 'CONVERTIDORES', 'sbg': 'CONVERTIDORES', 'attp': 'CONVERTIDORES', 'filtro': 'CONVERTIDORES',
+  
+  // 🎭 ROLEPLAY & SOCIAL
+  'roleplay': 'ROLEPLAY & SOCIAL', 'matrimonio': 'ROLEPLAY & SOCIAL', 'formarpareja': 'ROLEPLAY & SOCIAL', 'formarparejas': 'ROLEPLAY & SOCIAL', 'piropo': 'ROLEPLAY & SOCIAL', 'insulto': 'ROLEPLAY & SOCIAL', 'gay': 'ROLEPLAY & SOCIAL', 'gay2': 'ROLEPLAY & SOCIAL', 'follar': 'ROLEPLAY & SOCIAL', 'fake': 'ROLEPLAY & SOCIAL', 'tweet': 'ROLEPLAY & SOCIAL', 'felizcumple': 'ROLEPLAY & SOCIAL',
+  
+  // 🤖 INTELIGENCIA ARTIFICIAL
+  'ai': 'INTELIGENCIA ARTIFICIAL', 'clon': 'INTELIGENCIA ARTIFICIAL', 'acento': 'INTELIGENCIA ARTIFICIAL', 'resumen': 'INTELIGENCIA ARTIFICIAL', 'juez': 'INTELIGENCIA ARTIFICIAL', 'oraculo': 'INTELIGENCIA ARTIFICIAL',
+  
+  // 🎮 JUEGOS & CASINO
+  'cartas': 'JUEGOS', 'granja': 'JUEGOS', 'mascotas': 'JUEGOS', 'trivia': 'JUEGOS', 'ruleta': 'JUEGOS', 'slot': 'JUEGOS', 'pokedex': 'JUEGOS', 'verdad': 'JUEGOS', 'reto': 'JUEGOS', 'pregunta': 'JUEGOS', 'edad': 'JUEGOS', 'nacionalidad': 'JUEGOS', 'explotar': 'JUEGOS', 'doxear': 'JUEGOS',
+  
+  // 💰 ECONOMÍA & RPG
+  'policia': 'ECONOMÍA & RPG', 'robar': 'ECONOMÍA & RPG', 'tienda': 'ECONOMÍA & RPG', 'cazar': 'ECONOMÍA & RPG', 'minar': 'ECONOMÍA & RPG', 'pescar': 'ECONOMÍA & RPG', 'talar': 'ECONOMÍA & RPG', 'trabajar': 'ECONOMÍA & RPG', 'claim': 'ECONOMÍA & RPG', 'inventario': 'ECONOMÍA & RPG', 'perfil': 'ECONOMÍA & RPG', 'rank': 'ECONOMÍA & RPG', 'topxp': 'ECONOMÍA & RPG',
+  
+  // 🔎 UTILIDAD & BÚSQUEDA
+  'letra': 'UTILIDAD & BÚSQUEDA', 'shazam': 'UTILIDAD & BÚSQUEDA', 'clima': 'UTILIDAD & BÚSQUEDA', 'ping': 'UTILIDAD & BÚSQUEDA', 'estado': 'UTILIDAD & BÚSQUEDA', 'ver': 'UTILIDAD & BÚSQUEDA', 'menu': 'UTILIDAD & BÚSQUEDA', 'donar': 'UTILIDAD & BÚSQUEDA', 'tts': 'UTILIDAD & BÚSQUEDA',
+  
+  // 🛡️ MODERACIÓN & GRUPO
+  'mutear': 'MODERACIÓN & GRUPO', 'warns': 'MODERACIÓN & GRUPO', 'del': 'MODERACIÓN & GRUPO', 'antidelete': 'MODERACIÓN & GRUPO', 'admin': 'MODERACIÓN & GRUPO', 'config': 'MODERACIÓN & GRUPO', 'notify': 'MODERACIÓN & GRUPO', 'add': 'MODERACIÓN & GRUPO',
+  
+  // 👑 OWNER
+  'ban': 'OWNER', 'addxp': 'OWNER', 'update': 'OWNER'
+};
+
+// 🎨 DICCIONARIO DE ICONOS MAESTROS
+const MASTER_CATEGORIES = {
+  'MODERACIÓN & GRUPO': '🛡️',
+  'DESCARGAS': '📥',
+  'CONVERTIDORES': '🔄',
+  'ECONOMÍA & RPG': '💰',
+  'JUEGOS': '🎮',
+  'ROLEPLAY & SOCIAL': '🎭',
+  'INTELIGENCIA ARTIFICIAL': '🤖',
+  'UTILIDAD & BÚSQUEDA': '🔎',
+  'OWNER': '👑'
+};
+
+function getMasterCategory(pluginName, pluginCat) {
+  if (AUTO_ROUTER[pluginName]) return AUTO_ROUTER[pluginName];
+  return (pluginCat || 'OTROS').toUpperCase();
+}
+
 module.exports = {
   name: 'menu',
   aliases: ['help', 'ayuda', 'comandos', 'list'],
   category: 'utilidad',
-  desc: 'Muestra el menú principal de comandos',
+  desc: 'Muestra el menú principal de comandos organizados',
   
   execute: async ({ sock, msg, remoteJid, pushName, config, isOwner, reply }) => {
     try {
@@ -23,15 +71,15 @@ module.exports = {
           const plugin = require(filepath); 
           
           if (plugin.name && typeof plugin.execute === 'function') {
-            const category = plugin.category ? plugin.category.toUpperCase() : 'SIN CATEGORÍA';
+            const finalCategory = getMasterCategory(plugin.name.toLowerCase(), plugin.category);
             
-            if (category === 'OWNER' && !isOwner) continue;
+            if (finalCategory === 'OWNER' && !isOwner) continue;
 
-            if (!categories[category]) {
-              categories[category] = [];
+            if (!categories[finalCategory]) {
+              categories[finalCategory] = [];
             }
             
-            categories[category].push({
+            categories[finalCategory].push({
               name: plugin.name,
               aliases: (plugin.aliases && Array.isArray(plugin.aliases)) ? plugin.aliases.filter(a => a !== plugin.name) : [],
               desc: plugin.desc || 'Sin descripción'
@@ -48,31 +96,24 @@ module.exports = {
       menuText += `⚙️ Prefijo: *${config.prefix}*\n`;
       menuText += `📦 Plugins Activos: *${totalCommands}*\n\n`;
 
-      const sortedCategories = Object.keys(categories).sort();
+      // Ordenar alfabéticamente, pero dejar OWNER al final
+      const sortedCategories = Object.keys(categories).sort((a, b) => {
+         if (a === 'OWNER') return 1;
+         if (b === 'OWNER') return -1;
+         return a.localeCompare(b);
+      });
 
       for (const category of sortedCategories) {
-        let icon = '📌';
-        if (category.includes('ADMINISTRACIÓN') || category.includes('MODERACIÓN')) icon = '🛡️';
-        else if (category.includes('DIVERSIÓN') || category.includes('JUEGOS')) icon = '🎲';
-        else if (category.includes('MULTIMEDIA') || category.includes('DESCARGAS')) icon = '🎵';
-        else if (category.includes('ECONOMÍA') || category.includes('RPG')) icon = '💰';
-        else if (category.includes('OWNER')) icon = '👑';
-        else if (category.includes('INTELIGENCIA ARTIFICIAL') || category.includes('IA')) icon = '🤖';
-        else if (category.includes('MASCOTA')) icon = '🐾';
-        else if (category.includes('POLICÍA') || category.includes('CARCEL')) icon = '🚔';
-        else if (category.includes('SOCIAL') || category.includes('ROMANCE')) icon = '💖';
-        else if (category.includes('TOPS') || category.includes('RANKING')) icon = '🏆';
-        else if (category.includes('BROMAS') || category.includes('CALCULADOR')) icon = '🤡';
-        else if (category.includes('PREMIUM')) icon = '💎';
-
+        const icon = MASTER_CATEGORIES[category] || '📌';
+        const cmds = categories[category];
+        
         menuText += `━━━━━━━━━━━━━━━━━━━\n`;
-        menuText += `${icon} *${category}*\n`;
+        menuText += `${icon} *${category}* (${cmds.length})\n`;
         menuText += `━━━━━━━━━━━━━━━━━━━\n`;
         
-        categories[category].sort((a, b) => a.name.localeCompare(b.name));
+        cmds.sort((a, b) => a.name.localeCompare(b.name));
 
-        // 🔥 NUEVA ESTRUCTURA VISUAL EN ÁRBOL
-        for (const cmd of categories[category]) {
+        for (const cmd of cmds) {
           menuText += `✦ *${config.prefix}${cmd.name}*\n`;
           if (cmd.aliases && cmd.aliases.length > 0) {
             menuText += `  ├ ◦ _${cmd.desc}_\n`;
