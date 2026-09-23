@@ -27,7 +27,6 @@ const BASE_AUDIOS = [
   { triggers: ['añanin'], file: 'Añañin' },
   { triggers: ['chaoo'], file: 'Chaoo' },
   { triggers: ['coge'], file: 'Coger' },
-  { triggers: ['viernes'], file: 'viernes' },
   { triggers: ['siu', 'siuu', 'siuuu', 'siuuuu'], file: 'siu' },
   { triggers: ['noche de paz'], file: 'Noche' },
   { triggers: ['sexo'], file: 'S3x0g' },
