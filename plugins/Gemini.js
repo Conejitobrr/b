@@ -9,7 +9,7 @@ const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
 
 module.exports = {
   name: 'ai',
-  aliases: ['ia', 'gemini', 'vision', 'bot'],
+  aliases: ['gemini', 'vision'],
   category: 'utilidad',
   desc: 'Habla con la IA o haz que analice cualquier imagen',
 
