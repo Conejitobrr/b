@@ -8,7 +8,7 @@ const { downloadContentFromMessage } = require('@whiskeysockets/baileys');
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
 
 module.exports = {
-  name: 'ai',
+  name: 'gemini',
   aliases: ['gemini', 'vision'],
   category: 'utilidad',
   desc: 'Habla con la IA o haz que analice cualquier imagen',
