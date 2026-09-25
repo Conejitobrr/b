@@ -3,14 +3,13 @@
 require('dotenv').config();
 const { downloadContentFromMessage } = require('@whiskeysockets/baileys');
 
-// 🧹 Limpiamos espacios en blanco de la API Key por si acaso
 const GEMINI_API_KEY = (process.env.GEMINI_API_KEY || '').trim();
 
 module.exports = {
   name: 'gemini',
   aliases: ['vision'],
   category: 'utilidad',
-  desc: 'Analiza imágenes y texto usando Gemini 3.8 Flash',
+  desc: 'Analiza imágenes y texto usando Gemini (Múltiples modelos)',
 
   execute: async ({ sock, msg, remoteJid, args, reply }) => {
     try {
@@ -18,7 +17,6 @@ module.exports = {
         return reply('❌ Falta GEMINI_API_KEY en el archivo .env');
       }
 
-      // Desenvolver el mensaje
       let m = msg.message;
       if (m?.ephemeralMessage) m = m.ephemeralMessage.message;
       if (m?.viewOnceMessage) m = m.viewOnceMessage.message;
@@ -42,7 +40,7 @@ module.exports = {
         return reply('❌ Envía un texto o responde a una imagen.\nEjemplo: .gemini hola');
       }
 
-      const msgEspera = await sock.sendMessage(remoteJid, { text: (isImage || isQuotedImage) ? '⏳ Analizando imagen...' : '⏳ Pensando...' }, { quoted: msg });
+      const msgEspera = await sock.sendMessage(remoteJid, { text: (isImage || isQuotedImage) ? '⏳ Analizando imagen...' : '⏳ Conectando con Google...' }, { quoted: msg });
 
       let payload;
 
@@ -74,23 +72,48 @@ module.exports = {
         };
       }
 
-      // 🔥 CONEXIÓN ACTUALIZADA A GEMINI 3.8 FLASH
-      const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash:generateContent?key=${GEMINI_API_KEY}`;
-      
-      const response = await fetch(url, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
-      });
+      // 🛡️ ESCUDO ANTI-SATURACIÓN: Lista de modelos extraída de tu cuenta oficial
+      const modelosActivos = [
+        'gemini-3.8-flash',         // El más nuevo, pero suele saturarse
+        'gemini-flash-latest',      // Redirección automática de Google al más estable
+        'gemini-3.5-flash',         // Respaldo súper rápido
+        'gemini-2.5-flash-lite'     // Modelo ligero que casi nunca se satura
+      ];
 
-      const json = await response.json();
+      let iaResponse = null;
+      let ultimoError = null;
 
-      if (json.error) {
-        return sock.sendMessage(remoteJid, { text: `❌ Error de API: ${json.error.message}`, edit: msgEspera.key });
+      // Intentará conectarse a cada modelo en orden hasta que uno responda
+      for (const modelo of modelosActivos) {
+        const url = `https://generativelanguage.googleapis.com/v1beta/models/${modelo}:generateContent?key=${GEMINI_API_KEY}`;
+        
+        try {
+          const response = await fetch(url, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+          });
+
+          const json = await response.json();
+
+          if (!json.error) {
+            iaResponse = json.candidates[0].content.parts[0].text;
+            break; // ¡Exito! Rompe el bucle y deja de buscar
+          } else {
+            ultimoError = json.error.message;
+            console.log(`⚠️ Modelo ${modelo} falló o está saturado. Intentando el siguiente...`);
+          }
+        } catch (e) {
+          ultimoError = e.message;
+        }
       }
 
-      const iaResponse = json.candidates[0].content.parts[0].text;
+      // Si después de probar los 4 modelos todos fallan
+      if (!iaResponse) {
+        return sock.sendMessage(remoteJid, { text: `❌ Todos los servidores de Google están saturados ahora mismo.\nDetalle: ${ultimoError}`, edit: msgEspera.key });
+      }
 
+      // Entregar respuesta final
       try {
         await sock.sendMessage(remoteJid, { text: iaResponse, edit: msgEspera.key });
       } catch (e) {
@@ -99,7 +122,7 @@ module.exports = {
 
     } catch (err) {
       console.log('❌ Error en gemini.js:', err);
-      return reply('❌ Ocurrió un error al procesar la solicitud.');
+      return reply('❌ Ocurrió un error crítico al procesar la solicitud.');
     }
   }
 };
