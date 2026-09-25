@@ -1,41 +1,55 @@
 'use strict';
 
-// Cargamos el archivo oculto .env
 require('dotenv').config();
 const { downloadContentFromMessage } = require('@whiskeysockets/baileys');
 
-// La llave ahora está protegida y se extrae automáticamente
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
 
 module.exports = {
-  name: 'gemini',
-  aliases: ['gemini', 'vision'],
+  name: 'gemini', // 🔥 EL CAMBIO VITAL: Ahora es independiente de ai.js
+  aliases: ['vision'],
   category: 'utilidad',
-  desc: 'Habla con la IA o haz que analice cualquier imagen',
+  desc: 'Analiza imágenes usando Gemini 1.5 Flash',
 
   execute: async ({ sock, msg, remoteJid, args, reply }) => {
     try {
       if (!GEMINI_API_KEY) {
-        return reply('❌ Mi creador olvidó ponerme mi cerebro. Falta la `GEMINI_API_KEY` en el archivo `.env`.');
+        return reply('❌ Falta la `GEMINI_API_KEY` en el archivo `.env`.');
       }
 
-      // 🔍 Detectar si hay una imagen adjunta o citada
-      const isImage = msg.message?.imageMessage;
-      const isQuotedImage = msg.message?.extendedTextMessage?.contextInfo?.quotedMessage?.imageMessage;
+      // Desenvolver el mensaje (Por si es reenviado, temporal o modificado)
+      let m = msg.message;
+      if (m?.ephemeralMessage) m = m.ephemeralMessage.message;
+      if (m?.viewOnceMessage) m = m.viewOnceMessage.message;
+      if (m?.viewOnceMessageV2) m = m.viewOnceMessageV2.message;
+      if (m?.documentWithCaptionMessage) m = m.documentWithCaptionMessage.message;
+
+      // Detectar si hay una imagen adjunta o citada
+      const isImage = !!m?.imageMessage;
+      const isQuotedImage = !!m?.extendedTextMessage?.contextInfo?.quotedMessage?.imageMessage;
       
-      const prompt = args.length > 0 ? args.join(' ') : 'Describe esta imagen con mucho detalle, con un tono divertido, sarcástico y usando jerga peruana suave.';
+      let prompt = args.join(' ').trim();
+      
+      // Si el texto vino pegado a la imagen en la descripción, sacamos el ".gemini"
+      if (!prompt && isImage && m?.imageMessage?.caption) {
+          prompt = m.imageMessage.caption.replace(/^[.\/#!]\w+\s*/, '').trim();
+      }
+      
+      if (!prompt) {
+          prompt = 'Describe esta imagen detalladamente.';
+      }
 
       if (!isImage && !isQuotedImage && !args.length) {
-        return reply('❌ Tienes que preguntarme algo o adjuntar una foto, pe.\n📌 *Ejemplo:* .ai ¿De qué anime es esto? (adjuntando imagen)');
+        return reply('❌ Tienes que adjuntar o responder a una foto.\n📌 *Ejemplo:* .gemini ¿Qué anime es este? (adjuntando imagen)');
       }
 
-      const msgEspera = await sock.sendMessage(remoteJid, { text: '👀 A ver, déjame escanear esto...' }, { quoted: msg });
+      const msgEspera = await sock.sendMessage(remoteJid, { text: '👀 Analizando imagen...' }, { quoted: msg });
 
       let payload;
 
       if (isImage || isQuotedImage) {
-        // 📥 Descargar la imagen de WhatsApp
-        const imageMessage = isImage ? msg.message.imageMessage : msg.message.extendedTextMessage.contextInfo.quotedMessage.imageMessage;
+        // Descargar la imagen
+        const imageMessage = isImage ? m.imageMessage : m.extendedTextMessage.contextInfo.quotedMessage.imageMessage;
         const stream = await downloadContentFromMessage(imageMessage, 'image');
         
         let buffer = Buffer.from([]);
@@ -43,20 +57,19 @@ module.exports = {
             buffer = Buffer.concat([buffer, chunk]);
         }
         
-        // 🔄 Convertir a Base64
         const base64Image = buffer.toString('base64');
+        const mimeType = imageMessage.mimetype || 'image/jpeg';
 
+        // Formato estricto de Google: inlineData y mimeType (camelCase)
         payload = {
           contents: [{
             parts: [
               { text: prompt },
-              // 🔥 EL ÚNICO ARREGLO ESTÁ AQUÍ: inlineData y mimeType (sin guiones bajos)
-              { inlineData: { mimeType: "image/jpeg", data: base64Image } }
+              { inlineData: { mimeType: mimeType, data: base64Image } }
             ]
           }]
         };
       } else {
-        // 📝 Procesar solo texto
         payload = {
           contents: [{
             parts: [{ text: prompt }]
@@ -64,7 +77,7 @@ module.exports = {
         };
       }
 
-      // 🧠 Conexión directa a Gemini 1.5 Flash
+      // Conexión a Gemini 1.5 Flash
       const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${GEMINI_API_KEY}`;
       
       const response = await fetch(url, {
@@ -77,21 +90,21 @@ module.exports = {
 
       if (json.error) {
         console.log('Error Gemini:', json.error);
-        return sock.sendMessage(remoteJid, { text: `❌ Error en mis circuitos: ${json.error.message}`, edit: msgEspera.key });
+        return sock.sendMessage(remoteJid, { text: `❌ Error de API: ${json.error.message}`, edit: msgEspera.key });
       }
 
       const iaResponse = json.candidates[0].content.parts[0].text;
 
-      // 📤 Entregar la respuesta editando el mensaje
+      // Entregar respuesta editando el mensaje
       try {
-        await sock.sendMessage(remoteJid, { text: `🧠 *SiriusBot AI:*\n\n${iaResponse}`, edit: msgEspera.key, mentions: [msg.key.participant || msg.key.remoteJid] });
+        await sock.sendMessage(remoteJid, { text: iaResponse, edit: msgEspera.key });
       } catch (e) {
-        await sock.sendMessage(remoteJid, { text: `🧠 *SiriusBot AI:*\n\n${iaResponse}` }, { quoted: msg });
+        await sock.sendMessage(remoteJid, { text: iaResponse }, { quoted: msg });
       }
 
     } catch (err) {
-      console.log('❌ Error en ia.js:', err);
-      return reply('❌ Se me quemó una neurona procesando esto. Asegúrate de haber enviado una imagen válida o un buen texto.');
+      console.log('❌ Error en gemini.js:', err);
+      return reply('❌ Ocurrió un error al procesar la imagen. Intenta de nuevo.');
     }
   }
 };
