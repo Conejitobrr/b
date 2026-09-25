@@ -4,7 +4,7 @@
 const carreras = new Map();
 const esperar = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 
-// Catálogo de corredores salvajes
+// Catálogo de corredores salvajes (la mayoría mira naturalmente hacia la izquierda en WhatsApp)
 const ANIMALES = ['🐎', '🐢', '🐖', '🐕', '🐅', '🐉', '🦖', '🦘', '🦏', '🦍', '🐆', '🐏'];
 
 // Frases de relleno para el narrador
@@ -28,13 +28,13 @@ function getAnimalAleatorio(usados) {
     return disponibles[Math.floor(Math.random() * disponibles.length)];
 }
 
-// 🎨 CONSTRUCTOR DE PISTA INQUEBRANTABLE
+// 🎨 CONSTRUCTOR DE PISTA INVERTIDO (De derecha a izquierda)
 function renderTrack(animal, pos, maxPos = 16) {
     let p = Math.max(0, Math.min(pos, maxPos));
-    let trail = '═'.repeat(p);
-    let ahead = '═'.repeat(maxPos - p);
-    // Resultado visual: ║ ════🐎══════════ 🏁 ║
-    return `║ ${trail}${animal}${ahead} 🏁 ║`;
+    let trail = '═'.repeat(p); // El rastro que deja a la derecha
+    let ahead = '═'.repeat(maxPos - p); // Lo que le falta recorrer a la izquierda
+    // Resultado visual: ║ 🏁 ══════════🐎════ ║
+    return `║ 🏁 ${ahead}${animal}${trail} ║`;
 }
 
 module.exports = {
@@ -199,8 +199,8 @@ async function animarCarrera(sock, remoteJid, db) {
         textoFrame += carrera.apuesta > 0 ? `💰 Pozo: *${pozoTotal} XP*\n\n` : `🎮 Amistosa\n\n`;
 
         // 🎨 CONSTRUIR LA CAJA RÍGIDA
-        let bordeTop = `╔` + `═`.repeat(carrera.longitudPista + 7) + `╗\n`;
-        let bordeBot = `╚` + `═`.repeat(carrera.longitudPista + 7) + `╝\n\n`;
+        let bordeTop = `╔` + `═`.repeat(carrera.longitudPista + 6) + `╗\n`;
+        let bordeBot = `╚` + `═`.repeat(carrera.longitudPista + 6) + `╝\n\n`;
         
         textoFrame += bordeTop;
 
@@ -230,7 +230,7 @@ async function animarCarrera(sock, remoteJid, db) {
                 hayGanador = true;
             }
             
-            // Renderizamos el carril perfecto e inquebrantable
+            // Renderizamos el carril invirtiendo la dirección
             textoFrame += renderTrack(corredor.animal, corredor.posicion, carrera.longitudPista) + '\n';
         }
 
@@ -257,7 +257,7 @@ async function animarCarrera(sock, remoteJid, db) {
             } catch (err) {} 
         }
 
-        await esperar(3500); // 3.5s para no saturar los límites de edición de WhatsApp
+        await esperar(3500); 
     }
 
     // ==========================================
@@ -286,6 +286,8 @@ async function animarCarrera(sock, remoteJid, db) {
                 if (g.id !== 'bot') {
                     let wData = await db.getUser(g.id);
                     wData.xp = (wData.xp || 0) + premioPorGanador;
+                    // Actualizamos nivel
+                    wData.level = Math.floor(0.1 * Math.sqrt(wData.xp || 0)) || 1;
                     if (wData.save) await wData.save();
                 }
             }
