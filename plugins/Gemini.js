@@ -3,14 +3,14 @@
 require('dotenv').config();
 const { downloadContentFromMessage } = require('@whiskeysockets/baileys');
 
-// 🧹 El .trim() evita que un espacio en blanco rompa tu llave
+// 🧹 Limpiamos espacios en blanco de la API Key por si acaso
 const GEMINI_API_KEY = (process.env.GEMINI_API_KEY || '').trim();
 
 module.exports = {
   name: 'gemini',
   aliases: ['vision'],
   category: 'utilidad',
-  desc: 'Analiza imágenes y texto usando Gemini 2.5 Flash',
+  desc: 'Analiza imágenes y texto usando Gemini 3.8 Flash',
 
   execute: async ({ sock, msg, remoteJid, args, reply }) => {
     try {
@@ -74,8 +74,8 @@ module.exports = {
         };
       }
 
-      // 🔥 EL ARREGLO ESTÁ AQUÍ: Usamos gemini-2.5-flash que es el modelo que tú tienes activo
-      const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${GEMINI_API_KEY}`;
+      // 🔥 CONEXIÓN ACTUALIZADA A GEMINI 3.8 FLASH
+      const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash:generateContent?key=${GEMINI_API_KEY}`;
       
       const response = await fetch(url, {
         method: 'POST',
