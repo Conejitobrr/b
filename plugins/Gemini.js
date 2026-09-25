@@ -37,14 +37,14 @@ module.exports = {
       
       // Prompt por defecto si mandan la imagen sin escribir nada
       if (!prompt) {
-          prompt = 'Describe esta imagen con mucho detalle, dime de dónde es, usa un tono divertido, sarcástico y mete un poco de jerga peruana suave.';
+          prompt = 'Describe detalladamente esta imagen, dime de dónde es y usa tu tono sarcástico peruano.';
       }
 
       if (!isImage && !isQuotedImage && prompt.length === 0) {
         return reply('❌ Tienes que preguntarme algo o adjuntar una foto, pe.\n📌 *Ejemplo:* .gemini ¿De qué anime es esto? (adjuntando imagen)');
       }
 
-      const msgEspera = await sock.sendMessage(remoteJid, { text: '👀 A ver, déjame analizar esto al toque...' }, { quoted: msg });
+      const msgEspera = await sock.sendMessage(remoteJid, { text: '👀 Escaneando con mi visión biónica...' }, { quoted: msg });
 
       let payload;
 
@@ -59,25 +59,33 @@ module.exports = {
         }
         
         const base64Image = buffer.toString('base64');
+        const mimeType = imageMessage.mimetype || 'image/jpeg';
 
+        // 🔥 FIX DEFINITIVO: inline_data correcto, Imagen primero y orden de Sistema estricta
         payload = {
+          system_instruction: {
+            parts: [{ text: "Eres SiriusBot, un asistente peruano sarcástico y divertido. Tienes visión artificial perfecta. Observa obligatoriamente la imagen adjunta, analízala a fondo y responde la consulta. PROHIBIDO decir que no puedes ver la imagen o que necesitas que te la envíen." }]
+          },
           contents: [{
             parts: [
-              { text: prompt },
-              { inlineData: { mimeType: "image/jpeg", data: base64Image } }
+              { inline_data: { mime_type: mimeType, data: base64Image } },
+              { text: prompt }
             ]
           }]
         };
       } else {
         payload = {
+          system_instruction: {
+            parts: [{ text: "Eres SiriusBot, un asistente peruano sarcástico y divertido." }]
+          },
           contents: [{
             parts: [{ text: prompt }]
           }]
         };
       }
 
-      // 🔥 EL FIX ESTÁ AQUÍ: Le agregamos "-latest" al nombre del modelo
-      const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key=${GEMINI_API_KEY}`;
+      // 🧠 Conexión a Gemini 1.5 Flash (URL Oficial y estable)
+      const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${GEMINI_API_KEY}`;
       
       const response = await fetch(url, {
         method: 'POST',
@@ -96,9 +104,9 @@ module.exports = {
 
       // 📤 Entregar respuesta editando el mensaje
       try {
-        await sock.sendMessage(remoteJid, { text: `👁️ *SiriusBot Gemini:*\n\n${iaResponse}`, edit: msgEspera.key, mentions: [msg.key.participant || msg.key.remoteJid] });
+        await sock.sendMessage(remoteJid, { text: `👁️ *SiriusBot Vision:*\n\n${iaResponse}`, edit: msgEspera.key, mentions: [msg.key.participant || msg.key.remoteJid] });
       } catch (e) {
-        await sock.sendMessage(remoteJid, { text: `👁️ *SiriusBot Gemini:*\n\n${iaResponse}` }, { quoted: msg });
+        await sock.sendMessage(remoteJid, { text: `👁️ *SiriusBot Vision:*\n\n${iaResponse}` }, { quoted: msg });
       }
 
     } catch (err) {
