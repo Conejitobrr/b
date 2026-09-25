@@ -7,7 +7,7 @@ const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
 
 module.exports = {
   name: 'gemini',
-  aliases: ['vision'], // 🛑 Alias limpios para no chocar con tu IA de Groq
+  aliases: ['vision'], 
   category: 'utilidad',
   desc: 'Analiza imágenes y responde usando Gemini 1.5 Flash',
 
@@ -60,7 +60,6 @@ module.exports = {
         
         const base64Image = buffer.toString('base64');
 
-        // ⚠️ Formato estricto de Google: inlineData y mimeType
         payload = {
           contents: [{
             parts: [
@@ -77,8 +76,8 @@ module.exports = {
         };
       }
 
-      // 🧠 Conexión a Gemini 1.5 Flash
-      const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${GEMINI_API_KEY}`;
+      // 🔥 EL FIX ESTÁ AQUÍ: Le agregamos "-latest" al nombre del modelo
+      const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key=${GEMINI_API_KEY}`;
       
       const response = await fetch(url, {
         method: 'POST',
