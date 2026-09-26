@@ -56,14 +56,17 @@ const RESPONSES = {
   manca: target => `_*${upperText(target)}* *ES* *${getPercent()}%* *MANCA 💩*_`,
   rata: target => `_*${upperText(target)}* *ES* *${getPercent()}%* *RATA 🐁 COME QUESO 🧀*_`,
   prostituto: target => `_*${upperText(target)}* *ES 🫦* *${getPercent()}%* *🫦👅, QUIEN QUIERE DE SUS SERVICIOS? XD*_`,
-  prostituta: target => `_*${upperText(target)}* *ES 🫦* *${getPercent()}%* *🫦👅, QUIEN QUIERE DE SUS SERVICIOS? XD*_`
+  prostituta: target => `_*${upperText(target)}* *ES 🫦* *${getPercent()}%* *🫦👅, QUIEN QUIERE DE SUS SERVICIOS? XD*_`,
+  migajero: target => `_*${upperText(target)}* *ES 🍞* *${getPercent()}%* *MIGAJERO, SIEMPRE RECOGIENDO LAS SOBRAS DE OTROS 🚮🤡*_`,
+  migajera: target => `_*${upperText(target)}* *ES 🍞* *${getPercent()}%* *MIGAJERA, SIEMPRE RECOGIENDO LAS SOBRAS DE OTROS 🚮🤡*_`
 };
 
 module.exports = {
   name: 'gay', 
   aliases: [
     'lesbiana', 'pajero', 'pajera', 'puto', 'puta', 
-    'manco', 'manca', 'rata', 'prostituta', 'prostituto'
+    'manco', 'manca', 'rata', 'prostituta', 'prostituto',
+    'migajero', 'migajera'
   ],
   category: 'diversión',
   desc: 'Calcula tu porcentaje en diferentes categorías',
