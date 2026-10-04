@@ -19,7 +19,7 @@ const AUDIO_EXTENSIONS = ['.mp3', '.ogg', '.opus', '.wav', '.m4a', '.aac', '.fla
 const cooldowns = new Map();
 const COOLDOWN_TIME = 10000; // 10 segundos
 
-// 🎵 AUDIOS BASE (Movidos aquí arriba para usarlos en el menú y en la escucha)
+// 🎵 AUDIOS BASE
 const BASE_AUDIOS = [
   { triggers: ['hola'], file: 'hola' },
   { triggers: ['autoestima'], file: 'Autoestima' },
@@ -115,7 +115,7 @@ module.exports = {
   execute: async ({ sock, msg, remoteJid, args, commandName, isAdmin, isOwner, reply }) => {
     ensureSetup();
     
-    // 📋 LÓGICA PARA VER LA LISTA DE AUDIOS (Público para todos)
+    // 📋 LÓGICA PARA VER LA LISTA DE AUDIOS
     if (commandName === 'audios' || commandName === 'listaaudios' || commandName === 'audios_pasivos') {
       let customAudios = [];
       try { customAudios = JSON.parse(fs.readFileSync(CUSTOM_DB, 'utf-8')); } catch {}
@@ -140,7 +140,7 @@ module.exports = {
       return reply(texto);
     }
 
-    // ⛔ RESTRICCIÓN DE ADMINISTRADOR PARA AGREGAR O BORRAR
+    // ⛔ RESTRICCIÓN DE ADMINISTRADOR
     if (!isAdmin && !isOwner) {
       return reply('❌ Comando denegado. Solo los Administradores o el Creador del bot pueden añadir o borrar audios.');
     }
@@ -280,10 +280,29 @@ module.exports = {
       await convertToVoice(input, output);
       if (!fs.existsSync(output) || fs.statSync(output).size <= 0) return;
 
+      // 🔥 NUEVA LÓGICA: Redirigir el audio al mensaje original citado
+      let targetQuote = msg; // Por defecto responde a quien envía la palabra
+      
+      const contextInfo = msg.message?.extendedTextMessage?.contextInfo 
+                       || msg.message?.imageMessage?.contextInfo 
+                       || msg.message?.videoMessage?.contextInfo;
+
+      // Si el mensaje está respondiendo a alguien más, recreamos ese mensaje original
+      if (contextInfo && contextInfo.stanzaId && contextInfo.participant) {
+        targetQuote = {
+          key: {
+            remoteJid: msg.key.remoteJid,
+            id: contextInfo.stanzaId,
+            participant: contextInfo.participant
+          },
+          message: contextInfo.quotedMessage || {}
+        };
+      }
+
       await sock.sendMessage(
         remoteJid,
         { audio: fs.readFileSync(output), mimetype: 'audio/ogg; codecs=opus', ptt: true },
-        { quoted: msg }
+        { quoted: targetQuote } // <--- Aquí se inyecta la magia del desvío
       );
 
     } catch (err) {
