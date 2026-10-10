@@ -105,21 +105,18 @@ module.exports = {
         sendOptions = { audio: resultBuffer, mimetype: 'audio/mpeg' };
       }
 
-      // 🔥 LÓGICA DE DESVÍO (Extraída directamente de tu plugin de audios_pasivos)
-      let targetQuote = msg; 
+      // 🔥 RECONSTRUCCIÓN BLINDADA DEL MENSAJE ORIGINAL
+      let targetQuote = msg;
+      const ctx = msg.message?.extendedTextMessage?.contextInfo;
       
-      const contextInfo = msg.message?.extendedTextMessage?.contextInfo 
-                       || msg.message?.imageMessage?.contextInfo 
-                       || msg.message?.videoMessage?.contextInfo;
-
-      if (contextInfo && contextInfo.stanzaId && contextInfo.participant) {
+      if (ctx && ctx.stanzaId) {
         targetQuote = {
           key: {
             remoteJid: msg.key.remoteJid,
-            id: contextInfo.stanzaId,
-            participant: contextInfo.participant
+            id: ctx.stanzaId,
+            participant: ctx.participant || msg.key.participant || msg.key.remoteJid
           },
-          message: contextInfo.quotedMessage || {}
+          message: ctx.quotedMessage || { conversation: "media" }
         };
       }
 
