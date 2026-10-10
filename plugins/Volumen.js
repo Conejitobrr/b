@@ -105,18 +105,22 @@ module.exports = {
         sendOptions = { audio: resultBuffer, mimetype: 'audio/mpeg' };
       }
 
-      // 🔥 RECONSTRUCCIÓN BLINDADA DEL MENSAJE ORIGINAL
-      let targetQuote = msg;
-      const ctx = msg.message?.extendedTextMessage?.contextInfo;
+      // 🔥 LÓGICA DE DESVÍO EXACTA
+      let targetQuote = msg; // Por defecto responde a quien envía la palabra
       
-      if (ctx && ctx.stanzaId) {
+      const contextInfo = msg.message?.extendedTextMessage?.contextInfo 
+                       || msg.message?.imageMessage?.contextInfo 
+                       || msg.message?.videoMessage?.contextInfo;
+
+      // Si el mensaje está respondiendo a alguien más, recreamos ese mensaje original
+      if (contextInfo && contextInfo.stanzaId && contextInfo.participant) {
         targetQuote = {
           key: {
             remoteJid: msg.key.remoteJid,
-            id: ctx.stanzaId,
-            participant: ctx.participant || msg.key.participant || msg.key.remoteJid
+            id: contextInfo.stanzaId,
+            participant: contextInfo.participant
           },
-          message: ctx.quotedMessage || { conversation: "media" }
+          message: contextInfo.quotedMessage || {}
         };
       }
 
