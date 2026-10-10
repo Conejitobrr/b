@@ -15,10 +15,7 @@ function ensureTemp() {
 
 // 🧠 EXTRACTORES DE MENSAJE CITADO
 function getQuotedContext(msg) {
-  return msg.message?.extendedTextMessage?.contextInfo ||
-         msg.message?.audioMessage?.contextInfo ||
-         msg.message?.documentMessage?.contextInfo ||
-         msg.message?.videoMessage?.contextInfo || null;
+  return msg.message?.extendedTextMessage?.contextInfo || null;
 }
 
 function unwrapMessage(message = {}) {
@@ -74,12 +71,10 @@ module.exports = {
     let output = null;
 
     try {
-      // 1. Mostrar menú si no hay número
       if (!args.length) {
         return reply(`🎚️ *CONTROL DE VOLUMEN* 🎚️\n\nResponde a un *Audio* o *Video* usando:\n*.volumen [número]*\n\n📌 *Ejemplos:*\n.volumen 2 _(Doble de fuerte)_\n.volumen 5 _(Súper fuerte)_\n.volumen 0.5 _(Mitad de volumen)_`);
       }
 
-      // 2. Procesar el multiplicador de volumen (acepta comas o puntos)
       let volString = args[0].replace(',', '.');
       let vol = parseFloat(volString);
 
@@ -90,7 +85,6 @@ module.exports = {
         return reply('❌ El máximo permitido es 20. Más que eso reventaría tus parlantes.');
       }
 
-      // 3. Validar que se haya citado un archivo
       const quotedMsg = getQuotedMessage(msg);
       if (!quotedMsg) {
          return reply('❌ Debes responder al mensaje del *Audio*, *Nota de Voz* o *Video* al que quieres cambiarle el volumen.');
@@ -103,10 +97,8 @@ module.exports = {
 
       ensureTemp();
       
-      // Mostrar que el bot está trabajando
       const waitMsg = await sock.sendMessage(remoteJid, { text: `🎚️ Ajustando volumen al *${vol * 100}%*...` }, { quoted: msg });
 
-      // 4. Descargar el archivo original
       const stream = await downloadContentFromMessage(info.media, info.downloadType);
       let buffer = Buffer.from([]);
       for await (const chunk of stream) {
@@ -115,33 +107,24 @@ module.exports = {
 
       const id = `${Date.now()}_${Math.floor(Math.random() * 9999)}`;
       input = path.join(TEMP_DIR, `vol_in_${id}.${info.ext}`);
-      
-      // Determinar la extensión de salida según el tipo
       let outExt = info.type === 'video' ? 'mp4' : (info.isPtt ? 'ogg' : 'mp3');
       output = path.join(TEMP_DIR, `vol_out_${id}.${outExt}`);
 
       fs.writeFileSync(input, buffer);
 
-      // 5. Configurar FFmpeg para aplicar el filtro de volumen
       let ffmpegArgs = ['-y', '-i', input];
 
       if (info.type === 'video') {
-        // Mantiene la calidad del video, sube el volumen del audio
         ffmpegArgs.push('-c:v', 'copy', '-c:a', 'aac', '-b:a', '128k', '-af', `volume=${vol}`);
       } else if (info.isPtt) {
-        // Lo formatea perfecto para Nota de Voz de WhatsApp (Opus)
         ffmpegArgs.push('-c:a', 'libopus', '-application', 'voip', '-b:a', '48k', '-ar', '48000', '-ac', '1', '-af', `volume=${vol}`);
       } else {
-        // Formateo para audio/canción normal (MP3)
         ffmpegArgs.push('-c:a', 'libmp3lame', '-b:a', '128k', '-af', `volume=${vol}`);
       }
       
       ffmpegArgs.push(output);
-
-      // Ejecutar la renderización
       await execFileAsync('ffmpeg', ffmpegArgs);
 
-      // 6. Preparar y enviar el archivo modificado
       const resultBuffer = fs.readFileSync(output);
       let sendOptions = {};
 
@@ -153,21 +136,32 @@ module.exports = {
         sendOptions = { audio: resultBuffer, mimetype: 'audio/mpeg' };
       }
 
-      // Manda el resultado respondiendo al mensaje original del comando
-      await sock.sendMessage(remoteJid, sendOptions, { quoted: msg });
+      // 🔥 LÓGICA DE DESVÍO: Buscar el mensaje original para responderle
+      let targetQuote = msg;
+      const contextInfo = msg.message?.extendedTextMessage?.contextInfo;
       
-      // Intentar borrar el mensaje de "Ajustando..." para mantener el chat limpio
+      if (contextInfo && contextInfo.stanzaId && contextInfo.participant) {
+        targetQuote = {
+          key: {
+            remoteJid: msg.key.remoteJid,
+            id: contextInfo.stanzaId,
+            participant: contextInfo.participant
+          },
+          message: contextInfo.quotedMessage || {}
+        };
+      }
+
+      // Manda el resultado respondiendo al audio/video original
+      await sock.sendMessage(remoteJid, sendOptions, { quoted: targetQuote });
+      
       try { await sock.sendMessage(remoteJid, { delete: waitMsg.key }); } catch (e) {}
 
     } catch (error) {
       console.log('❌ Error en control de volumen:', error?.message || error);
       return reply('❌ Ocurrió un error al procesar el archivo. Puede que sea muy pesado o que hubo una falla interna.');
     } finally {
-      // 🧹 Limpieza inmediata de disco duro para que el bot no se ponga lento
       for (const file of [input, output]) {
-        try {
-          if (file && fs.existsSync(file)) fs.unlinkSync(file);
-        } catch (e) {}
+        try { if (file && fs.existsSync(file)) fs.unlinkSync(file); } catch (e) {}
       }
     }
   }
