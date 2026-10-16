@@ -273,12 +273,13 @@ module.exports = {
       const mentionedRaw = msg.message?.extendedTextMessage?.contextInfo?.mentionedJid?.[0];
       const mentionedJid = mentionedRaw ? cleanJid(mentionedRaw) : null;
       const mentioned = mentionedJid ? (mentionedJid.includes('@') ? mentionedJid : `${cleanNumber(mentionedJid)}@s.whatsapp.net`) : null;
+      const mentionedNum = mentioned ? cleanNumber(mentioned) : null;
 
-      let suspects = robos.filter(r => !r.caught && now - Number(r.time || 0) <= ROB_TIME);
-      if (mentioned) suspects = suspects.filter(r => r.thief === mentioned);
+      let activeRobos = robos.filter(r => !r.caught && now - Number(r.time || 0) <= ROB_TIME);
+      if (mentionedNum) activeRobos = activeRobos.filter(r => cleanNumber(r.thief) === mentionedNum);
       const oldRobos = robos.filter(r => !r.caught && now - Number(r.time || 0) > ROB_TIME);
 
-      if (!suspects.length) {
+      if (!activeRobos.length) {
         if (mentioned) return sock.sendMessage(remoteJid, { text: `🚓 *SIN PRUEBAS*\n\n@${cleanNumber(mentioned)} no tiene robos recientes o ya escapó.`, mentions: [mentioned] }, { quoted: msg });
         
         if (oldRobos.length) {
@@ -290,10 +291,27 @@ module.exports = {
         return reply('✅ La ciudad está en paz. No hay robos recientes en los últimos 5 minutos.');
       }
 
+      // 🛡️ FILTRO POR ROBO: Solo evaluar robos donde este usuario aún NO haya llamado a la policía
+      const suspects = activeRobos.filter(r => {
+        const reportedBy = Array.isArray(r.reportedBy) ? r.reportedBy : [];
+        return !reportedBy.includes(myNum);
+      });
+
+      if (!suspects.length) {
+        return sock.sendMessage(remoteJid, {
+          text: `🚓 *DENUNCIA YA REGISTRADA*\n\n@${myNum}, ya llamaste a la policía por ${activeRobos.length > 1 ? 'los robos recientes' : 'el robo reciente'} y el ladrón logró escapar de tu patrulla.\n\n⏳ _No puedes volver a usar *.policia* hasta que ocurra otro robo reciente, pero otro usuario que aún no haya denunciado sí puede intentarlo._`,
+          mentions: [me]
+        }, { quoted: msg });
+      }
+
       const captured = [];
       const escaped = [];
 
       for (const robbery of suspects) {
+        // Registrar que este usuario ya gastó su oportunidad en este robo específico
+        if (!Array.isArray(robbery.reportedBy)) robbery.reportedBy = [];
+        if (!robbery.reportedBy.includes(myNum)) robbery.reportedBy.push(myNum);
+
         const thief = robbery.thief;
         const victim = robbery.victim;
         const fame = applyFameDecay(jailDB, thief);
