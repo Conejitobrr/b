@@ -39,6 +39,29 @@ function getTarget(msg, args) {
   return null;
 }
 
+// 🔍 Buscador inteligente de inventario (compatible con @lid y @s.whatsapp.net)
+function getTargetInventoryKey(dbInv, targetJid, targetNum) {
+  const clean = cleanJid(targetJid);
+  
+  // 1. Priorizar la llave exacta si tiene escudos
+  if (dbInv[clean] && Number(dbInv[clean].shieldUses || 0) > 0) return clean;
+  if (dbInv[targetJid] && Number(dbInv[targetJid].shieldUses || 0) > 0) return targetJid;
+
+  // 2. Buscar por número limpio en todo el inventario por si compró con otro formato de JID
+  for (const key of Object.keys(dbInv)) {
+    if (cleanNumber(key) === targetNum && Number(dbInv[key]?.shieldUses || 0) > 0) {
+      return key;
+    }
+  }
+
+  // 3. Si no tiene escudos, devolver su llave existente o la limpia por defecto
+  if (dbInv[clean]) return clean;
+  for (const key of Object.keys(dbInv)) {
+    if (cleanNumber(key) === targetNum) return key;
+  }
+  return clean;
+}
+
 function msToTime(ms) {
   const m = Math.floor(ms / 60000);
   const s = Math.floor((ms % 60000) / 1000);
@@ -54,9 +77,9 @@ module.exports = {
   execute: async ({ sock, msg, remoteJid, sender, args, db, reply }) => {
     try {
       const rawTarget = getTarget(msg, args);
-      if (!rawTarget) return reply('❌ Debes mencionar a quién quieres robar.\n📌 Ejemplo: *.robar @usuario*');
+      if (!rawTarget) return reply('❌ Debes mencionar o responder a quién quieres robar.\n📌 Ejemplo: *.robar @usuario*');
       
-      const targetJid = rawTarget.includes('@') ? rawTarget : `${cleanNumber(rawTarget)}@s.whatsapp.net`;
+      const targetJid = rawTarget.includes('@') ? cleanJid(rawTarget) : `${cleanNumber(rawTarget)}@s.whatsapp.net`;
       const targetNum = cleanNumber(targetJid);
       
       const rawSender = cleanJid(sender);
@@ -84,13 +107,14 @@ module.exports = {
         }
       }
 
-      // 2. Control de spam
+      // 2. VERIFICAR COOLDOWN DEL LADRÓN (Si está en enfriamiento, no puede robar ni gastar tu escudo)
       const cooldowns = getCooldowns();
       const now = Date.now();
-      const delay = 10 * 60 * 1000; 
+      const delay = 10 * 60 * 1000; // 10 minutos
 
-      if (cooldowns[attackerJid] && cooldowns[attackerJid].lastRob) {
-        const timeLeft = (cooldowns[attackerJid].lastRob + delay) - now;
+      const lastRobTime = cooldowns[attackerJid]?.lastRob || cooldowns[attackerNum]?.lastRob || 0;
+      if (lastRobTime > 0) {
+        const timeLeft = (lastRobTime + delay) - now;
         if (timeLeft > 0) {
           return sock.sendMessage(remoteJid, {
             text: `⏳ *MÁS DESPACIO*\n\n@${attackerNum}, estás llamando mucho la atención.\n🕒 Vuelve a intentar en: *${msToTime(timeLeft)}*`,
@@ -99,26 +123,29 @@ module.exports = {
         }
       }
 
-      // 🔥 ANOTAR COOLDOWN ANTES DEL ESCUDO
-      if (!cooldowns[attackerJid]) cooldowns[attackerJid] = {};
-      cooldowns[attackerJid].lastRob = now;
-      saveCooldowns(cooldowns);
-
-      // 3. INTERCEPCIÓN DE ESCUDO
+      // 3. INTERCEPCIÓN DE ESCUDO 🛡️
       const dbInv = getInv();
-      const targetInvKey = `${targetNum}@s.whatsapp.net`;
+      const targetInvKey = getTargetInventoryKey(dbInv, targetJid, targetNum);
       if (!dbInv[targetInvKey]) dbInv[targetInvKey] = {};
       const targetInv = dbInv[targetInvKey];
 
       if (Number(targetInv.shieldUses || 0) > 0) {
+        // Rompemos 1 escudo de la víctima
         targetInv.shieldUses -= 1;
         saveInv(dbInv);
+
+        // Le activamos el cooldown al ladrón para que pierda su intento de robo
+        cooldowns[attackerJid] = { lastRob: now };
+        cooldowns[attackerNum] = { lastRob: now };
+        saveCooldowns(cooldowns);
+
         return sock.sendMessage(remoteJid, {
-          text: `🛡️ *¡ROBO BLOQUEADO!*\n\nIntentaste asaltar a @${targetNum}, pero tenía un *Escudo Anti-Robo* equipado.\n💥 El escudo se ha roto.\n🚨 Has sido descubierto y debes huir.`,
-          mentions: [targetJid]
+          text: `🛡️ *¡ROBO BLOQUEADO!*\n\n@${attackerNum} intentó asaltar a @${targetNum}, pero tenía un *Escudo Anti-Robo* activo.\n💥 1 escudo se ha roto en el impacto (Quedan: *${targetInv.shieldUses}*).\n⏳ El ladrón fue descubierto y deberá esperar *10 minutos* para volver a intentar.`,
+          mentions: [attackerJid, targetJid]
         }, { quoted: msg });
       }
 
+      // 4. VERIFICAR XP MÍNIMO DE LA VÍCTIMA (Si no tenía escudo)
       const targetData = await db.getUser(targetJid);
       const targetXP = targetData.xp || 0;
       
@@ -128,6 +155,11 @@ module.exports = {
           mentions: [targetJid]
         }, { quoted: msg });
       }
+
+      // 5. ACTIVAR COOLDOWN Y EJECUTAR EL ROBO
+      cooldowns[attackerJid] = { lastRob: now };
+      cooldowns[attackerNum] = { lastRob: now };
+      saveCooldowns(cooldowns);
 
       const isSuccess = Math.random() > 0.5;
 
@@ -161,7 +193,6 @@ module.exports = {
 
       } else {
         const multa = 800;
-        // Bajar cárcel a 10 minutos
         const tiempoCarcel = 10 * 60 * 1000; 
 
         attackerData.xp = Math.max(0, (attackerData.xp || 0) - multa);
