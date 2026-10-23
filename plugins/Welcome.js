@@ -124,13 +124,14 @@ module.exports = {
             });
           }
         } else if (action === 'remove') {
-          let texto = `╔══════════════════════╗\n`;
+          let texto = `╭─❖「 😢 DESPEDIDA 」\n`;
           texto += `        👋 *¡ADIÓS!* 👋\n`;
-          texto += `╚══════════════════════╝\n\n`;
+          texto += `╰───────────────\n\n`;
           texto += `💨 @${userNum} ha salido de *${groupName}*.\n`;
           texto += `👥 *Quedamos:* ${memberCount} miembros.\n\n`;
-          texto += `_Ojalá no vuelva (broma... o tal vez no) XD._`;
-
+          texto += `Te extrañaremos...\n│\n│ Ojalá te atropelle un carro\n│ pero con cariño 💔🚗`;
+          
+          
           if (imgBuffer) {
             await sock.sendMessage(id, {
               image: imgBuffer,
