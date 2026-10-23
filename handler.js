@@ -229,7 +229,23 @@ async function messageHandler(sock, msg, store = {}) {
     sender = normalizeJid(sender || remoteJid);
     
     const botJid = normalizeJid(sock.user?.id || '');
-    const body = getBody(msg);
+        // 🔘 EXTRACTOR DE RESPUESTAS DE BOTONES INTERACTIVOS (2026)
+    let buttonId = '';
+    try {
+      const m = msg.message?.ephemeralMessage?.message || msg.message?.viewOnceMessage?.message || msg.message || {};
+      const nativeJson = m.interactiveResponseMessage?.nativeFlowResponseMessage?.paramsJson;
+      if (nativeJson) {
+        buttonId = JSON.parse(nativeJson)?.id || '';
+      } else {
+        buttonId =
+          m.buttonsResponseMessage?.selectedButtonId ||
+          m.templateButtonReplyMessage?.selectedId ||
+          m.listResponseMessage?.singleSelectReply?.selectedRowId ||
+          '';
+      }
+    } catch {}
+
+    const body = buttonId || getBody(msg);
     const pushName = msg.pushName || 'Usuario';
     const senderNumber = cleanNumber(sender);
     
