@@ -10,6 +10,18 @@ const { getBody, normalizeJid, detectPrefix, cleanNumber, getReadableType } = re
 // 🛡️ BÓVEDA DE BANEOS (Aviso único)
 const BANNED_PATH = path.join(process.cwd(), 'lib', 'banned.json');
 
+// 🧠 Caché para evitar que la bienvenida se envíe duplicada
+const recentGroupEvents = new Map();
+
+function isDuplicateGroupEvent(groupId, userJid, action) {
+  const key = `${groupId}_${cleanNumber(userJid)}_${action}`;
+  const now = Date.now();
+  const last = recentGroupEvents.get(key) || 0;
+  if (now - last < 8000) return true;
+  recentGroupEvents.set(key, now);
+  return false;
+}
+
 async function checkBannedUser(sock, remoteJid, sender, msg, isOwner) {
   if (isOwner) return false; 
   try {
@@ -67,7 +79,43 @@ async function processSendQueue() {
   isSending = false;
 }
 
+const PLUGINS_DIR = path.join(process.cwd(), 'plugins');
+if (!fs.existsSync(PLUGINS_DIR)) fs.mkdirSync(PLUGINS_DIR, { recursive: true });
+
+const commands = new Map();
+const aliases = new Map();
+const messageListeners = [];
+const groupListeners = [];
+
+async function dispatchGroupUpdate(sock, id, participants, action) {
+  if (!id || !Array.isArray(participants) || !participants.length) return;
+  const validParticipants = participants.filter(p => {
+    const jid = typeof p === 'string' ? p : (p?.id || p?.jid || '');
+    return jid && !isDuplicateGroupEvent(id, jid, action);
+  });
+  if (!validParticipants.length) return;
+
+  for (const listener of groupListeners) {
+    try {
+      await listener.onGroupUpdate({ sock, id, participants: validParticipants, action, db, config });
+    } catch (e) {
+      console.log(chalk.red(`❌ Error en onGroupUpdate: ${e?.message || e}`));
+    }
+  }
+}
+
 function attachSendLogger(sock) {
+  if (!sock._groupEventsAttached) {
+    sock._groupEventsAttached = true;
+    sock.ev.on('group-participants.update', async (update) => {
+      try {
+        if (update?.id && (update.action === 'add' || update.action === 'remove')) {
+          await dispatchGroupUpdate(sock, update.id, update.participants || [], update.action);
+        }
+      } catch (e) {}
+    });
+  }
+
   if (sock._loggerAttached) return;
   sock._loggerAttached = true;
   
@@ -112,17 +160,11 @@ function attachSendLogger(sock) {
   };
 }
 
-const PLUGINS_DIR = path.join(process.cwd(), 'plugins');
-if (!fs.existsSync(PLUGINS_DIR)) fs.mkdirSync(PLUGINS_DIR, { recursive: true });
-
-const commands = new Map();
-const aliases = new Map();
-const messageListeners = [];
-
 function loadPlugins() {
   commands.clear();
   aliases.clear();
   messageListeners.length = 0;
+  groupListeners.length = 0;
   
   const files = fs.readdirSync(PLUGINS_DIR).filter(file => file.endsWith('.js'));
   let cmdCount = 0;
@@ -147,6 +189,10 @@ function loadPlugins() {
         messageListeners.push(plugin);
         listenerCount++;
       }
+
+      if (typeof plugin.onGroupUpdate === 'function') {
+        groupListeners.push(plugin);
+      }
     } catch (err) {
       console.log(chalk.bgRed.white(' ❌ ERROR PLUGIN '), chalk.red(`Fallo en ${file}: ${err?.message}`));
     }
@@ -159,6 +205,19 @@ loadPlugins();
 async function messageHandler(sock, msg, store = {}) {
   try {
     attachSendLogger(sock);
+
+    // 🔔 Respaldo para detectar entradas/salidas vía messageStubType
+    if (msg?.messageStubType && msg?.key?.remoteJid?.endsWith('@g.us')) {
+      const stub = msg.messageStubType;
+      const params = Array.isArray(msg.messageStubParameters) ? msg.messageStubParameters : [];
+      // 27 = ADD, 31 = INVITE | 28 = REMOVE, 32 = LEAVE
+      if (stub === 27 || stub === 31) {
+        await dispatchGroupUpdate(sock, msg.key.remoteJid, params, 'add');
+      } else if (stub === 28 || stub === 32) {
+        await dispatchGroupUpdate(sock, msg.key.remoteJid, params, 'remove');
+      }
+    }
+
     if (!msg?.message) return;
 
     const key = msg.key || {};
