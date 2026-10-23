@@ -20,7 +20,7 @@ const ANIMALES = {
   raro: ["Lobo", "Zorro", "Oso", "Tigre", "León", "Pantera", "Guepardo", "Leopardo", "Jaguar", "Puma", "Lince", "Hiena"],
   epico: ["Lobo Blanco", "Tigre Blanco", "Pantera Negra", "León Dorado", "Oso Polar", "Zorro Ártico", "Águila Dorada", "Megalodón Clonado"],
   mitologico: ["Dragón", "Fénix", "Grifo", "Unicornio", "Pegaso", "Cerbero", "Quimera", "Basilisco", "Kraken", "Leviatán"],
-  exclusivo: ["Dragón Ancestral"]
+  exclusivo: ["Dragón Ancestral, Polla"]
 };
 
 function cleanJid(jid = '') { return String(jid).split(':')[0]; }
