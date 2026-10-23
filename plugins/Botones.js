@@ -28,7 +28,7 @@ module.exports = {
                 title: '💰 ECONOMÍA & RPG',
                 highlight_label: 'Popular',
                 rows: [
-                  { header: '🎁 Recompensa Diaria', title: 'Reclamar tu XP con .claim', description: 'Obtén tu bono diario', id: '.claim' },
+                  { header: '🎁 Recompensa Diaria', title: 'Reclamar tu XP', description: 'Obtén tu bono diario', id: '.claim' },
                   { header: '🏦 Banco Central', title: 'Ver tu bóveda de XP', description: 'Protege tu dinero de robos', id: '.banco' },
                   { header: '🛒 Tienda Oficial', title: 'Comprar escudos e ítems', description: 'Usa .tienda', id: '.tienda' },
                   { header: '🎒 Tu Mochila', title: 'Ver inventario de objetos', description: 'Usa .inventario', id: '.inventario' }
@@ -56,7 +56,7 @@ module.exports = {
         {
           name: 'quick_reply',
           buttonParamsJson: JSON.stringify({
-            display_text: '🎁 Reclamar .claim',
+            display_text: '🎁 Reclamar',
             id: '.claim'
           })
         },
