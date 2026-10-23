@@ -7,7 +7,7 @@ function cleanNumber(jid = '') { return cleanJid(jid).split('@')[0].replace(/\D/
 
 module.exports = {
   name: 'menu',
-  aliases: ['menu2', 'help', 'ayuda', 'comandos'],
+  aliases: ['ayuda', 'comandos'],
   category: 'utilidad & búsqueda',
   desc: 'Muestra el menú principal interactivo de SiriusBot',
 
@@ -39,13 +39,13 @@ module.exports = {
                 rows: [
                   { header: '🪢 Juego del Ahorcado', title: 'Adivina palabras y gana XP', description: 'Usa .ahorcado', id: '.ahorcado' },
                   { header: '🪂 Battle Royale', title: 'Juegos del hambre grupal', description: 'Usa .royale', id: '.royale' },
-                  { header: '🧩 Anagrama Veloz', title: 'Ordena palabras rápido', description: 'Usa .anagrama', id: '.anagrama' }
+                  { header: '🧩 Trivia', title: 'Adivina las palabras', description: 'Usa .trivia', id: '.trivia' }
                 ]
               },
               {
                 title: '⚙️ UTILIDAD Y OTROS',
                 rows: [
-                  { header: '📜 Menú de Texto Completo', title: 'Ver todos los +105 plugins', description: 'Muestra la lista detallada en texto', id: '.menu2' },
+                  { header: '📜 Menú de Texto Completo', title: 'Ver todos los +105 plugins', description: 'Muestra la lista detallada en texto', id: '.menucompleto' },
                   { header: '📊 Estado del Bot', title: 'Rendimiento y servidores', description: 'Usa .estado', id: '.estado' }
                 ]
               }
