@@ -52,8 +52,8 @@ function getMasterCategory(pluginName, pluginCat) {
 }
 
 module.exports = {
-  name: 'menu',
-  aliases: ['help', 'ayuda', 'comandos', 'list'],
+  name: 'menu2',
+  aliases: ['help', 'ayuda', 'menucompleto', 'list'],
   category: 'utilidad',
   desc: 'Muestra el menú principal de comandos organizados',
   
