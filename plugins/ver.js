@@ -2,168 +2,204 @@
 
 const fs = require('fs');
 const path = require('path');
-const { execFile } = require('child_process');
-const { promisify } = require('util');
 const { downloadContentFromMessage } = require('@whiskeysockets/baileys');
 
-const execFileAsync = promisify(execFile);
+const INV_PATH = path.join(process.cwd(), 'lib', 'inventario.json');
 
-const COSTO_VER = 10000;
-const PENDING_TIME = 60 * 1000;
-const TEMP_DIR = path.join(process.cwd(), 'temp');
-if (!fs.existsSync(TEMP_DIR)) fs.mkdirSync(TEMP_DIR, { recursive: true });
+// 🧠 Memoria automática: guarda las fotos "Ver una sola vez" apenas llegan al chat (antes de que las abras)
+const viewOnceCache = new Map();
+const lastInChat = new Map();
+const CACHE_TTL = 60 * 60 * 1000; // Las recuerda por 1 hora
 
-const pendingVer = new Map();
-
-async function streamToBuffer(stream) {
-  let buffer = Buffer.from([]);
-  for await (const chunk of stream) buffer = Buffer.concat([buffer, chunk]);
-  return buffer;
+function getInv() {
+  try { return JSON.parse(fs.readFileSync(INV_PATH, 'utf8')); } catch { return {}; }
+}
+function saveInv(data) {
+  try { fs.writeFileSync(INV_PATH, JSON.stringify(data, null, 2)); } catch {}
 }
 
 function cleanJid(jid = '') { return String(jid).split(':')[0]; }
+function cleanNumber(jid = '') { return cleanJid(jid).split('@')[0].replace(/\D/g, ''); }
 
-function isPremiumUser(user = {}) {
-  return (user?.premium === true || Number(user?.premiumUntil || 0) > Date.now());
+function findUserInvKey(dbInv, senderJid) {
+  const clean = cleanJid(senderJid);
+  const num = cleanNumber(senderJid);
+  if (dbInv[clean] && Number(dbInv[clean].verUses || 0) > 0) return clean;
+  if (dbInv[senderJid] && Number(dbInv[senderJid].verUses || 0) > 0) return senderJid;
+  for (const k of Object.keys(dbInv)) {
+    if (cleanNumber(k) === num && Number(dbInv[k]?.verUses || 0) > 0) return k;
+  }
+  return clean;
 }
 
-function unwrapMessage(message = {}) {
-  if (message.ephemeralMessage?.message) return unwrapMessage(message.ephemeralMessage.message);
-  if (message.documentWithCaptionMessage?.message) return unwrapMessage(message.documentWithCaptionMessage.message);
-  if (message.viewOnceMessageV2?.message) return unwrapMessage(message.viewOnceMessageV2.message);
-  if (message.viewOnceMessageV2Extension?.message) return unwrapMessage(message.viewOnceMessageV2Extension.message);
-  return message;
-}
+function extractViewOnceMedia(msgObj = {}) {
+  if (!msgObj) return null;
 
-function getQuotedContext(msg) {
-  return (msg.message?.extendedTextMessage?.contextInfo || msg.message?.imageMessage?.contextInfo || msg.message?.videoMessage?.contextInfo || msg.message?.audioMessage?.contextInfo || msg.message?.documentMessage?.contextInfo || null);
-}
+  const inner =
+    msgObj.viewOnceMessage?.message ||
+    msgObj.viewOnceMessageV2?.message ||
+    msgObj.viewOnceMessageV2Extension?.message ||
+    msgObj.ephemeralMessage?.message?.viewOnceMessage?.message ||
+    msgObj.ephemeralMessage?.message?.viewOnceMessageV2?.message ||
+    msgObj.ephemeralMessage?.message?.viewOnceMessageV2Extension?.message ||
+    msgObj.ephemeralMessage?.message ||
+    msgObj;
 
-function getQuotedMessage(msg) {
-  const ctx = getQuotedContext(msg);
-  return ctx?.quotedMessage ? unwrapMessage(ctx.quotedMessage) : null;
-}
-
-function getQuotedWAMessage(msg, remoteJid) {
-  const ctx = getQuotedContext(msg);
-  if (!ctx?.quotedMessage || !ctx?.stanzaId) return msg;
-  return { key: { remoteJid, id: ctx.stanzaId, participant: ctx.participant, fromMe: false }, message: ctx.quotedMessage };
-}
-
-function getMediaInfo(message = {}) {
-  if (message.imageMessage) return { type: 'image', mediaType: 'image', media: message.imageMessage, mimetype: message.imageMessage.mimetype || 'image/jpeg', caption: message.imageMessage.caption || '' };
-  if (message.videoMessage) return { type: message.videoMessage.gifPlayback ? 'gif' : 'video', mediaType: 'video', media: message.videoMessage, mimetype: message.videoMessage.mimetype || 'video/mp4', caption: message.videoMessage.caption || '', gifPlayback: message.videoMessage.gifPlayback };
-  if (message.audioMessage) return { type: 'audio', mediaType: 'audio', media: message.audioMessage, mimetype: message.audioMessage.mimetype || 'audio/mpeg', ptt: message.audioMessage.ptt || false, caption: '' };
+  if (inner.imageMessage && (inner.imageMessage.viewOnce || msgObj.viewOnceMessage || msgObj.viewOnceMessageV2 || msgObj.viewOnceMessageV2Extension)) {
+    return { type: 'image', media: inner.imageMessage, mimetype: inner.imageMessage.mimetype || 'image/jpeg', caption: inner.imageMessage.caption || '' };
+  }
+  if (inner.videoMessage && (inner.videoMessage.viewOnce || msgObj.viewOnceMessage || msgObj.viewOnceMessageV2 || msgObj.viewOnceMessageV2Extension)) {
+    return { type: 'video', media: inner.videoMessage, mimetype: inner.videoMessage.mimetype || 'video/mp4', caption: inner.videoMessage.caption || '' };
+  }
+  if (inner.audioMessage && (inner.audioMessage.viewOnce || msgObj.viewOnceMessage || msgObj.viewOnceMessageV2 || msgObj.viewOnceMessageV2Extension)) {
+    return { type: 'audio', media: inner.audioMessage, mimetype: inner.audioMessage.mimetype || 'audio/ogg; codecs=opus', caption: '' };
+  }
   return null;
 }
 
-async function sendMedia(sock, remoteJid, mediaInfo, quotedOriginal) {
-  try {
-    const stream = await downloadContentFromMessage(mediaInfo.media, mediaInfo.mediaType);
-    const buffer = await streamToBuffer(stream);
+function extractFromQuoted(quoted = {}) {
+  const vo = extractViewOnceMedia(quoted);
+  if (vo) return vo;
 
-    if (mediaInfo.type === 'image') return sock.sendMessage(remoteJid, { image: buffer, mimetype: mediaInfo.mimetype, caption: mediaInfo.caption || '' }, { quoted: quotedOriginal });
-    if (mediaInfo.type === 'video') return sock.sendMessage(remoteJid, { video: buffer, mimetype: mediaInfo.mimetype, caption: mediaInfo.caption || '' }, { quoted: quotedOriginal });
-    if (mediaInfo.type === 'gif') return sock.sendMessage(remoteJid, { video: buffer, mimetype: 'video/mp4', gifPlayback: true, caption: mediaInfo.caption || '' }, { quoted: quotedOriginal });
-    if (mediaInfo.type === 'audio') return sock.sendMessage(remoteJid, { audio: buffer, mimetype: mediaInfo.mimetype, ptt: mediaInfo.ptt || false }, { quoted: quotedOriginal });
-  } catch (err) {
-    console.log('Error enviando media en .ver:', err);
+  if (quoted.imageMessage) {
+    return { type: 'image', media: quoted.imageMessage, mimetype: quoted.imageMessage.mimetype || 'image/jpeg', caption: quoted.imageMessage.caption || '' };
   }
+  if (quoted.videoMessage) {
+    return { type: 'video', media: quoted.videoMessage, mimetype: quoted.videoMessage.mimetype || 'video/mp4', caption: quoted.videoMessage.caption || '' };
+  }
+  if (quoted.audioMessage) {
+    return { type: 'audio', media: quoted.audioMessage, mimetype: quoted.audioMessage.mimetype || 'audio/ogg; codecs=opus', caption: '' };
+  }
+  return null;
+}
+
+async function downloadToBuffer(media, type) {
+  if (!media || !media.mediaKey || !media.mediaKey.length) {
+    throw new Error('EMPTY_MEDIA_KEY');
+  }
+  const stream = await downloadContentFromMessage(media, type);
+  const chunks = [];
+  for await (const chunk of stream) chunks.push(chunk);
+  return Buffer.concat(chunks);
 }
 
 module.exports = {
   name: 'ver',
-  category: 'multimedia',
-  desc: 'Revela mensajes de "Ver una sola vez"',
+  aliases: ['rvo', 'revelar', 'viewonce'],
+  category: 'utilidad & búsqueda',
+  desc: 'Revela mensajes de "Ver una sola vez" en privado o grupos',
 
-  execute: async ({ sock, remoteJid, msg, sender, args, db, isOwner, userData, reply }) => {
-    let chargedXp = false;
-    let usedTicket = false;
-
+  // 📡 Captura el archivo apenas entra al chat (antes de que quede "Abierto")
+  onMessage: async ({ msg, remoteJid }) => {
     try {
-      const userKey = cleanJid(sender);
-      const option = (args?.[0] || '').toLowerCase();
+      if (!msg?.message || !msg?.key?.id) return;
+      const extracted = extractViewOnceMedia(msg.message);
+      if (!extracted) return;
 
-      const xp = Number(userData.xp || 0);
-      const premium = isPremiumUser(userData);
-      const verUses = userData.inventory?.verUses || 0;
-
-      // CANCELAR
-      if (['cancelar', 'cancel', 'no'].includes(option)) {
-        pendingVer.delete(userKey);
-        return reply('✅ Canje cancelado. No se descontó XP.');
+      const now = Date.now();
+      for (const [id, item] of viewOnceCache.entries()) {
+        if (now - item.time > CACHE_TTL) viewOnceCache.delete(id);
       }
 
-      // ACEPTAR
-      if (['aceptar', 'confirmar', 'si', 'sí'].includes(option)) {
-        const pending = pendingVer.get(userKey);
-        if (!pending) return reply(`❌ No tienes ningún uso pendiente de *.ver*.\n\n🎟️ Usos comprados: *${verUses}*\n\nPara usarlo:\n1. Responde al archivo "ver una sola vez".\n2. Escribe *.ver*`);
-        
-        if (Date.now() > pending.expiresAt) {
-          pendingVer.delete(userKey);
-          return reply('⏳ El canje expiró. Vuelve a responder al archivo y usa *.ver*.');
+      let buffer = null;
+      if (extracted.media?.mediaKey && extracted.media.mediaKey.length > 0) {
+        try {
+          buffer = await downloadToBuffer(extracted.media, extracted.type);
+        } catch {}
+      }
+
+      viewOnceCache.set(msg.key.id, {
+        type: extracted.type,
+        mimetype: extracted.mimetype,
+        caption: extracted.caption,
+        media: extracted.media,
+        buffer,
+        time: now
+      });
+
+      lastInChat.set(remoteJid, msg.key.id);
+    } catch {}
+  },
+
+  execute: async ({ sock, msg, remoteJid, sender, isOwner, reply }) => {
+    try {
+      const ctx = msg.message?.extendedTextMessage?.contextInfo;
+      const quotedId = ctx?.stanzaId || null;
+      const quotedMsg = ctx?.quotedMessage || null;
+
+      let targetData = null;
+
+      // 1. Buscar en la memoria automática por ID del mensaje citado (funciona aunque ya diga "Abierto")
+      if (quotedId && viewOnceCache.has(quotedId)) {
+        targetData = viewOnceCache.get(quotedId);
+      }
+
+      // 2. Si no estaba en memoria, intentar extraer directo de la cita (funciona si aún no se ha abierto)
+      if (!targetData && quotedMsg) {
+        const fromQuote = extractFromQuoted(quotedMsg);
+        if (fromQuote) {
+          targetData = {
+            type: fromQuote.type,
+            mimetype: fromQuote.mimetype,
+            caption: fromQuote.caption,
+            media: fromQuote.media,
+            buffer: null
+          };
         }
+      }
 
-        if (xp < COSTO_VER) {
-          pendingVer.delete(userKey);
-          return reply(`❌ No tienes suficiente XP para canjear *.ver*.\n💰 Costo: *${COSTO_VER} XP*\n⭐ Tu XP actual: *${xp} XP*`);
+      // 3. Si puso .ver sin citar nada, revelar la última foto de 1 vez de ese chat
+      if (!targetData && !quotedMsg) {
+        const lastId = lastInChat.get(remoteJid);
+        if (lastId && viewOnceCache.has(lastId)) {
+          targetData = viewOnceCache.get(lastId);
         }
-
-        // Cobro seguro de XP
-        userData.xp -= COSTO_VER;
-        if (userData.save) await userData.save(); else await db.setUser(sender, userData);
-        chargedXp = true;
-
-        await sendMedia(sock, pending.remoteJid, pending.mediaInfo, pending.quotedOriginal);
-        pendingVer.delete(userKey);
-        return;
       }
 
-      // USO NORMAL
-      const quoted = getQuotedMessage(msg);
-      const quotedOriginal = getQuotedWAMessage(msg, remoteJid);
-
-      if (!quoted) {
-        if (isOwner || premium) return reply('❌ Responde a una imagen, video o audio enviado como "Ver una sola vez".\n👑 Para ti es gratis.');
-        if (verUses > 0) return reply(`🎟️ Tienes *${verUses}* uso(s) comprado(s) de *.ver*.\n\nPara usar uno, responde a la imagen "ver una sola vez" con *.ver*`);
-        if (xp < COSTO_VER) return reply(`❌ No tienes usos de *.ver* ni XP suficiente.\n💰 Necesitas *${COSTO_VER} XP*.\n⭐ Tienes: *${xp} XP*`);
-        
-        return reply(`ℹ️ Tienes XP suficiente para usar *.ver*.\n💰 Precio: *${COSTO_VER} XP*\n\nPara usarlo ahora:\n1. Responde a la imagen "ver una vez" con *.ver*\n2. Confirma con *.ver aceptar*`);
+      if (!targetData) {
+        return reply('❌ Responde a una foto, video o audio de *"Ver una sola vez"* con *.ver*.');
       }
 
-      const mediaInfo = getMediaInfo(quoted);
-      if (!mediaInfo) return reply('❌ El mensaje citado no es una imagen, video o audio compatible.');
-
-      // Si es dueño o premium, lo saca directo
-      if (isOwner || premium) return sendMedia(sock, remoteJid, mediaInfo, quotedOriginal);
-
-      // Si tiene ticket de inventario
-      if (verUses > 0) {
-        userData.inventory.verUses -= 1;
-        if (userData.save) await userData.save(); else await db.setUser(sender, userData);
-        usedTicket = true;
-        return sendMedia(sock, remoteJid, mediaInfo, quotedOriginal);
+      // 🎟️ Verificar ticket si lo usa otra persona que no seas tú (Owner)
+      const dbInv = getInv();
+      const invKey = findUserInvKey(dbInv, sender);
+      if (!isOwner) {
+        const uses = Number(dbInv[invKey]?.verUses || 0);
+        if (uses <= 0) {
+          return reply('🎟️ No tienes tickets de *.ver* en tu inventario.\n🛒 Cómpralo con: *.comprar ver*');
+        }
       }
 
-      if (xp < COSTO_VER) return reply(`❌ No tienes suficiente XP para usar *.ver*.\n💰 Costo: *${COSTO_VER} XP*\n⭐ Tu XP actual: *${xp} XP*`);
+      let finalBuffer = targetData.buffer;
+      if (!finalBuffer) {
+        try {
+          finalBuffer = await downloadToBuffer(targetData.media, targetData.type);
+        } catch (err) {
+          if (err.message === 'EMPTY_MEDIA_KEY' || String(err.message).includes('empty media key')) {
+            return reply('⚠️ Esta foto ya había sido abierta (*Abierto*) antes de que el bot pudiera guardarla en memoria. Con las nuevas que te envíen ya podrás usar *.ver* incluso después de abrirlas.');
+          }
+          throw err;
+        }
+      }
 
-      pendingVer.set(userKey, { remoteJid, mediaInfo, quotedOriginal, expiresAt: Date.now() + PENDING_TIME });
+      if (!isOwner) {
+        dbInv[invKey].verUses -= 1;
+        saveInv(dbInv);
+      }
 
-      return reply(`⚠️ *Confirmar canje*\n\nVas a gastar *${COSTO_VER} XP* para ver este archivo.\n\n⭐ Tu XP actual: *${xp} XP*\n⭐ Te quedaría: *${xp - COSTO_VER} XP*\n\nPara confirmar escribe:\n*.ver aceptar*\n\n⏳ Tienes 60 segundos.`);
+      const captionText = targetData.caption ? `📝 *Texto:* ${targetData.caption}` : '';
+
+      if (targetData.type === 'image') {
+        await sock.sendMessage(remoteJid, { image: finalBuffer, caption: captionText }, { quoted: msg });
+      } else if (targetData.type === 'video') {
+        await sock.sendMessage(remoteJid, { video: finalBuffer, caption: captionText }, { quoted: msg });
+      } else if (targetData.type === 'audio') {
+        await sock.sendMessage(remoteJid, { audio: finalBuffer, mimetype: targetData.mimetype, ptt: true }, { quoted: msg });
+      }
 
     } catch (err) {
-      console.log('❌ Error en ver:', err?.message || err);
-      // Reembolso seguro
-      if (chargedXp) {
-        userData.xp += COSTO_VER;
-        if (userData.save) await userData.save(); else await db.setUser(sender, userData);
-      }
-      if (usedTicket) {
-        if (!userData.inventory) userData.inventory = {};
-        userData.inventory.verUses = (userData.inventory.verUses || 0) + 1;
-        if (userData.save) await userData.save(); else await db.setUser(sender, userData);
-      }
-      return reply('❌ Ocurrió un error al intentar revelar el archivo.');
+      console.log('❌ Error enviando media en .ver:', err?.message || err);
+      return reply('❌ No se pudo recuperar el archivo.');
     }
   }
 };
